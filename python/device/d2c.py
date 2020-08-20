@@ -210,7 +210,7 @@ class App(object):
             t.d2c_failure_count = self.metrics.d2c.failed.extract_count()
 
             msg = Message(json.dumps(t.to_dict()))
-            msg.content_type = "appliucation/json"
+            msg.content_type = "application/json"
             msg.content_encoding = "utf-8"
             logger.debug("Selnding telementry: {}".format(msg.data))
             self.client.send_message(msg)
