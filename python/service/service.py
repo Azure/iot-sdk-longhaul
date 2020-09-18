@@ -2,31 +2,29 @@
 # Licensed under the MIT license. See LICENSE file in the project root for
 # full license information.
 import logging
-import common
+import longhaul
+import reaper
 import time
 import os
 import queue
 import threading
 import json
+from concurrent.futures import ThreadPoolExecutor
 from azure.iot.hub import IoTHubRegistryManager
 from azure.eventhub import EventHubConsumerClient
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("thief.{}".format(__name__))
 
-logger = logging.getLogger(__name__)
-logger.setLevel(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("thief").setLevel(level=logging.INFO)
 
 iothub_connection_string = os.environ["THIEF_SERVICE_CONNECTION_STRING"]
 eventhub_connection_string = os.environ["THIEF_EVENTHUB_CONNECTION_STRING"]
 eventhub_consumer_group = os.environ["THIEF_EVENTHUB_CONSUMER_GROUP"]
 device_id = os.environ["THIEF_DEVICE_ID"]
 
-logger.debug("service={}".format(iothub_connection_string))
-logger.debug("eh={}".format(eventhub_connection_string))
-logger.debug("group={}".format(eventhub_consumer_group))
 
-
-class ServiceRunMetrics(common.RunMetrics):
+class ServiceRunMetrics(longhaul.RunMetrics):
     """
     Object we use internally to keep track of how a the entire test is performing.
     """
@@ -35,7 +33,7 @@ class ServiceRunMetrics(common.RunMetrics):
         super(ServiceRunMetrics, self).__init__()
 
 
-class ServiceRunConfig(common.RunConfig):
+class ServiceRunConfig(longhaul.RunConfig):
     """
     Object we use internally to keep track of how the entire test is configured.
     """
@@ -44,7 +42,7 @@ class ServiceRunConfig(common.RunConfig):
         super(ServiceRunConfig, self).__init__()
 
 
-def unpack_config(config):
+def set_config(config):
     pass
 
 
@@ -52,13 +50,14 @@ def get_device_id_from_event(event):
     return event.message.annotations["iothub-connection-device-id".encode()].decode()
 
 
-class ServiceApp(common.BaseApp):
+class ServiceApp(longhaul.LonghaulMixin, reaper.ReaperMixin):
     """
     Main application object
     """
 
     def __init__(self):
-        super(ServiceApp, self).__init__()
+        self.executor = ThreadPoolExecutor(max_workers=128)
+        self.done = threading.Event()
         self.registry_manager = None
         self.eventhub_consumer_client = None
         self.metrics = ServiceRunMetrics()
@@ -66,32 +65,35 @@ class ServiceApp(common.BaseApp):
         self.pingback_events = queue.Queue()
         self.pingback_events_lock = threading.Lock()
         self.last_heartbeat = time.time()
+        self.shutdown_event = threading.Event()
 
-    def eventhub_listener_thread(self):
+        self.start_reaper()
+
+    def eventhub_dispatcher_thread(self):
         """
         Thread to listen on eventhub for events which are targeted to our device_id
         """
 
         def on_error(partition_context, error):
-            logger.debug("on_error: {}".format(error))
+            logger.warning("on_error: {}".format(error))
 
         def on_partition_initialize(partition_context):
-            logger.debug("on_partition_initialize")
+            logger.warning("on_partition_initialize")
 
         def on_partition_close(partition_context, reason):
-            logger.debug("on_partition_close: {}".format(reason))
+            logger.warning("on_partition_close: {}".format(reason))
 
         def on_event(partition_context, event):
             if get_device_id_from_event(event) == device_id:
                 body = event.body_as_json()
                 if "thiefHeartbeat" in body:
-                    logger.debug("heartbeat received")
+                    logger.info("heartbeat received")
                     self.last_heartbeat = time.time()
                 elif "thiefPingback" in body:
                     with self.pingback_events_lock:
                         self.pingback_events.put(event)
 
-        logger.debug("starting receive")
+        logger.info("starting receive")
         with self.eventhub_consumer_client:
             self.eventhub_consumer_client.receive(
                 on_event,
@@ -105,7 +107,7 @@ class ServiceApp(common.BaseApp):
         Thread which is responsible for returning pingback response message to the
         device client on the other side of the wall.
         """
-        while not self.done:
+        while not self.done.isSet():
             message_ids = []
             while True:
                 try:
@@ -132,31 +134,23 @@ class ServiceApp(common.BaseApp):
         Thread which is responsible for sending heartbeat messages to the other side and
         also for making sure that heartbeat messages are received often enough
         """
-        while not self.done:
+        while not self.done.isSet():
             message = json.dumps({"thiefHeartbeat": True})
 
-            logger.debug("sending heartbeat")
+            logger.info("sending heartbeat")
             self.registry_manager.send_c2d_message(
                 device_id, message, {"contentType": "application/json", "contentEncoding": "utf-8"},
             )
 
             seconds_since_last_heartbeat = time.time() - self.last_heartbeat
-            if seconds_since_last_heartbeat > (self.config.heartbeat_interval * 3):
+            if seconds_since_last_heartbeat > self.config.heartbeat_failure_interval:
                 raise Exception(
                     "No heartbeat received for {} seconds".format(seconds_since_last_heartbeat)
                 )
 
             time.sleep(self.config.heartbeat_interval)
 
-    def run_service_loop(self):
-        # collection of Future objects for all of the threads that are running continuously
-        # these are stored in a local variable because no other thread procs should need this.
-        loop_futures = []
-
-        unpack_config(self.config)
-
-        self.registry_manager = IoTHubRegistryManager(iothub_connection_string)
-
+    def wait_for_device_creation(self):
         # Make sure our device exists before we continue.  Since the device app and this
         # app are both starting up around the same time, it's possible that the device app
         # hasn't used DPS to crate the device yet.  Give up after 60 seconds
@@ -182,35 +176,67 @@ class ServiceApp(common.BaseApp):
         if not device:
             raise Exception("Device does not exist.  Cannot continue")
 
+    def shutdown(self, error):
+        """
+        Shutdown the test.  This function can be called from any tread in order to trigger
+        the shutdown of the test
+        """
+        if self.shutdown_event.isSet():
+            logger.info("shutdown: event is already set.  ignorning")
+        else:
+            if error:
+                self.metrics.run_state = longhaul.FAILED
+                logger.error("shutdown: triggering error shutdown", exc_info=error)
+            else:
+                self.metrics.run_state = longhaul.COMPLETE
+                logger.info("shutdown: trigering clean shutdown")
+            self.shutdown_event.set()
+
+    def main(self):
+        set_config(self.config)
+
+        self.metrics.run_start = time.time()
+        self.metrics.run_state = longhaul.RUNNING
+
+        self.registry_manager = IoTHubRegistryManager(iothub_connection_string)
+
+        self.wait_for_device_creation()
+
         self.eventhub_consumer_client = EventHubConsumerClient.from_connection_string(
             eventhub_connection_string, consumer_group=eventhub_consumer_group
         )
 
-        loop_futures.append(self.executor.submit(self.eventhub_listener_thread))
-        loop_futures.append(self.executor.submit(self.pingback_thread))
-        loop_futures.append(self.executor.submit(self.heartbeat_thread))
+        # spin up threads that are required for operation
+        self.shutdown_on_future_exit(
+            self.executor.submit(self.eventhub_dispatcher_thread), name="eventhub_dispatcher"
+        )
+        self.shutdown_on_future_exit(
+            self.executor.submit(self.pingback_thread), name="pingback thread"
+        )
+        self.shutdown_on_future_exit(
+            self.executor.submit(self.heartbeat_thread), name="heartbeat thread"
+        )
 
-        # Spin up our worker threads.
-        return self.run_longhaul_loop(loop_futures)
+        # Live my life the way I want to until it's time for me to die.
+        self.shutdown_event.wait(timeout=self.config.max_run_duration_in_seconds or None)
 
-    def disconnect_all_clients(self):
-        if self.eventhub_consumer_client:
-            self.eventhub_consumer_client.close()
-            self.eventhub_consumer_client = None
+        logger.info("Run is complete.  Cleaning up.")
 
-    def trigger_thread_shutdown(self):
-        super(ServiceApp, self).trigger_thread_shutdown()
-        if self.eventhub_consumer_client:
-            self.eventhub_consumer_client.close()
-            self.eventhub_consumer_client = None
+        # stop the reaper, then set the "done" event in order to stop all other threads.
+        self.stop_reaper()
+        self.done.set()
 
-    def main(self):
-        unpack_config(self.config)
+        # close the eventhub consumer before shutting down the executor.  This is necessary because
+        # the "receive" function that we use to receive EventHub events is blocking and doesn't
+        # have a timeout.
+        logger.info("closing eventhub listener")
+        self.eventhub_consumer_client.close()
 
-        self.metrics.run_start = time.time()
-        self.metrics.run_state = common.RUNNING
+        # wait for all other threads to exit.  This currently waits for all threads, and it can't
+        # "give up" if some threads refuse to exit.
+        self.executor.shutdown()
 
-        return self.run_service_loop()
+        logger.info("Done disconnecting.  Exiting")
 
 
 if __name__ == "__main__":
