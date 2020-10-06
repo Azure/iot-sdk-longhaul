@@ -3,11 +3,16 @@
 # full license information.
 set -e
 
-DEVICE_IMAGE=py36-linux-device-pypi-2.1.4
-SERVICE_IMAGE=py38-linux-service-pypi-2.2.1
+if [ ! -z $1 ]; then
+    DEVICE_ID=$1
+else
+    DEVICE_ID=${USER}-${DATETIME_NOW}
+fi
+
+DEVICE_IMAGE=py36-linux-device-pypi-2.2.0
+SERVICE_IMAGE=py38-linux-service-pypi-2.2.2
 DATETIME_NOW=$(date "+%Y-%m-%d-%H-%M-%S")
 
-DEVICE_ID=${USER}-${DATETIME_NOW}
 SERVICE_CONTAINER_NAME=${DEVICE_ID}-service
 DEVICE_CONTAINER_NAME=${DEVICE_ID}-device
 
