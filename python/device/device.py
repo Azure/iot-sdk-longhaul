@@ -70,7 +70,7 @@ class DeviceRunConfig(object):
         self.max_run_duration = 0
 
         self.heartbeat_interval = 10
-        self.heartbeat_failure_interval = 30
+        self.heartbeat_failure_interval = 300
         self.thief_property_update_interval = 60
         self.watchdog_failure_interval = 300
 

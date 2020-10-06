@@ -8,6 +8,7 @@ token_failures=0
 
 echo "Getting token"
 while [ "$token" == "" ]; do 
+    echo "calling curl"
     response=$(curl --silent 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -H Metadata:true)
     echo "response is ${response}"
     token=$(echo $response | jq -r '.access_token')
@@ -16,8 +17,10 @@ while [ "$token" == "" ]; do
         if [ $token_failures == $TOKEN_FAILURES_ALLOWED ]; then
             echo "TOO MANY FAILURES. ABORTING"
             exit 1
+        else
+            echo "Failed ${token_failures} out of ${TOKEN_FAILURES_ALLOWED} allowed failures.  Trying again."
+            sleep 2
         fi
-        sleep 2
     fi
 done
 
