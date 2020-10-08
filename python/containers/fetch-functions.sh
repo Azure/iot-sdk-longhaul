@@ -10,7 +10,6 @@ echo "Getting token"
 while [ "$token" == "" ]; do 
     echo "calling curl"
     response=$(curl --silent 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -H Metadata:true)
-    echo "response is ${response}"
     token=$(echo $response | jq -r '.access_token')
     if [ "$token" == "" ]; then 
         let token_failures+=1

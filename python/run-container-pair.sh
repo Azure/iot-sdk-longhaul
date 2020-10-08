@@ -18,7 +18,6 @@ DEVICE_CONTAINER_NAME=${DEVICE_ID}-device
 
 echo "creating device client container"
 az container create \
-    --no-wait \
     --resource-group ${THIEF_RUNS_RESOURCE_GROUP} \
     --name ${DEVICE_CONTAINER_NAME} \
     --image ${THIEF_CONTAINER_REGISTRY_HOST}/${DEVICE_IMAGE} \
@@ -30,7 +29,6 @@ az container create \
 
 echo "creating service client container"
 az container create \
-    --no-wait \
     --resource-group ${THIEF_RUNS_RESOURCE_GROUP} \
     --name ${SERVICE_CONTAINER_NAME} \
     --image ${THIEF_CONTAINER_REGISTRY_HOST}/${SERVICE_IMAGE} \

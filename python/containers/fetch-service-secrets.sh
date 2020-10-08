@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft. All rights reserved.
 # Licensed under the MIT license. See LICENSE file in the project root for
 # full license information.
-set -e
+
 script_dir=$(cd "$(dirname "$0")" && pwd)
 
 source ${script_dir}/fetch-functions.sh
