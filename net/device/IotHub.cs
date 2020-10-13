@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using static Microsoft.Azure.Iot.Thief.Device.LoggingConstants;
 
 namespace Microsoft.Azure.Iot.Thief.Device
 {
@@ -99,7 +100,7 @@ namespace Microsoft.Azure.Iot.Thief.Device
                     }
                 }
 
-                _logger.Metric("MessageBacklog", _messagesToSend.Count);
+                _logger.Metric(MessageBacklog, _messagesToSend.Count);
 
                 // If not connected, skip the work below this round
                 if (!_isConnected)
@@ -122,7 +123,8 @@ namespace Microsoft.Azure.Iot.Thief.Device
                         await _deviceClient.SendEventAsync(pendingMessage, ct).ConfigureAwait(false);
 
                         ++_totalMessagesSent;
-                        _logger.Metric("TotalMessagesSent", _totalMessagesSent);
+                        _logger.Metric(TotalMessagesSent, _totalMessagesSent);
+                        _logger.Metric(MessageDelaySeconds, (DateTime.UtcNow - pendingMessage.CreationTimeUtc).TotalSeconds);
 
                         pendingMessage.Dispose();
                         pendingMessage = null;
@@ -255,12 +257,13 @@ namespace Microsoft.Azure.Iot.Thief.Device
             {
                 _disconnectedTimer.Stop();
                 _logger.Metric(
-                    "DisconnectedDurationMinutes",
-                    _disconnectedTimer.Elapsed.TotalMinutes,
+                    DisconnectedDurationSeconds,
+                    _disconnectedTimer.Elapsed.TotalSeconds,
                     new Dictionary<string, string>
                     {
-                        { "DisconnectedStatus", _disconnectedStatus.ToString() },
-                        { "DisconnectedReason", _disconnectedReason.ToString() },
+                        { DisconnectedStatus, _disconnectedStatus.ToString() },
+                        { DisconnectedReason, _disconnectedReason.ToString() },
+                        { ConnectionStatusChangeCount, _connectionStatusChangeCount.ToString() },
                     });
             }
             else if (!_isConnected && !_disconnectedTimer.IsRunning)
