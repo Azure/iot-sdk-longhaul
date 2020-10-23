@@ -18,7 +18,7 @@ from measurement import ThreadSafeCounter
 import azure_monitor
 from azure_monitor_metrics import MetricsReporter
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 logging.getLogger("paho").setLevel(level=logging.INFO)
 logging.getLogger("thief").setLevel(level=logging.INFO)
 
@@ -35,7 +35,7 @@ run_id = os.getenv("THIEF_DEVICE_APP_RUN_ID")
 requested_service_pool = os.getenv("THIEF_REQUESTED_SERVICE_POOL")
 
 # Amount of time to wait for a service app to pair with this device
-PAIRING_REQUEST_TIMEOUT_INTERVAL = 300
+PAIRING_REQUEST_TIMEOUT_INTERVAL = 900
 # Amount of time before resending pairingRequest command
 PAIR_REQUEST_SENT_INTERVAL = 30
 
@@ -79,12 +79,12 @@ class DeviceRunConfig(object):
     """
 
     def __init__(self):
-        self.max_run_duration = 90
+        self.max_run_duration = 0
 
         self.thief_property_update_interval = 60
         self.watchdog_failure_interval = 300
 
-        self.d2c_operations_per_second = 5
+        self.d2c_operations_per_second = 1
         self.d2c_slowness_threshold = 60
         self.d2c_failures_allowed = 10
         self.d2c_slow_operations_allowed = 100

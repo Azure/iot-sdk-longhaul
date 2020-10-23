@@ -17,7 +17,6 @@ import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
 import azure_monitor
 from measurement import ThreadSafeCounter
-from azure.iot.device.common.auth import connection_string
 
 
 logging.basicConfig(level=logging.WARNING)
@@ -37,13 +36,13 @@ run_id = os.getenv("THIEF_SERVICE_APP_RUN_ID")
 if not run_id:
     run_id = str(uuid.uuid4())
 
-cs = connection_string.ConnectionString(iothub_connection_string)
+cs_info = dict(map(str.strip, sub.split("=", 1)) for sub in iothub_connection_string.split(";"))
 
 # configure our traces and events to go to Azure Monitor
 azure_monitor.configure_logging(
     client_type="service",
     run_id=run_id,
-    hub=cs["HostName"],
+    hub=cs_info["HostName"],
     sdk_version=azure.iot.hub.constant.VERSION,
 )
 event_logger = azure_monitor.get_event_logger()
