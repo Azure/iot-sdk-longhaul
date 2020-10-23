@@ -281,6 +281,8 @@ class ServiceApp(app_base.AppBase):
             logger.warning("on_partition_close: {}".format(reason))
 
         def on_event(partition_context, event):
+            # TODO: find a better place to update the watchdog.  This will cause the service
+            # app to fail if no messages are received for a long time.
             worker_thread_info.watchdog_time = time.time()
             body = event.body_as_json()
             thief = body.get("thief")
