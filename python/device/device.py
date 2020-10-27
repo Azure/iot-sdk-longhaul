@@ -80,7 +80,7 @@ class DeviceRunConfig(object):
 
     # All durations are in seconds
     def __init__(self):
-        # how long should teh test run before finishing.  0 = forever
+        # how long should the test run before finishing.  0 = forever
         self.max_run_duration = 0
 
         # How often do we update reported properties
@@ -98,7 +98,9 @@ class DeviceRunConfig(object):
         # How many times to call send_message per second
         self.send_message_operations_per_second = 1
 
-        # How many threads do we spin up for overlapped send_message calls
+        # How many threads do we spin up for overlapped send_message calls.  These threads
+        # pull messages off of a single outgoing queue.  If all of the send_message threads
+        # are busy, outgoing messages will just pile up in the queue.
         self.send_message_thread_count = 10
 
         # How long do we wait for notification that the service app received a
@@ -528,7 +530,7 @@ class DeviceApp(app_base.AppBase):
         Thread which is responsible for watching for test failures based on limits that are
         exceeded.
 
-        Thesae checks were put into their own thread for 2 reasons:
+        These checks were put into their own thread for 2 reasons:
 
         1. to centralize this code.
 
