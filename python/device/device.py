@@ -105,7 +105,7 @@ class DeviceRunConfig(object):
         # message before we consider it a failure?
         self.send_message_arrival_failure_interval = 3600
 
-        # How many messages do let not arrive at the service before we fail the test
+        # How many messages fail to arrive at the service before we fail the test
         # This counts messages that have been sent and acked, but the service app hasn't reported receipt.
         self.send_message_arrival_failure_count = 10
 
