@@ -49,7 +49,7 @@ azure_monitor.log_to_azure_monitor("azure")
 azure_monitor.log_to_azure_monitor("paho")
 
 MessageWaitingToArrive = collections.namedtuple(
-    "MessageWaitingToArrive", "callback pingback_id message send_time"
+    "MessageWaitingToArrive", "callback pingback_id message send_epochtime"
 )
 
 
@@ -290,11 +290,11 @@ class DeviceApp(app_base.AppBase):
         """
 
         currently_pairing = False
-        pairing_start_timestamp = 0
-        pairing_last_request_timestamp = 0
+        pairing_start_epochtime = 0
+        pairing_last_request_epochtime = 0
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
 
             try:
                 msg = self.incoming_pairing_message_queue.get(timeout=1)
@@ -307,8 +307,8 @@ class DeviceApp(app_base.AppBase):
             if msg == "START_PAIRING":
                 logger.info("Starting pairing operation")
                 currently_pairing = True
-                pairing_start_timestamp = time.time()
-                pairing_last_request_timestamp = 0
+                pairing_start_epochtime = time.time()
+                pairing_last_request_epochtime = 0
                 self.pairing_id = str(uuid.uuid4())
                 self.service_run_app_id = None
                 # set msg to None to trigger the block that sends the first pairingRequest message
@@ -316,7 +316,7 @@ class DeviceApp(app_base.AppBase):
 
             if not msg and currently_pairing:
                 if (
-                    time.time() - pairing_start_timestamp
+                    time.time() - pairing_start_epochtime
                 ) > self.config.pairing_request_timeout_interval:
                     raise Exception(
                         "No resopnse to pairing requests after trying for {} seconds".format(
@@ -325,7 +325,7 @@ class DeviceApp(app_base.AppBase):
                     )
 
                 elif (
-                    time.time() - pairing_last_request_timestamp
+                    time.time() - pairing_last_request_epochtime
                 ) > self.config.pairing_request_send_interval:
 
                     logger.info("sending pairingRequest message")
@@ -344,7 +344,7 @@ class DeviceApp(app_base.AppBase):
                     pairing_request_message.content_type = "application/json"
                     pairing_request_message.content_encoding = "utf-8"
                     self.outgoing_send_message_queue.put(pairing_request_message)
-                    pairing_last_request_timestamp = time.time()
+                    pairing_last_request_epochtime = time.time()
 
             elif msg:
                 if currently_pairing:
@@ -384,7 +384,7 @@ class DeviceApp(app_base.AppBase):
         while not self.done.isSet():
             # We do not check is_pairing_complete here because we use this thread to
             # send pairing requests.
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
             try:
                 msg = self.outgoing_send_message_queue.get(timeout=1)
             except queue.Empty:
@@ -428,7 +428,7 @@ class DeviceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
 
             if self.is_pairing_complete():
                 pingback_id = str(uuid.uuid4())
@@ -465,7 +465,7 @@ class DeviceApp(app_base.AppBase):
                         callback=on_pingback_received,
                         pingback_id=pingback_id,
                         message=msg,
-                        send_time=time.time(),
+                        send_epochtime=time.time(),
                     )
 
                 # This function only queues the message.  A send_message_thread instance will pick
@@ -487,7 +487,7 @@ class DeviceApp(app_base.AppBase):
         done = False
 
         while not done:
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
             # setting this at the begining and checking at the end guarantees one last update
             # before the thread dies
             if self.done.isSet():
@@ -508,7 +508,7 @@ class DeviceApp(app_base.AppBase):
         to pick up.
         """
         while not self.done.isSet():
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
             msg = self.client.receive_message(timeout=1)
 
             if msg:
@@ -533,7 +533,7 @@ class DeviceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
 
             try:
                 msg = self.incoming_pingback_response_queue.get(timeout=1)
@@ -576,19 +576,19 @@ class DeviceApp(app_base.AppBase):
        """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
 
             arrival_failure_count = 0
             now = time.time()
             with self.pingback_list_lock:
                 for message_waiting in self.pingback_wait_list.values():
                     if (
-                        now - message_waiting.send_time
+                        now - message_waiting.send_epochtime
                     ) > self.config.send_message_arrival_failure_interval:
                         logger.warning(
                             "arrival time for {} of {} seconds is longer than failure interval of {}".format(
                                 message_waiting.pingback_id,
-                                (now - message_waiting.send_time),
+                                (now - message_waiting.send_epochtime),
                                 self.config.send_message_arrival_failure_interval,
                             )
                         )

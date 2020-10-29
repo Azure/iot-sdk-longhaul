@@ -133,7 +133,7 @@ class ServiceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
 
             # Step #1: see if we have any pairingRequest events waiting in the queue
             try:
@@ -258,7 +258,7 @@ class ServiceApp(app_base.AppBase):
         def on_event(partition_context, event):
             # TODO: find a better place to update the watchdog.  This will cause the service
             # app to fail if no messages are received for a long time.
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
 
             body = event.body_as_json()
             thief = body.get("thief")
@@ -305,7 +305,7 @@ class ServiceApp(app_base.AppBase):
 
     def send_outgoing_c2d_messages_thread(self, worker_thread_info):
         while not (self.done.isSet() and self.outgoing_c2d_queue.empty()):
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
             try:
                 (device_id, message, props) = self.outgoing_c2d_queue.get(timeout=1)
             except queue.Empty:
@@ -353,7 +353,7 @@ class ServiceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_time = time.time()
+            worker_thread_info.watchdog_epochtime = time.time()
             pingbacks = {}
             while True:
                 try:
