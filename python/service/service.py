@@ -1,4 +1,4 @@
-# Copyright (c) Microsoft. All rights reserved.
+#d Copyright (c) Microsoft. All rights reserved.
 # Licensed under the MIT license. See LICENSE file in the project root for
 # full license information.
 import logging
@@ -217,7 +217,7 @@ class ServiceApp(app_base.AppBase):
         # TODO: this isn't very robust.  There should be some way to tell the device that we're done.
         with self.pairing_list_lock:
             if device_id in self.paired_devices:
-                logger.info("unpairing {}. Removing it from paired device list".format(device_id))
+                logger.info("Unpairing {}. Removing it from paired device list".format(device_id))
                 del self.paired_devices[device_id]
 
     def implicitely_update_paired_device_list(self, device_id, pairing_id, service_app_run_id):
@@ -235,7 +235,7 @@ class ServiceApp(app_base.AppBase):
                         self.paired_devices[device_id].pairing_complete = True
                 else:
                     logger.info(
-                        "Device {} has decided to pair with somebody else".format(device_id)
+                            "Device {} has decided to pair with a different service instance:  {}".format(device_id, service_app_run_id)
                     )
                     del self.paired_devices[device_id]
 
