@@ -1,4 +1,4 @@
-#d Copyright (c) Microsoft. All rights reserved.
+# d Copyright (c) Microsoft. All rights reserved.
 # Licensed under the MIT license. See LICENSE file in the project root for
 # full license information.
 import logging
@@ -10,6 +10,8 @@ import json
 import datetime
 import app_base
 import uuid
+import string
+import random
 from concurrent.futures import ThreadPoolExecutor
 from azure.iot.hub import IoTHubRegistryManager
 import azure.iot.hub.constant
@@ -19,6 +21,7 @@ import azure_monitor
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("thief").setLevel(level=logging.INFO)
+logging.getLogger("azure.iot").setLevel(level=logging.INFO)
 
 logger = logging.getLogger("thief.{}".format(__name__))
 
@@ -49,10 +52,26 @@ azure_monitor.log_to_azure_monitor("azure")
 azure_monitor.log_to_azure_monitor("uamqp")
 
 
+def random_string(length):
+    """
+    return a random string
+    """
+    return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+
+
 class PerDeviceData(object):
     def __init__(self, pairing_id):
+        # For Pairing
         self.pairing_id = pairing_id
         self.pairing_complete = False
+
+        # For C2D
+        self.test_c2d_enabled = False
+        self.first_c2d_sent = False
+        self.next_c2d_message_index = 0
+        self.c2d_interval = 0
+        self.c2d_filler_size = 0
+        self.c2d_next_message_epochtime = 0
 
 
 class ServiceRunMetrics(object):
@@ -235,7 +254,9 @@ class ServiceApp(app_base.AppBase):
                         self.paired_devices[device_id].pairing_complete = True
                 else:
                     logger.info(
-                            "Device {} has decided to pair with a different service instance:  {}".format(device_id, service_app_run_id)
+                        "Device {} has decided to pair with a different service instance:  {}".format(
+                            device_id, service_app_run_id
+                        )
                     )
                     del self.paired_devices[device_id]
 
@@ -266,10 +287,11 @@ class ServiceApp(app_base.AppBase):
 
             service_app_run_id = thief.get("serviceAppRunId") if thief else None
             pairing_id = thief.get("pairingId") if thief else None
+
             device_id = get_device_id_from_event(event)
 
             if cmd == "pairingRequest":
-                logger.debug("Got pairingRequest command for device {}".format(device_id))
+                logger.info("Got pairingRequest command for device {}".format(device_id))
                 # If we're re-connecting a device, wipe out data from the previous relationship
                 self.unpair_device(device_id)
                 self.add_device_to_pairing_list(event)
@@ -283,7 +305,7 @@ class ServiceApp(app_base.AppBase):
 
                 if device_id in self.paired_devices:
                     if cmd == "pingbackRequest":
-                        logger.debug(
+                        logger.info(
                             "received pingback request from {} with pingbackId {}".format(
                                 device_id, event.body_as_json()["thief"]["pingbackId"]
                             )
@@ -291,6 +313,8 @@ class ServiceApp(app_base.AppBase):
                         self.incoming_pingback_request_queue.put(
                             (event, partition_context.partition_id)
                         )
+                    elif cmd == "startC2dMessageSending":
+                        self.start_c2d_message_sending(device_id, thief)
                     else:
                         logger.info("Unknown command received from {}: {}".format(device_id, body))
 
@@ -371,7 +395,7 @@ class ServiceApp(app_base.AppBase):
 
             if len(pingbacks):
                 for device_id in pingbacks:
-                    logger.debug(
+                    logger.info(
                         "send pingback for device_id = {}: {}".format(
                             device_id, pingbacks[device_id]
                         )
@@ -401,7 +425,97 @@ class ServiceApp(app_base.AppBase):
                             {"contentType": "application/json", "contentEncoding": "utf-8"},
                         )
                     )
-            time.sleep(1)
+
+            time.sleep(3)
+
+    def start_c2d_message_sending(self, device_id, thief):
+        """
+        Start sending c2d messages for a specific device.
+
+        NOTE: the caller is holding a lock when this is called.  Do not call any external
+        functions from here.
+        """
+
+        with self.pairing_list_lock:
+            if device_id in self.paired_devices:
+                device_data = self.paired_devices[device_id]
+                device_data.test_c2d_enabled = True
+                device_data.c2d_interval = thief["messageInterval"]
+                device_data.c2d_filler_size = thief["fillerSize"]
+                device_data.c2d_next_message_epochtime = 0
+
+    def test_c2d_thread(self, worker_thread_info):
+        """
+        Thread to send test C2D messages to devices which have enabled C2D testing
+        """
+
+        while not self.done.isSet():
+            now = time.time()
+            worker_thread_info.watchdog_epochtime = now
+
+            with self.pairing_list_lock:
+                devices = list(self.paired_devices.keys())
+
+            for device_id in devices:
+                with self.pairing_list_lock:
+                    if device_id in self.paired_devices:
+                        device_data = self.paired_devices[device_id]
+                        # make sure c2d is enabled and make sure it's time to send the next c2d
+                        if (
+                            not device_data.test_c2d_enabled
+                            or device_data.c2d_next_message_epochtime > time.time()
+                        ):
+                            device_data = None
+                    else:
+                        device_data = None
+
+                if device_data:
+                    # we can access device_data without holding pairing_list_lock because that lock protects the list
+                    # but not the structures inside the list.
+                    message = json.dumps(
+                        {
+                            "thief": {
+                                "cmd": "testC2d",
+                                "serviceAppRunId": run_id,
+                                "pairingId": device_data.pairing_id,
+                                "firstMessage": not device_data.first_c2d_sent,
+                                "testC2dMessageIndex": device_data.next_c2d_message_index,
+                                "filler": random_string(device_data.c2d_filler_size),
+                            }
+                        }
+                    )
+
+                    logger.info(
+                        "Sending test c2d to {} with index {}".format(
+                            device_id, device_data.next_c2d_message_index
+                        )
+                    )
+
+                    device_data.next_c2d_message_index += 1
+                    device_data.first_c2d_sent = True
+                    device_data.c2d_next_message_epochtime = now + device_data.c2d_interval
+
+                    self.outgoing_c2d_queue.put(
+                        (
+                            device_id,
+                            message,
+                            {"contentType": "application/json", "contentEncoding": "utf-8"},
+                        )
+                    )
+
+            # loop through devices and see when our next outgoing c2d message is due to be sent.
+            next_iteration_epochtime = now + 1
+            with self.pairing_list_lock:
+                for device_data in self.paired_devices.values():
+                    if (
+                        device_data.test_c2d_enabled
+                        and device_data.c2d_next_message_epochtime
+                        and device_data.c2d_next_message_epochtime < next_iteration_epochtime
+                    ):
+                        next_iteration_epochtime = device_data.c2d_next_message_epochtime
+
+            if next_iteration_epochtime > now:
+                time.sleep(next_iteration_epochtime - now)
 
     def main(self):
 
@@ -428,6 +542,7 @@ class ServiceApp(app_base.AppBase):
             app_base.WorkerThreadInfo(
                 self.handle_pingback_request_thread, "handle_pingback_request_thread"
             ),
+            app_base.WorkerThreadInfo(self.test_c2d_thread, "test_c2d_thread"),
         ]
 
         self.run_threads(threads_to_launch)
@@ -445,4 +560,5 @@ class ServiceApp(app_base.AppBase):
 
 
 if __name__ == "__main__":
+
     ServiceApp().main()
