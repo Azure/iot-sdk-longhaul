@@ -35,6 +35,7 @@ logger = logging.getLogger("thief.{}".format(__name__))
 # TODO: add config for "how long must a message be missing before we consider it actually missing".
 # TODO: add device_id to service logs as extra parameter
 # TODO: decide if config values should be failure_count or allowed_failures?
+# TODO: add code to update desired properties when unpairing device.
 
 # use os.environ[] for required environment variables
 provisioning_host = os.environ["THIEF_DEVICE_PROVISIONING_HOST"]
