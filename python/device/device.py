@@ -95,16 +95,16 @@ class DeviceRunConfig(object):
         self.max_run_duration = 0
 
         # How often do we update reported properties
-        self.thief_property_update_interval = 60
+        self.thief_property_update_interval_in_seconds = 60
 
         # How long can a thread go without updating its watchdog before failing.
-        self.watchdog_failure_interval = 300
+        self.watchdog_failure_interval_in_seconds = 300
 
         # How long to keep trying to pair with a service instance before giving up.
-        self.pairing_request_timeout_interval = 900
+        self.pairing_request_timeout_interval_in_seconds = 900
 
         # How many seconds to wait before sending a new pairingRequest message
-        self.pairing_request_send_interval = 30
+        self.pairing_request_send_interval_in_seconds = 30
 
         # How many times to call send_message per second
         self.send_message_operations_per_second = 1
@@ -116,7 +116,7 @@ class DeviceRunConfig(object):
 
         # How long do we wait for notification that the service app received a
         # message before we consider it a failure?
-        self.send_message_arrival_failure_interval = 3600
+        self.send_message_arrival_failure_interval_in_seconds = 3600
 
         # How many messages fail to arrive at the service before we fail the test
         # This counts messages that have been sent and acked, but the service app hasn't reported receipt.
@@ -134,13 +134,13 @@ class DeviceRunConfig(object):
         self.send_message_exception_failure_count = 1
 
         # How often do we want the service to send test C2D messages?
-        self.receive_message_interval = 2
+        self.receive_message_interval_in_seconds = 2
 
         # How big, in bytes, do we we want the random text size in test C2D messages to be
         self.receive_message_filler_size = 16 * 1024
 
         # How many missing C2D messages will cause the test to fail?
-        self.receive_message_missing_message_failure_count = 1
+        self.receive_message_missing_message_failure_count = 10
 
 
 class DeviceApp(app_base.AppBase):
@@ -265,7 +265,7 @@ class DeviceApp(app_base.AppBase):
 
         props = {
             "runStartUtc": self.metrics.run_start_utc.isoformat(),
-            "runCurrentTimeUtc": datetime.datetime.utcnow().isoformat(),
+            "latestUpdateTimeUtc": datetime.datetime.utcnow().isoformat(),
             "runEndUtc": self.metrics.run_end_utc.isoformat() if self.metrics.run_end_utc else None,
             "runTime": str(self.metrics.run_time),
             "runState": str(self.metrics.run_state),
@@ -287,18 +287,18 @@ class DeviceApp(app_base.AppBase):
         properties
         """
         return {
-            "configPropertyUpdateInterval": self.config.thief_property_update_interval,
-            "configWatchdogFailureInterval": self.config.watchdog_failure_interval,
-            "configPairingRequestTimeoutInterval": self.config.pairing_request_timeout_interval,
-            "configPairingRequestSendInterval": self.config.pairing_request_send_interval,
+            "configPropertyUpdateIntervalInSeconds": self.config.thief_property_update_interval_in_seconds,
+            "configWatchdogFailureIntervalInSeconds": self.config.watchdog_failure_interval_in_seconds,
+            "configPairingRequestTimeoutIntervalInSeconds": self.config.pairing_request_timeout_interval_in_seconds,
+            "configPairingRequestSendIntervalInSeconds": self.config.pairing_request_send_interval_in_seconds,
             "configSendMessageOperationsPerSecond": self.config.send_message_operations_per_second,
             "configSendMessageThreadCount": self.config.send_message_thread_count,
-            "configSendMessageArrivalFailureInterval": self.config.send_message_arrival_failure_interval,
+            "configSendMessageArrivalFailureIntervalInSeconds": self.config.send_message_arrival_failure_interval_in_seconds,
             "configSendMessageArrivalFailureCount": self.config.send_message_arrival_failure_count,
             "configSendMessageBacklogFailureCount": self.config.send_message_backlog_failure_count,
             "configSendMessageUnackedFailureCount": self.config.send_message_unacked_failure_count,
             "configSendMessageExceptionFailureCount": self.config.send_message_exception_failure_count,
-            "configReceiveMessageInterval": self.config.receive_message_interval,
+            "configReceiveMessageIntervalInSeconds": self.config.receive_message_interval_in_seconds,
             "configReceiveMessageFillerSize": self.config.receive_message_filler_size,
             "configReceiveMessageMissingMessageFailureCount": self.config.receive_message_missing_message_failure_count,
         }
@@ -365,16 +365,16 @@ class DeviceApp(app_base.AppBase):
             if not msg and currently_pairing:
                 if (
                     time.time() - pairing_start_epochtime
-                ) > self.config.pairing_request_timeout_interval:
+                ) > self.config.pairing_request_timeout_interval_in_seconds:
                     raise Exception(
                         "No resopnse to pairing requests after trying for {} seconds".format(
-                            self.config.pairing_request_timeout_interval
+                            self.config.pairing_request_timeout_interval_in_seconds
                         )
                     )
 
                 elif (
                     time.time() - pairing_last_request_epochtime
-                ) > self.config.pairing_request_send_interval:
+                ) > self.config.pairing_request_send_interval_in_seconds:
 
                     logger.info("sending pairingRequest message")
                     pairing_request_message = Message(
@@ -560,7 +560,7 @@ class DeviceApp(app_base.AppBase):
             logger.info("updating thief props: {}".format(pprint.pformat(props)))
             self.client.patch_twin_reported_properties(props)
 
-            self.done.wait(self.config.thief_property_update_interval)
+            self.done.wait(self.config.thief_property_update_interval_in_seconds)
 
     def dispatch_incoming_message_thread(self, worker_thread_info):
         """
@@ -580,13 +580,13 @@ class DeviceApp(app_base.AppBase):
                 if thief and thief["pairingId"] == self.pairing_id:
                     cmd = thief["cmd"]
                     if cmd == "pingbackResponse":
-                        print("received {} message with {}".format(cmd, thief["pingbacks"]))
+                        logger.info("received {} message with {}".format(cmd, thief["pingbacks"]))
                         self.incoming_pingback_response_queue.put(msg)
                     elif cmd == "pairingResponse":
-                        print("received {} message".format(cmd))
+                        logger.info("received {} message".format(cmd))
                         self.incoming_pairing_message_queue.put(msg)
                     elif cmd == "testC2d":
-                        print(
+                        logger.info(
                             "received {} message with index {}".format(
                                 cmd, thief["testC2dMessageIndex"]
                             )
@@ -655,12 +655,12 @@ class DeviceApp(app_base.AppBase):
                 for message_waiting in self.pingback_wait_list.values():
                     if (
                         now - message_waiting.send_epochtime
-                    ) > self.config.send_message_arrival_failure_interval:
+                    ) > self.config.send_message_arrival_failure_interval_in_seconds:
                         logger.warning(
                             "arrival time for {} of {} seconds is longer than failure interval of {}".format(
                                 message_waiting.pingback_id,
                                 (now - message_waiting.send_epochtime),
-                                self.config.send_message_arrival_failure_interval,
+                                self.config.send_message_arrival_failure_interval_in_seconds,
                             )
                         )
                         arrival_failure_count += 1
@@ -731,7 +731,7 @@ class DeviceApp(app_base.AppBase):
                 "cmd": "startC2dMessageSending",
                 "serviceAppRunId": self.service_app_run_id,
                 "pairingId": self.pairing_id,
-                "messageInterval": self.config.receive_message_interval,
+                "messageIntervalInSeconds": self.config.receive_message_interval_in_seconds,
                 "fillerSize": self.config.receive_message_filler_size,
             }
         }

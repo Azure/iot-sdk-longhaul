@@ -1,4 +1,4 @@
-# d Copyright (c) Microsoft. All rights reserved.
+# Copyright (c) Microsoft. All rights reserved.
 # Licensed under the MIT license. See LICENSE file in the project root for
 # full license information.
 import logging
@@ -69,7 +69,7 @@ class PerDeviceData(object):
         self.test_c2d_enabled = False
         self.first_c2d_sent = False
         self.next_c2d_message_index = 0
-        self.c2d_interval = 0
+        self.c2d_interval_in_seconds = 0
         self.c2d_filler_size = 0
         self.c2d_next_message_epochtime = 0
 
@@ -97,10 +97,10 @@ class ServiceRunConfig(object):
         self.max_run_duration = 0
 
         # How long do we allow a thread to be unresponsive for.
-        self.watchdog_failure_interval = 300
+        self.watchdog_failure_interval_in_seconds = 300
 
         # How often to check device twins to make sure the device is still running
-        self.check_device_pairing_state_interval = 30
+        self.check_device_pairing_state_interval_in_seconds = 30
 
 
 def get_device_id_from_event(event):
@@ -157,7 +157,7 @@ class ServiceApp(app_base.AppBase):
             # Step #1: see if we have any pairingRequest events waiting in the queue
             try:
                 event = self.incoming_pairing_request_queue.get(
-                    timeout=self.config.check_device_pairing_state_interval
+                    timeout=self.config.check_device_pairing_state_interval_in_seconds
                 )
             except queue.Empty:
                 event = None
@@ -440,7 +440,7 @@ class ServiceApp(app_base.AppBase):
             if device_id in self.paired_devices:
                 device_data = self.paired_devices[device_id]
                 device_data.test_c2d_enabled = True
-                device_data.c2d_interval = thief["messageInterval"]
+                device_data.c2d_interval_in_seconds = thief["messageIntervalInSeconds"]
                 device_data.c2d_filler_size = thief["fillerSize"]
                 device_data.c2d_next_message_epochtime = 0
 
@@ -493,7 +493,9 @@ class ServiceApp(app_base.AppBase):
 
                     device_data.next_c2d_message_index += 1
                     device_data.first_c2d_sent = True
-                    device_data.c2d_next_message_epochtime = now + device_data.c2d_interval
+                    device_data.c2d_next_message_epochtime = (
+                        now + device_data.c2d_interval_in_seconds
+                    )
 
                     self.outgoing_c2d_queue.put(
                         (
