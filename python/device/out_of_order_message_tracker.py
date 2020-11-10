@@ -48,7 +48,7 @@ class OutOfOrderMessageTracker(object):
                 self.max_resolved_index = index - 1
 
             # since we're qos=1, we can get a c2d more than once
-            # This is why we comapre to max_resolved_index
+            # This is why we compare to max_resolved_index
             if index > self.max_resolved_index:
                 self.unresolved_indices.add(index)
 

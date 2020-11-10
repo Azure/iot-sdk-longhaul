@@ -13,11 +13,11 @@ function usage {
 source ${script_dir}/_parse_args $*
 
 if [ "${LANGUAGE_SHORT_NAME}" == "" ]; then
-    echo "ERROR: Language is required"
+    echo "ERROR: language_short_name is required"
     usage
 fi
 if [ "${LIBRARY}" == "" ]; then
-    echo "ERROR: Library is required"
+    echo "ERROR: library is required"
     usage
 fi
 if [ ${LIBRARY_VERSION} == "" ]; then
