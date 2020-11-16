@@ -1,6 +1,6 @@
 This document describes communication between Thief device and service apps and IotHub.  There are several ways that this communication occurs:
 
-* C2D and D2C are used for communication between the two proceses.  
+* C2D and D2C are used for communication between the two proceses.
 * Reported properties are used for reporting operational metrics of the _device_ app
 * Desired properties are used for reporting operational metrics of the _service_ app
 
@@ -33,7 +33,7 @@ All thief messages are inside a "thief" object, which is part of the message pay
 ### heartbeat
 
 heartbeat messages are used to inform your corresponding app that you"re still running.  i
-If an app doesn"t receive a hertbeat within some failure interval, it should exit with failure.  
+If an app doesn"t receive a hertbeat within some failure interval, it should exit with failure.
 
 example:
 ```json
@@ -69,15 +69,15 @@ fields:
 
 ### pingbackResponse
 
-A pingbackResponse is used to indicate reception of one or more pingback messages.  The messageIds are grouped into an array to limit the number of C2D messages that are sent.  A client will typically wait one second before sending a pingbackResponse and include all guids that were recevied within that second.  
+A pingbackResponse is used to indicate reception of one or more pingback messages.  The messageIds are grouped into an array to limit the number of C2D messages that are sent.  A client will typically wait one second before sending a pingbackResponse and include all guids that were recevied within that second.
 
 example:
 ```json
 "thief": {
     "cmd": "pingbackResponse",
     "pingbackIds": [
-        "27cee6a8-6ff6-484c-ba2e-6b53335e5fea", 
-        "cf434228-1790-42e1-a095-9ce7ce6b0883", 
+        "27cee6a8-6ff6-484c-ba2e-6b53335e5fea",
+        "cf434228-1790-42e1-a095-9ce7ce6b0883",
         "aa2a5a76-13a6-4b10-a689-a37cb736eb3b"
     ]
 }
@@ -131,22 +131,22 @@ example:
 ```json
 "thief": {
     "device": {
-        "runStart": "2020-09-21 16:09:09.746644", 
-        "runTime": "0:10:52.883547", 
-        "runState": "running", 
-        "exitReason": None, 
+        "runStart": "2020-09-21 16:09:09.746644",
+        "runTime": "0:10:52.883547",
+        "runState": "running",
+        "exitReason": None,
         "heartbeats": {
-            "sent": 65, 
+            "sent": 65,
             "received": 54
-        }, 
+        },
         "pingbacks": {
-            "requestsSent": 1946, 
-            "responsesReceived": 521, 
-            "requestsReceived": 0, 
+            "requestsSent": 1946,
+            "responsesReceived": 521,
+            "requestsReceived": 0,
             "responsesSent": 0
-        }, 
+        },
         "d2c": {
-            "totalSuccessCount": 1946, 
+            "totalSuccessCount": 1946,
             "totalFailureCount": 0
         }
     }
