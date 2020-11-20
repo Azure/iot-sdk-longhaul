@@ -402,7 +402,7 @@ class DeviceApp(app_base.AppBase):
         self, props, on_pingback_received, pingback_type, user_data=None
     ):
         """
-        helper function to crate a message from a dict and add pingback
+        helper function to create a message from a dict and add pingback
         properties.
         """
         pingback_id = str(uuid.uuid4())

@@ -54,7 +54,7 @@ class AppBase(object):
 
     def unpause_all_threads(self):
         """
-        Unpause all threads.  Used when debugging is finished./
+        Unpause all threads.  Used when debugging is finished.
         """
         self.paused = False
 
