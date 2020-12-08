@@ -203,7 +203,7 @@ class DeviceApp(app_base.AppBase):
         self.outgoing_control_message_queue = queue.Queue()
         # for pairing
         self.incoming_pairing_message_queue = queue.Queue()
-        self.session_id = None
+        self.pairing_id = None
         # for c2d
         self.out_of_order_message_tracker = OutOfOrderMessageTracker()
         self.incoming_test_c2d_message_queue = queue.Queue()
@@ -327,7 +327,7 @@ class DeviceApp(app_base.AppBase):
             "runTime": str(self.metrics.run_time),
             "runState": str(self.metrics.run_state),
             "exitReason": self.metrics.exit_reason,
-            "sessionId": self.session_id,
+            "pairingId": self.pairing_id,
         }
         return props
 
@@ -406,7 +406,7 @@ class DeviceApp(app_base.AppBase):
         # This isn't the best idea, but it works and it saves us from deep copies
         if self.service_app_run_id:
             props["thief"]["serviceAppRunId"] = self.service_app_run_id
-        props["thief"]["sessionId"] = self.session_id
+        props["thief"]["pairingId"] = self.pairing_id
 
         # This function only creates the message.  The caller needs to queue it up for sending.
         msg = Message(json.dumps(props))
@@ -454,7 +454,7 @@ class DeviceApp(app_base.AppBase):
         like this:
 
         1. The device sends a pairingRequest message stating what perferences it has about its
-             prospective partner along with a sessionId value that we can use to discriminate
+             prospective partner along with a pairingId value that we can use to discriminate
              this partnership with other (previous) pairings.
 
         2. All service apps watch for all pairingRequest messages.  If some service app instance
@@ -463,7 +463,7 @@ class DeviceApp(app_base.AppBase):
             If multiple service apps send the message, the winner is chosen by the
             device app, probably based on what message comes in first.
 
-        3. Once the device decides on a service app, it sets serviceAppRunId and sessionId
+        3. Once the device decides on a service app, it sets serviceAppRunId and pairingId
             in all messages it sends.  When the service sees this value, it can know whether
             it was chosen by the device.
 
@@ -494,9 +494,9 @@ class DeviceApp(app_base.AppBase):
                 currently_pairing = True
                 pairing_start_epochtime = time.time()
                 pairing_last_request_epochtime = 0
-                self.session_id = str(uuid.uuid4())
+                self.pairing_id = str(uuid.uuid4())
                 self.service_run_app_id = None
-                azure_monitor.add_logging_properties(session_id=self.session_id)
+                azure_monitor.add_logging_properties(pairing_id=self.pairing_id)
                 logger.info("Starting pairing operation")
                 # set msg to None to trigger the block that sends the first pairingRequest message
                 msg = None
@@ -553,7 +553,7 @@ class DeviceApp(app_base.AppBase):
         """
         return True if the pairing process is complete
         """
-        return self.session_id and self.service_app_run_id
+        return self.pairing_id and self.service_app_run_id
 
     def on_pairing_complete(self):
         """
@@ -718,7 +718,7 @@ class DeviceApp(app_base.AppBase):
                 obj = json.loads(msg.data.decode())
                 thief = obj.get("thief")
 
-                if thief and thief["sessionId"] == self.session_id:
+                if thief and thief["pairingId"] == self.pairing_id:
                     cmd = thief["cmd"]
                     if cmd == "pingbackResponse":
                         logger.info("received {} message with {}".format(cmd, thief["pingbacks"]))

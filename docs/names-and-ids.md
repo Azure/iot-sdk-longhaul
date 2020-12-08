@@ -6,12 +6,12 @@ There are a number of names and IDs used in THIEF.  This table describes some of
 
 | Identifier | format | Meaning |
 | - | - | - |
-| servicePool | string | Name of pool that a service app belongs to. |
-| requestedServicePool | string | Name of pool that a device app would like to pair with. |
-| runId | guid | Guid representing a running executable. |
-| serviceAppRunId | guid | Guid representing a running _service_ executable. |
-| sessionId | guid | Guid representing the pairing between a device app and a service app. |
-| pingbackId | guid | Guid used to represent the ACK of a thief operation. |
+| `servicePool` | string | Name of pool that a service app belongs to. |
+| `requestedServicePool` | string | Name of pool that a device app would like to pair with. |
+| `runId` | guid | Guid representing a running executable. |
+| `serviceAppRunId` | guid | Guid representing a running _service_ executable. |
+| `pairingId` | guid | Guid representing the pairing between a device app and a service app. |
+| `pingbackId` | guid | Guid used to represent the ACK of a thief operation. |
 
 ## servicePool notes
 * A service pool contains one or more running service apps.
@@ -34,9 +34,9 @@ There are a number of names and IDs used in THIEF.  This table describes some of
 * When a device pairs with a service app, it records the service app's runId and uses this ID when communicating with the service app.
 * The service app uses the presence of its serviceAppRunId in a device message to know that pairing is established (or broken) 
 
-## sessionId notes
-* Every time a device app pairs with a service app, it gets a new sessionId value.
-* sessionId was added to support service app fallback.  If a run pairs with the same service app a second time, the runIds would remain unchanged but a new sessionId would be allocated. 
+## pairingId notes
+* Every time a device app pairs with a service app, it gets a new pairingId value.
+* pairingId was added to support service app fallback.  If a run pairs with the same service app a second time, the runIds would remain unchanged but a new pairingId would be allocated. 
 
 ## pingbackId notes
 * When the device app needs the service app to verify some behavior, it includes a pingackId ID in the verification request.
