@@ -7,7 +7,7 @@ Test metrics are sent to 3 different places:
 
 Not all metrics are sent to all destinations.
 
-| group | reported properties | test telemetry | Azure Monitor | 
+| group | reported properties | test telemetry | Azure Monitor |
 | Session Metrics | X | X | - |
 | Test Metrics | X | X | X |
 | System Health Metrics | - | X | X |
@@ -111,7 +111,7 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
 | `processBytesInAllHeaps` | integer | Count of bytes for all _virtual_ memory used by the process. |
 | `processCpuPercent` | float | CPU usage of the test process, as a percentage of total CPU available.  Using 100% of 1 core on a 4 core system would evaluate to 25%. |
 | `processPrivateBytes` | integer | Amount of non-shared physical memory (in bytes) used by the process.  May be redundant and equal to `processWorkingSetPrivate`. |
-| `processWorkingSet` | integer | All physical memory (in bytes) used by the process. | 
+| `processWorkingSet` | integer | All physical memory (in bytes) used by the process. |
 | `processWorkingSetPrivate` | integer | Amount of non-shared physical memory (in bytes) used by the process. |
 
 

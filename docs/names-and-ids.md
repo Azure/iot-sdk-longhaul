@@ -23,14 +23,14 @@ There are a number of names and IDs used in THIEF.  This table describes some of
 * The device _must_ specify a requested service pool.
 * Any service app in the requested pool can pair with the device app.
 * A service app cannot pair with a device app that is requesting a different pool.
-* If no service apps are available in the device's requested pool, the pairing fails. 
+* If no service apps are available in the device's requested pool, the pairing fails.
 
 ## runId notes
 * Every time a service or device app launches, it gets a new runId value.
 
 ## pairingId notes
 * Every time a device app pairs with a service app, it gets a new pairingId value.
-* pairingId was added to support service app fallback.  If a run pairs with the same service app a second time, the runIds would remain unchanged but a new pairingId would be allocated. 
+* pairingId was added to support service app fallback.  If a run pairs with the same service app a second time, the runIds would remain unchanged but a new pairingId would be allocated.
 
 ## serviceAck notes
 * When the device app needs the service app to verify some behavior, it includes a pingackId ID in the verification request.

@@ -5,7 +5,7 @@
 `serviceAckResponse` messages are used to acknowledge events that the device app is unable to observe.
 A `serviceAckId` could represent a telemetry message, a reported property write, or any other operation that needs to be verified by the service.
 The `serviceAckId` is created by the device and passed to the service app as part of an operation.
-When the service app verifies that operation, it returns the `serviceAckId` to the device inside a `serviceAckResponse` c2d message.  
+When the service app verifies that operation, it returns the `serviceAckId` to the device inside a `serviceAckResponse` c2d message.
 When the device receives an operation's `serviceAckId` back, it knows that the operation has been verified by the service app.
 Because c2d is a fairly expensive operation, the service app gathers `serviceAckIds` in batches to send to the device app.
 
@@ -134,9 +134,9 @@ The device app uses the `testC2dMessageIndex` value to keep track of messages re
     "thief": {
       "cmd": "testC2d",
       "serviceRunId": "3e5917f2-3625-4431-92fa-45b184a25498",
-      "pairingId": "64186b84-48d3-4831-8f09-85edc31dc133", 
-      "firstMessage": true, 
-      "testC2dMessageIndex": 0, 
+      "pairingId": "64186b84-48d3-4831-8f09-85edc31dc133",
+      "firstMessage": true,
+      "testC2dMessageIndex": 0,
       "filler": "5EGILSQJHVG7T3WK8N59ITEJZRAS1IGEGCRMC3MGA"
     }
   }
@@ -145,7 +145,7 @@ The device app uses the `testC2dMessageIndex` value to keep track of messages re
 | field | format | meaning |
 | - | - | - |
 | `cmd` | string | must be `testC2d` |
-| `serviceRunId` | guid |  `runid` for the service app sending this message | 
+| `serviceRunId` | guid |  `runid` for the service app sending this message |
 | `pairingId` | guid | `pairingid` representing the device/service app pairing |
 | `firstMessage` | boolean | `true` if this is the first message in the sequence.  `false` otherwise. |
 | `testC2dMessageIndex` | integer | index for this message, starts at 0 and increments by 1 for each message sent |

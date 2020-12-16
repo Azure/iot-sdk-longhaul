@@ -94,7 +94,7 @@ The name `receiveMessage` is used for these properties even though the specific 
 | - | - | - |
 | `receiveMessageIntervalInSeconds` | integer | When testing c2d, how many seconds to wait between c2d message.  This only applies to test c2d messages and does not apply to serverAck messages. |
 | `receiveMessageMaxFillerSize` | integer | When testing c2d, how many characters, max, to add to c2d message as "filler" |
-| `receiveMessageMissingMessageAllowedFailureCount` | integer | When testing c2d, how many mesages are allowed to be "missing" before the test fails. | 
+| `receiveMessageMissingMessageAllowedFailureCount` | integer | When testing c2d, how many mesages are allowed to be "missing" before the test fails. |
 
 ### reported property test configuration
 
