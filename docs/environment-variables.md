@@ -37,7 +37,7 @@ e.g. The environment variable `THIEF_SUBSCRIPTION_ID` is stored as a keyvault se
 ## IoTHub Service
 | variable name | service | device | developer | source | format | meaning |
 | - | - | - | - | - | - | - |
-| `THIEF_IOTHUB_NAME` | - | - | X |  keyvault | string | Name of IoT Hub instance being used for testing |
+| `THIEF_IOTHUB_NAME` | X | - | X |  keyvault | string | Name of IoT Hub instance being used for testing |
 | `THIEF_SERVICE_CONNECTION_STRING` | X | - | X | keyvault | connection string | service connection strong for the IoT Hub instance being used for testing |
 
 ## EventHub

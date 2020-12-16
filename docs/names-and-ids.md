@@ -8,10 +8,9 @@ There are a number of names and IDs used in THIEF.  This table describes some of
 | - | - | - |
 | `servicePool` | string | Name of pool that a service app belongs to. |
 | `requestedServicePool` | string | Name of pool that a device app would like to pair with. |
-| `runId` | guid | Guid representing a running executable. |
-| `serviceAppRunId` | guid | Guid representing a running _service_ executable. |
+| `runId` | guid | Guid representing a running executable.|
 | `pairingId` | guid | Guid representing the pairing between a device app and a service app. |
-| `pingbackId` | guid | Guid used to represent the ACK of a thief operation. |
+| `serviceAck` | guid | Guid used to represent the ACK of a thief operation. |
 
 ## servicePool notes
 * A service pool contains one or more running service apps.
@@ -28,16 +27,11 @@ There are a number of names and IDs used in THIEF.  This table describes some of
 
 ## runId notes
 * Every time a service or device app launches, it gets a new runId value.
-* For development scenarios, optional `THIEF_DEVICE_APP_RUN_ID` and `THIEF_SERVICE_APP_RUN_ID` environment variables can be used.  (These variables used to be more important.  They are less useful at this point and might be unnecessary.)
-
-## serviceAppRunId notes
-* When a device pairs with a service app, it records the service app's runId and uses this ID when communicating with the service app.
-* The service app uses the presence of its serviceAppRunId in a device message to know that pairing is established (or broken) 
 
 ## pairingId notes
 * Every time a device app pairs with a service app, it gets a new pairingId value.
 * pairingId was added to support service app fallback.  If a run pairs with the same service app a second time, the runIds would remain unchanged but a new pairingId would be allocated. 
 
-## pingbackId notes
+## serviceAck notes
 * When the device app needs the service app to verify some behavior, it includes a pingackId ID in the verification request.
-* When the service app verifies the behavior, it sends a pingbackResponse message to the decvice which includes the appropriate pingbackId.
+* When the service app verifies the behavior, it sends a serviceAckResponse message to the decvice which includes the appropriate serviceAckId.
