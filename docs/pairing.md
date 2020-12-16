@@ -57,7 +57,7 @@ A service app can tell the device app that it's available for pairing by setting
 | - | - | - |
 | `pairingId` | guid | ID representing an individual pairing attempt.  This is included so the device can know that it's not looking at an old set of desired properties. |
 | `serviceRunId` | guid | `runId` for the service app that wants to pair with the device app |
-| `acceptedPairing`: guid | `none` in this step because there is no agreement (yet) between the device app and service app |
+| `acceptedPairing` | guid | `none` in this step because there is no agreement (yet) between the device app and service app |
 
 ## Step 3: device sets reported properties to select service instance.
 
