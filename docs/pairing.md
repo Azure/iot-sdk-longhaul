@@ -13,7 +13,7 @@ Once `acceptedPairing` is set, the pairing is complete and test operation can be
 The pairing stars with the device setting `properties/reported/thief/pairing/serviceRunId` to `null`.
 This indicates that it doesn't have a paired service app and welcomes service apps to "throw their hat into the ring" by setting desired properties as described in step 2.
 
-````json
+```json
   {
     "reported": {
       "thief": {
