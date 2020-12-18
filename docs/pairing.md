@@ -1,9 +1,9 @@
 # pairing process
 
 The pairing process is a handshake with 4 steps, all done with reported and desired properties:
-1. A device app says "I need a partner" by setting it's reported `serviceRunId` to `null`.
+1. A device app says "I need a partner" by setting its reported `serviceRunId` to `null`.
 2. A service app says "I'm available" by setting the devices desired `serviceRunId` to the service app's `runId` value.
-3. The device app says "I choose you" by setting it's reported `serviceRunId` to the `runId` of the chosen service
+3. The device app says "I choose you" by setting its reported `serviceRunId` to the `runId` of the chosen service
 4. The service app finalizes the pairing by setting the devices desired `acceptedPairing` value.
 
 Once `acceptedPairing` is set, the pairing is complete and test operation can begin.
@@ -35,7 +35,7 @@ This indicates that it doesn't have a paired service app and welcomes service ap
 | `requestedServicePool` | string | free-form name for the pool of service apps which are known to be valid.  This is the the only value that a service app uses to decide if it can pair with the device app |
 | `serviceRunId` | guid | runId of the selected service app. Since this step is starting the pairing process, this is set to `null` because no service app has been chosen yet. |
 
-## Step 2: service sets desired properties to say that it's available.
+## Step 2: service sets desired properties to say that its available.
 
 A service app can tell the device app that it's available for pairing by setting `properties/desired/thief/pairing` values as described below.
 
@@ -91,7 +91,7 @@ When the deivce sees this value, it knows that the pairing is complete and it ca
       "thief": {
         "pairing": {
           "pairingId": "176e7469-9755-4a7a-af74-85f735f0f296",
-          "serviceRunId": "23ebf618-41e2-40d7-9964-a16ae9762a1c"
+          "serviceRunId": "23ebf618-41e2-40d7-9964-a16ae9762a1c",
           "acceptedPairing": "176e7469-9755-4a7a-af74-85f735f0f296, 23ebf618-41e2-40d7-9964-a16ae9762a1c",
         }
       }
@@ -109,6 +109,6 @@ When the deivce sees this value, it knows that the pairing is complete and it ca
 
 ## Unpairing
 When a device wishes to unpair with a service app, it can simply replace `properties/reported/thief/pairing/serviceRunId` with a new value or with `null`.
-When the service app sees that this value has changed, it
+When the service app sees that this value has changed, it will consider the device to be "unpaird" and stop working with that device.
 
 

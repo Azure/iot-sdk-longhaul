@@ -29,7 +29,7 @@ Because c2d is a fairly expensive operation, the service app gathers `serviceAck
 
 | field | format | meaning |
 | - | - | - |
-| `cmd` | string | Must be `serviceAckResponse` to indicate that this c2d message is a `serviceAckResopnse`. |
+| `cmd` | string | Must be `serviceAckResponse` to indicate that this c2d message is a `serviceAckResponse`. |
 | `serviceRunId` | guid | `serviceRunId` for the service app sending the `serviceAckResponse`. |
 | `pairingId` |  guid | `pairingId` that represents the pairing between the device and service apps. |
 | `serviceAcks` | array | Array of service acks |
@@ -126,7 +126,7 @@ When the service app observes the removal of hte property, it returns the `remov
 
 ## test c2d messages
 
-When c2d testing is enabled (via `properties/reported/thief/testControl/c2d`), the service sends a continuous sream of c2d messages using the configuration stored in the `testControl/c2d` structure.
+When c2d testing is enabled (via `properties/reported/thief/testControl/c2d`), the service sends a continuous stream of c2d messages using the configuration stored in the `testControl/c2d` structure.
 The device app uses the `testC2dMessageIndex` value to keep track of messages received from the service, including dropped messages.
 
 ```json
@@ -147,6 +147,6 @@ The device app uses the `testC2dMessageIndex` value to keep track of messages re
 | `cmd` | string | must be `testC2d` |
 | `serviceRunId` | guid |  `runid` for the service app sending this message |
 | `pairingId` | guid | `pairingid` representing the device/service app pairing |
-| `firstMessage` | boolean | `true` if this is the first message in the sequence.  `false` otherwise. |
+| `firstMessage` | boolean | `true` if this is the first message in the sequence, otherwise `false` |
 | `testC2dMessageIndex` | integer | index for this message, starts at 0 and increments by 1 for each message sent |
 | `filler` | string | random text to pad out the c2d message to an arbitrary size.  Maximum filler size set inside the `testControl/c2d` structure. |

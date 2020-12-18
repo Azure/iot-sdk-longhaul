@@ -64,7 +64,7 @@ Service app will include these fields if they are available, but not all service
 
 | field | format | meaning |
 | - | - | - |
-| `sessionId` | string | populated by python Azure Monitor wrappres. |
+| `sessionId` | string | populated by python Azure Monitor wrappers. |
 | `process` | string | populated by Python Azure Monitor wrappers. |
 
 ## Automaticly populated fields for Python traces.
@@ -74,7 +74,7 @@ Service app will include these fields if they are available, but not all service
 | `level` | string | debug level for generated message |
 | `module`| string | module generating message (without path and extension) |
 | `lineNumber` | integer | line number in source file which is generating this message |
-| `fileName` | string | filename generating message (with path and excention) |
+| `fileName` | string | filename generating message (with path and extension) |
 
 ## Metric names
 

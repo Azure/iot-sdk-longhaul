@@ -11,8 +11,7 @@ System properties are set one time at the beginning of the run and used to recor
         "systemProperties": {
           "language": "python",
           "languageVersion": "3.8.2",
-          "osRelease": "#34~18.04.2-Ubuntu SMP Thu Oct "
-                                             "10 10:36:02 UTC 2019",
+          "osRelease": "#34~18.04.2-Ubuntu SMP Thu Oct 10 10:36:02 UTC 2019",
           "osType": "Linux",
           "sdkGithubBranch": null,
           "sdkGithubCommit": null,
@@ -26,14 +25,34 @@ System properties are set one time at the beginning of the run and used to recor
 
 | field | format | meaning |
 | - | - | - |
-| `language` | string | Language name, one of `python`, `node`, `csharp`, `c`, or `java` |
-| `languageVersion` | string | Version of the language, such as `3.7`, `8`, etc.  Format is arbitrary and depends on language.  `|
-| `osRelease` | string | Release version of the OS, such as `Windows 10 Amd64`  Format is arbitrary as this is only for display |
+| `language` | string | Language name, one of `python`, `node`, `.NET`, `c`, or `java` |
+| `languageVersion` | string | Version of the language, such as `3.7`, `8`, etc.  Format depends on `language`. |
+| `osRelease` | string | Release version of the OS.  Format depends on `osType` |
 | `osType` | string | one of `Windows` or `Linux`.  Others will be added as necessary.  |
-| `sdkGithubRepro` | string | If testing against code cloned from GitHub, name of repo, such as `Azure/azure-iot-sdk-python`.  Excluded if testing against code installed from a package repository. |
+| `sdkGithubRepo` | string | If testing against code cloned from GitHub, name of repo, such as `Azure/azure-iot-sdk-python`.  Excluded if testing against code installed from a package repository. |
 | `sdkGithubBranch` | string | If testing against code cloned from Github, name of branch, such as `master` Excluded if testing against code installed from a package repository. |
 | `sdkGithubCommit` | string | If testing against code cloned from GitHub, sha of commit, such as `731f8fe`.  Excluded if testing against code installed from a package repository. |
 | `sdkVersion` | string | Version of the device sdk, such as `2.4.0`.  Format is currently arbitrary and used only for display, so this could be freeform, such as `client 2.4.0 with mqtt 1.9.3` |
+
+`sdkVersion` is only required if the code is running against a released SDK.
+`sdkGithubRepo`, `sdkGithubBranch`, and `sdkGithubCommit` are only required if the code is running against an unreleased SDK.
+
+## `language` and `languageVersion` formats
+
+The following rules apply to the langauge and langaugeVersion fields:
+
+| `langauge` | `languageVersion` rules | examples |
+| - | - |
+| Python | For cpython, use the PEP 440 major.minor.micro version number, followed by "async" if using the asyncio API. | `3.8.2` and `3.8.2 async` |
+| node | not yet defined | |
+| .NET | not yet defined | |
+| c | not yet defined ||
+| java | not yet defined ||
+
+## `osType` and `osRelease` formats
+
+`osRelease` should follow the Lq
+
 
 ## Test Confiuration
 

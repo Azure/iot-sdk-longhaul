@@ -10,7 +10,7 @@ There are a number of names and IDs used in THIEF.  This table describes some of
 | `requestedServicePool` | string | Name of pool that a device app would like to pair with. |
 | `runId` | guid | Guid representing a running executable.|
 | `pairingId` | guid | Guid representing the pairing between a device app and a service app. |
-| `serviceAck` | guid | Guid used to represent the ACK of a thief operation. |
+| `serviceAckId` | guid | Guid used to represent the ACK of a thief operation. |
 
 ## servicePool notes
 * A service pool contains one or more running service apps.
