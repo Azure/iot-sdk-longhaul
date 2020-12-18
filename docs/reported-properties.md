@@ -51,7 +51,9 @@ The following rules apply to the langauge and langaugeVersion fields:
 
 ## `osType` and `osRelease` formats
 
-`osRelease` should follow the Lq
+`osRelease` should follow the same rules as teh DeviceClientType field from the user agent string.
+
+For `osType` == `linux`, an appropriate `osRelease` string would be `Linux #34~18.04.2-Ubuntu SMP Thu Oct 10 10:36:02 UTC 2019;x86_64`
 
 
 ## Test Confiuration

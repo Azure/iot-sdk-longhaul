@@ -275,10 +275,9 @@ class ServiceApp(app_base.AppBase):
             logger.warning("EventHub on_partition_close: {}".format(reason))
 
         def on_event(partition_context, event):
-            # TODO: find a better place to update the watchdog.  This will cause the service
-            # app to fail if no messages are received for a long time.
             worker_thread_info.watchdog_epochtime = time.time()
-            self.incoming_eventhub_event_queue.put((event, partition_context.partition_id))
+            if event:
+                self.incoming_eventhub_event_queue.put((event, partition_context.partition_id))
 
         logger.info("starting EventHub receive")
         with self.eventhub_consumer_client:
@@ -287,6 +286,7 @@ class ServiceApp(app_base.AppBase):
                 on_error=on_error,
                 on_partition_initialize=on_partition_initialize,
                 on_partition_close=on_partition_close,
+                max_wait_time=30,
             )
 
     def send_outgoing_c2d_messages_thread(self, worker_thread_info):
