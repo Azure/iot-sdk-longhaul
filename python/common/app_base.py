@@ -11,6 +11,7 @@ import platform
 import os
 import traceback
 import pdb
+import threading
 from system_health_telemetry import SystemHealthTelemetry
 
 
@@ -33,6 +34,7 @@ class WorkerThreadInfo(object):
         self.name = name
         self.future = None
         self.watchdog_epochtime = None
+        self.thread_id = None
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -95,20 +97,30 @@ class AppBase(object):
         }
         return props
 
-    def _dump_all_threads(self):
+    def _dump_all_threads(self, problem_thread_id=None):
         """
         Dump all threads for debugging
         """
         if six.PY3:
+            logger.warning("Dumping all stacks")
             for thread_id, frame in sys._current_frames().items():
-                logger.warning("Stack for thread {}".format(thread_id))
+                if problem_thread_id and thread_id == problem_thread_id:
+                    logger.warning("Stack for PROBLEM thread {}".format(thread_id))
+                else:
+                    logger.warning("Stack for thread {}".format(thread_id))
                 logger.warning(str(traceback.format_stack(frame)))
 
     def run_threads(self, threads_to_launch):
+        def _thread_outer_proc(worker_thread_info):
+            current_thread = threading.current_thread()
+            current_thread.name = worker_thread_info.name
+            worker_thread_info.thread_id = current_thread.ident
+            return worker.threadproc(worker_thread_info)
+
         # Launch the threads.
         for worker in threads_to_launch:
             logger.info("Launching {}".format(worker.name))
-            worker.future = self.executor.submit(worker.threadproc, worker)
+            worker.future = self.executor.submit(_thread_outer_proc, worker)
             worker.watchdog_epochtime = time.time()
 
         loop_start_epochtime = time.time()
@@ -156,7 +168,7 @@ class AppBase(object):
                         )
                         error = Exception(reason)
                         logger.error(reason)
-                        self._dump_all_threads()
+                        self._dump_all_threads(worker.thread_id)
                         worker.future = None
                         self.metrics.run_state = FAILED
                         self.metrics.exit_reason = str(error)
