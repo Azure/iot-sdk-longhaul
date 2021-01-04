@@ -487,7 +487,7 @@ class DeviceApp(app_base.AppBase):
                 elif (
                     time.time() - pairing_last_request_epochtime
                 ) > self.config.pairing_request_send_interval_in_seconds:
-                    logger.info("pairing response timeout.  Requesting again")
+                    logger.info("Pairing response timeout.  Requesting again")
                     repeat_pairing_request = True
 
             # We trigger a pairing operation by pushing this string into our incoming queue.
@@ -514,7 +514,7 @@ class DeviceApp(app_base.AppBase):
                         }
                     }
                 }
-                logger.info("updating pairing reported props: {}".format(pprint.pformat(props)))
+                logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
                 self.client.patch_twin_reported_properties(props)
                 azure_monitor.add_logging_properties(pairing_id=self.pairing_id)
 
@@ -522,7 +522,7 @@ class DeviceApp(app_base.AppBase):
             elif msg and isinstance(msg, dict):
                 # is msg is a dict, that means we have a desired property change.  A service
                 # might be trying to pair with us.
-                logger.info("received pairing desired props: {}".format(pprint.pformat(msg)))
+                logger.info("Received pairing desired props: {}".format(pprint.pformat(msg)))
 
                 pairing = msg.get("thief", {}).get("pairing", {})
                 pairing_id = pairing.get("pairingId", None)
@@ -574,7 +574,7 @@ class DeviceApp(app_base.AppBase):
                         }
                     }
                     currently_pairing = False
-                    logger.info("updating pairing reported props: {}".format(pprint.pformat(props)))
+                    logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
                     self.client.patch_twin_reported_properties(props)
 
     def start_pairing(self):
@@ -687,9 +687,7 @@ class DeviceApp(app_base.AppBase):
                 self.send_metrics_to_azure_monitor(props["thief"])
 
                 def on_service_ack_received(service_ack_id, user_data):
-                    logger.info(
-                        "received service_ack with serviceAckId = {}".format(service_ack_id)
-                    )
+                    logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
                     self.metrics.send_message_count_received_by_service_app.increment()
 
                 # This function only queues the message.  A send_message_thread instance will pick
@@ -734,7 +732,7 @@ class DeviceApp(app_base.AppBase):
                 }
             }
 
-            logger.info("updating thief props: {}".format(pprint.pformat(props)))
+            logger.info("Updating thief props: {}".format(pprint.pformat(props)))
             self.client.patch_twin_reported_properties(props)
 
             self.done.wait(self.config.thief_property_update_interval_in_seconds)
@@ -784,14 +782,14 @@ class DeviceApp(app_base.AppBase):
                     if cmd == "serviceAckResponse":
                         # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
                         # for another thread to handle.
-                        logger.info("received {} message with {}".format(cmd, thief["serviceAcks"]))
+                        logger.info("Received {} message with {}".format(cmd, thief["serviceAcks"]))
                         self.incoming_service_ack_response_queue.put(msg)
 
                     elif cmd == "testC2d":
                         # If this is a test C2D messages, we put it into `incoming_test_c2d_message_queue`
                         # for another thread to handle.
                         logger.info(
-                            "received {} message with index {}".format(
+                            "Received {} message with index {}".format(
                                 cmd, thief["testC2dMessageIndex"]
                             )
                         )
@@ -801,7 +799,7 @@ class DeviceApp(app_base.AppBase):
                         logger.warning("Unknown command received: {}".format(obj))
 
                 else:
-                    logger.warning("C2d received, but it's not for us: {}".format(obj))
+                    logger.warning("C2D received, but it's not for us: {}".format(obj))
 
     def handle_service_ack_response_thread(self, worker_thread_info):
         """
@@ -875,7 +873,7 @@ class DeviceApp(app_base.AppBase):
                         now - wait_info.send_epochtime
                     ) > self.config.send_message_arrival_failure_interval_in_seconds:
                         logger.warning(
-                            "arrival time for {} of {} seconds is longer than failure interval of {}".format(
+                            "Arrival time for {} of {} seconds is longer than failure interval of {}".format(
                                 wait_info.service_ack_id,
                                 (now - wait_info.send_epochtime),
                                 self.config.send_message_arrival_failure_interval_in_seconds,
@@ -892,7 +890,7 @@ class DeviceApp(app_base.AppBase):
                         > self.config.reported_properties_update_interval_in_seconds
                     ):
                         logger.warning(
-                            "reported property set time for {} of {} seconds is longer than failure interval of {}".format(
+                            "Reported property set time for {} of {} seconds is longer than failure interval of {}".format(
                                 wait_info.service_ack_id,
                                 (now - wait_info.send_epochtime),
                                 self.config.reported_properties_update_interval_in_seconds,
@@ -909,7 +907,7 @@ class DeviceApp(app_base.AppBase):
                         > self.config.reported_properties_update_interval_in_seconds
                     ):
                         logger.warning(
-                            "reported property clear time for {} of {} seconds is longer than failure interval of {}".format(
+                            "Reported property clear time for {} of {} seconds is longer than failure interval of {}".format(
                                 wait_info.service_ack_id,
                                 (now - wait_info.send_epochtime),
                                 self.config.reported_properties_update_interval_in_seconds,
@@ -1011,7 +1009,7 @@ class DeviceApp(app_base.AppBase):
             }
         }
 
-        logger.info("Enabling C2d message testing: {}".format(props))
+        logger.info("Enabling C2D message testing: {}".format(props))
         self.client.patch_twin_reported_properties(props)
 
     def handle_incoming_test_c2d_messages_thread(self, worker_thread_info):

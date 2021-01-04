@@ -16,11 +16,11 @@ from system_health_telemetry import SystemHealthTelemetry
 
 logger = logging.getLogger("thief.{}".format(__name__))
 
-WAITING = "waiting"
-RUNNING = "running"
-FAILED = "failed"
-COMPLETE = "complete"
-INTERRUPTED = "interrupted"
+WAITING = "Waiting"
+RUNNING = "Running"
+FAILED = "Failed"
+COMPLETE = "Complete"
+INTERRUPTED = "Interrupted"
 
 
 class WorkerThreadInfo(object):
