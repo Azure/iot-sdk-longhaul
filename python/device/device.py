@@ -799,7 +799,7 @@ class DeviceApp(app_base.AppBase):
                         logger.warning("Unknown command received: {}".format(obj))
 
                 else:
-                    logger.warning("C2d received, but it's not for us: {}".format(obj))
+                    logger.warning("C2D received, but it's not for us: {}".format(obj))
 
     def handle_service_ack_response_thread(self, worker_thread_info):
         """
@@ -1009,7 +1009,7 @@ class DeviceApp(app_base.AppBase):
             }
         }
 
-        logger.info("Enabling C2d message testing: {}".format(props))
+        logger.info("Enabling C2D message testing: {}".format(props))
         self.client.patch_twin_reported_properties(props)
 
     def handle_incoming_test_c2d_messages_thread(self, worker_thread_info):

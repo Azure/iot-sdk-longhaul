@@ -329,7 +329,7 @@ class ServiceApp(app_base.AppBase):
 
                 if not do_send:
                     logger.warning(
-                        "C2d found in outgoing queue for device {} which is not paired".format(
+                        "C2D found in outgoing queue for device {} which is not paired".format(
                             device_id
                         )
                     )
@@ -359,7 +359,7 @@ class ServiceApp(app_base.AppBase):
         device clients.  The various serviceAcks are collected in `outgoing_service_ack_response_queue`
         and this thread collects the serviceAcks into batches to send at a regular interval.  This
         batching is required because we send many serviceAck responses per second and IoTHub will throttle
-        C2d events if we send too many.  Sending fewer big messages is better than sending fewer
+        C2D events if we send too many.  Sending fewer big messages is better than sending fewer
         small messages.
         """
 
