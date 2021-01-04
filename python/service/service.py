@@ -233,7 +233,7 @@ class ServiceApp(app_base.AppBase):
 
                         if service_ack_type == ServiceAckType.TELEMETRY_SERVICE_ACK:
                             logger.info(
-                                "received telemetry serviceAckRequest from {} with serviceAckId {}".format(
+                                "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
                                     device_id, thief["serviceAckId"]
                                 ),
                                 extra=custom_props(device_id, pairing_id),
@@ -245,7 +245,7 @@ class ServiceApp(app_base.AppBase):
                             )
                         else:
                             logger.warning(
-                                "unknown ServiceAckType: {}. Ignoring.".format(service_ack_type),
+                                "Unknown ServiceAckType: {}. Ignoring.".format(service_ack_type),
                                 extra=custom_props(device_id, pairing_id),
                             )
                     else:
@@ -280,7 +280,7 @@ class ServiceApp(app_base.AppBase):
             worker_thread_info.watchdog_epochtime = time.time()
             self.incoming_eventhub_event_queue.put((event, partition_context.partition_id))
 
-        logger.info("starting EventHub receive")
+        logger.info("Starting EventHub receive")
         with self.eventhub_consumer_client:
             self.eventhub_consumer_client.receive(
                 on_event,
@@ -295,7 +295,7 @@ class ServiceApp(app_base.AppBase):
         thead in order to centralize error handling and also because sending is a synchronous
         function and we don't want to block other threads while we're sending.
         """
-        logger.info("starting thread")
+        logger.info("Starting thread")
         last_amqp_refresh_epochtime = time.time()
 
         while not (self.done.isSet() and self.outgoing_c2d_queue.empty()):
@@ -329,7 +329,7 @@ class ServiceApp(app_base.AppBase):
 
                 if not do_send:
                     logger.warning(
-                        "c2d found in outgoing queue for device {} which is not paired".format(
+                        "C2d found in outgoing queue for device {} which is not paired".format(
                             device_id
                         )
                     )
@@ -393,7 +393,7 @@ class ServiceApp(app_base.AppBase):
                     pairing_id = device_data.pairing_id
 
                     logger.info(
-                        "send serviceAckResponse for device_id = {}: {}".format(
+                        "Send serviceAckResponse for device_id = {}: {}".format(
                             device_id, service_acks[device_id]
                         ),
                         extra=custom_props(device_id, pairing_id),
@@ -566,7 +566,7 @@ class ServiceApp(app_base.AppBase):
             if requested_service_pool and requested_service_pool != service_pool:
                 # Ignore events if the device is looking for a service pool which isn't us.
                 logger.info(
-                    "device {} requesting an app in a diffeent pool: {}".format(
+                    "Device {} requesting an app in a diffeent pool: {}".format(
                         device_id, requested_service_pool
                     ),
                     extra=custom_props(device_id, pairing_id),
