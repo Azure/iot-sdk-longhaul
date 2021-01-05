@@ -32,7 +32,7 @@ System properties are set one time at the beginning of the run and used to recor
 | `sdkGithubRepo` | string | If testing against code cloned from GitHub, name of repo, such as `Azure/azure-iot-sdk-python`.  Excluded if testing against code installed from a package repository. |
 | `sdkGithubBranch` | string | If testing against code cloned from Github, name of branch, such as `master` Excluded if testing against code installed from a package repository. |
 | `sdkGithubCommit` | string | If testing against code cloned from GitHub, sha of commit, such as `731f8fe`.  Excluded if testing against code installed from a package repository. |
-| `sdkVersion` | string | Version of the device sdk, such as `2.4.0`.  Format is currently arbitrary and used only for display, so this could be freeform, such as `client 2.4.0 with mqtt 1.9.3` |
+| `sdkVersion` | string | Version of the device sdk, such as `2.4.0`.  The exact format of this string depends on the langauge and is defined below |
 
 `sdkVersion` is only required if the code is running against a released SDK.
 `sdkGithubRepo`, `sdkGithubBranch`, and `sdkGithubCommit` are only required if the code is running against an unreleased SDK.
@@ -68,7 +68,6 @@ Test configuration is set one time at the beginning of the run and used to recor
           "pairingRequestSendIntervalInSeconds": 30,
           "pairingRequestTimeoutIntervalInSeconds": 900,
           "receiveMessageIntervalInSeconds": 20,
-          "receiveMessageMaxFillerSize": 16384,
           "receiveMessageMissingMessageAllowedFailureCount": 100,
           "reportedPropertiesUpdateAllowedFailureCount": 100,
           "reportedPropertiesUpdateIntervalInSeconds": 10,
@@ -114,7 +113,6 @@ The name `receiveMessage` is used for these properties even though the specific 
 | field | format | meaning |
 | - | - | - |
 | `receiveMessageIntervalInSeconds` | integer | When testing c2d, how many seconds to wait between c2d message.  This only applies to test c2d messages and does not apply to serverAck messages. |
-| `receiveMessageMaxFillerSize` | integer | When testing c2d, how many characters, max, to add to c2d message as "filler" |
 | `receiveMessageMissingMessageAllowedFailureCount` | integer | When testing c2d, how many mesages are allowed to be "missing" before the test fails. |
 
 ### reported property test configuration

@@ -37,6 +37,21 @@ class WorkerThreadInfo(object):
         self.thread_id = None
 
 
+python_runtime = platform.python_version()
+os_type = platform.system()
+os_release = platform.version()
+architecture = platform.machine()
+
+
+def _get_os_release_based_on_user_agent_standard():
+    return "({python_runtime};{os_type} {os_release};{architecture})".format(
+        python_runtime=python_runtime,
+        os_type=os_type,
+        os_release=os_release,
+        architecture=architecture,
+    )
+
+
 @six.add_metaclass(abc.ABCMeta)
 class AppBase(object):
     def __init__(self):
@@ -84,7 +99,7 @@ class AppBase(object):
             "sdkGithubBranch": os.getenv("THIEF_SDK_GIT_BRANCH"),
             "sdkGithubCommit": os.getenv("THIEF_SDK_GIT_COMMIT"),
             "osType": platform.system(),
-            "osRelease": platform.version(),
+            "osRelease": _get_os_release_based_on_user_agent_standard(),
         }
 
     def get_system_health_telemetry(self):

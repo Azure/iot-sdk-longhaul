@@ -69,7 +69,6 @@ If we look at the `nov12-03` test, we can see that the `exitReason` indicates a 
       "configPairingRequestSendIntervalInSeconds": 30,
       "configPairingRequestTimeoutIntervalInSeconds": 900,
       "configPropertyUpdateIntervalInSeconds": 60,
-      "configReceiveMessageFillerSize": 16384,
       "configReceiveMessageIntervalInSeconds": 2,
       "configReceiveMessageMissingMessageAllowedFailureCount": 10,
       "configSendMessageArrivalAllowedFailureCount": 10,

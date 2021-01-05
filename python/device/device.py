@@ -145,9 +145,6 @@ class DeviceRunConfig(object):
         # Be careful with this.  Too often will result in throttling on the service, which has 1.83  messages/sec/unit as a shared limit for all devices
         self.receive_message_interval_in_seconds = 20
 
-        # How big, in bytes, is the maximum random text size in test C2D messages to be
-        self.receive_message_max_filler_size = 16 * 1024
-
         # How many missing C2D messages will cause the test to fail?
         self.receive_message_missing_message_allowed_failure_count = 100
 
@@ -361,7 +358,6 @@ class DeviceApp(app_base.AppBase):
             "sendMessageUnackedAllowedFailureCount": self.config.send_message_unacked_allowed_failure_count,
             "sendMessageExceptionAllowedFailureCount": self.config.send_message_exception_allowed_failure_count,
             "receiveMessageIntervalInSeconds": self.config.receive_message_interval_in_seconds,
-            "receiveMessageMaxFillerSize": self.config.receive_message_max_filler_size,
             "receiveMessageMissingMessageAllowedFailureCount": self.config.receive_message_missing_message_allowed_failure_count,
             "reportedPropertiesUpdateIntervalInSeconds": self.config.reported_properties_update_interval_in_seconds,
             "reportedPropertiesVerifyFailureIntervalInSeconds": self.config.reported_properties_verify_failure_interval_in_seconds,
@@ -834,8 +830,7 @@ class DeviceApp(app_base.AppBase):
                 thief = json.loads(msg.data.decode())[Fields.Telemetry.THIEF]
 
                 with self.service_ack_list_lock:
-                    for service_ack in thief[Fields.C2d.SERVICE_ACKS]:
-                        service_ack_id = service_ack[Fields.C2d.SERVICE_ACK_ID]
+                    for service_ack_id in thief[Fields.C2d.SERVICE_ACKS]:
 
                         if service_ack_id in self.service_ack_wait_list:
                             # we've received a service_ack.  Don't call back here because we're holding
@@ -1019,7 +1014,6 @@ class DeviceApp(app_base.AppBase):
                     Fields.Reported.TestControl.C2D: {
                         Fields.Reported.TestControl.C2d.SEND: True,
                         Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS: self.config.receive_message_interval_in_seconds,
-                        Fields.Deprecated.MAX_FILLER_SIZE: self.config.receive_message_max_filler_size,
                     }
                 }
             }

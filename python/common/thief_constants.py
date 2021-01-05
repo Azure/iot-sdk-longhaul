@@ -19,8 +19,6 @@ class Fields(object):
         PAIRING_ID = "pairingId"
         SERVICE_ACK_TYPE = "serviceAckType"
         ACCEPTED_PAIRING = "acceptedPairing"
-        MAX_FILLER_SIZE = "maxFillerSize"
-        FILLER = "filler"
 
     class Telemetry(object):
         THIEF = "thief"
@@ -74,10 +72,8 @@ class Fields(object):
         SERVICE_RUN_ID = "serviceRunId"
 
         SERVICE_ACKS = "serviceAcks"
-        SERVICE_ACK_ID = "serviceAckId"  # DEPRECATED
         CMD = "cmd"
 
-        FIRST_MESSAGE = "firstMessage"
         TEST_C2D_MESSAGE_INDEX = "testC2dMessageIndex"
 
 
