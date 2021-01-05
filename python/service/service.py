@@ -17,7 +17,6 @@ from azure.iot.hub.protocol.models import Twin, TwinProperties
 import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
 import azure_monitor
-from utilities import get_random_length_string
 from thief_constants import (
     Const,
     Fields,
@@ -78,10 +77,8 @@ class PerDeviceData(object):
 
         # For testing C2D
         self.test_c2d_enabled = False
-        self.first_c2d_sent = False
         self.next_c2d_message_index = 0
         self.c2d_interval_in_seconds = 0
-        self.c2d_max_filler_size = 0
         self.c2d_next_message_epochtime = 0
 
         # for verifying reported property changes
@@ -383,9 +380,7 @@ class ServiceApp(app_base.AppBase):
                     break
                 if service_ack.device_id not in service_acks:
                     service_acks[service_ack.device_id] = []
-                service_acks[service_ack.device_id].append(
-                    {Fields.C2d.SERVICE_ACK_ID: service_ack.service_ack_id}
-                )
+                service_acks[service_ack.device_id].append(service_ack.service_ack_id)
 
             for device_id in service_acks:
 
@@ -431,7 +426,7 @@ class ServiceApp(app_base.AppBase):
                 device_data = self.paired_devices[device_id]
                 device_data.test_c2d_enabled = False
 
-    def start_c2d_message_sending(self, device_id, interval, max_filler_size):
+    def start_c2d_message_sending(self, device_id, interval):
         """
         Start sending c2d messages for a specific device.
         """
@@ -441,7 +436,6 @@ class ServiceApp(app_base.AppBase):
                 device_data = self.paired_devices[device_id]
                 device_data.test_c2d_enabled = True
                 device_data.c2d_interval_in_seconds = interval
-                device_data.c2d_max_filler_size = max_filler_size
                 device_data.c2d_next_message_epochtime = 0
 
     def test_c2d_thread(self, worker_thread_info):
@@ -481,11 +475,7 @@ class ServiceApp(app_base.AppBase):
                                 Fields.C2d.CMD: Types.Message.TEST_C2D,
                                 Fields.C2d.SERVICE_RUN_ID: run_id,
                                 Fields.Deprecated.PAIRING_ID: device_data.pairing_id,
-                                Fields.C2d.FIRST_MESSAGE: not device_data.first_c2d_sent,
                                 Fields.C2d.TEST_C2D_MESSAGE_INDEX: device_data.next_c2d_message_index,
-                                Fields.Deprecated.FILLER: get_random_length_string(
-                                    device_data.c2d_max_filler_size
-                                ),
                             }
                         }
                     )
@@ -498,7 +488,6 @@ class ServiceApp(app_base.AppBase):
                     )
 
                     device_data.next_c2d_message_index += 1
-                    device_data.first_c2d_sent = True
                     device_data.c2d_next_message_epochtime = (
                         now + device_data.c2d_interval_in_seconds
                     )
@@ -721,8 +710,7 @@ class ServiceApp(app_base.AppBase):
                 self.stop_c2d_message_sending(device_id)
             elif send is True:
                 interval = c2d[Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS]
-                max_filler_size = c2d[Fields.Deprecated.MAX_FILLER_SIZE]
-                self.start_c2d_message_sending(device_id, interval, max_filler_size)
+                self.start_c2d_message_sending(device_id, interval)
 
     def dispatch_twin_change_thread(self, worker_thread_info):
         """

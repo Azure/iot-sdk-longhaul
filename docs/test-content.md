@@ -16,12 +16,8 @@ Because c2d is a fairly expensive operation, the service app gathers `serviceAck
       "serviceRunId": "ca3ceadb-ac57-4cca-8f9b-c5d1e4dc189d",
       "pairingId": "3887e97e-6f06-484b-a5bf-1753913866d3",
       "serviceAcks": [
-        {
-          "serviceAckId": "3fcef06d-1240-4323-bc20-da664cbcdac7"
-        },
-        {
-          "serviceAckId": "7157db96-4da3-4192-a789-9082ee782a5c"
-        }
+          "3fcef06d-1240-4323-bc20-da664cbcdac7",
+          "7157db96-4da3-4192-a789-9082ee782a5c"
       ]
     }
   }
@@ -32,8 +28,7 @@ Because c2d is a fairly expensive operation, the service app gathers `serviceAck
 | `cmd` | string | Must be `serviceAckResponse` to indicate that this c2d message is a `serviceAckResponse`. |
 | `serviceRunId` | guid | `serviceRunId` for the service app sending the `serviceAckResponse`. |
 | `pairingId` |  guid | `pairingId` that represents the pairing between the device and service apps. |
-| `serviceAcks` | array | Array of service acks |
-| `serviceAckId` | guid | `serviceAckId` being acknowledged |
+| `serviceAcks` | array | Array of service ack IDs being acknowledge |
 
 ## test telemetry with serviceAckRequest properties
 
@@ -135,9 +130,7 @@ The device app uses the `testC2dMessageIndex` value to keep track of messages re
       "cmd": "testC2d",
       "serviceRunId": "3e5917f2-3625-4431-92fa-45b184a25498",
       "pairingId": "64186b84-48d3-4831-8f09-85edc31dc133",
-      "firstMessage": true,
-      "testC2dMessageIndex": 0,
-      "filler": "5EGILSQJHVG7T3WK8N59ITEJZRAS1IGEGCRMC3MGA"
+      "testC2dMessageIndex": 0
     }
   }
 ```
@@ -147,6 +140,4 @@ The device app uses the `testC2dMessageIndex` value to keep track of messages re
 | `cmd` | string | must be `testC2d` |
 | `serviceRunId` | guid |  `runid` for the service app sending this message |
 | `pairingId` | guid | `pairingid` representing the device/service app pairing |
-| `firstMessage` | boolean | `true` if this is the first message in the sequence, otherwise `false` |
 | `testC2dMessageIndex` | integer | index for this message, starts at 0 and increments by 1 for each message sent |
-| `filler` | string | random text to pad out the c2d message to an arbitrary size.  Maximum filler size set inside the `testControl/c2d` structure. |
