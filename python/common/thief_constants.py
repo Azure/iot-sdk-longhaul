@@ -3,7 +3,91 @@
 # full license information.
 
 
-class ServiceAckType(object):
-    TELEMETRY_SERVICE_ACK = "telemetry"
-    ADD_REPORTED_PROPERTY_SERVICE_ACK = "add_reported"
-    REMOVE_REPORTED_PROPERTY_SERVICE_ACK = "remove_reported"
+class Const(object):
+    JSON_CONTENT_TYPE = "application/json"
+    JSON_CONTENT_ENCODING = "utf-8"
+    JSON_TYPE_AND_ENCODING = {
+        "contentType": "application/json",
+        "contentEncoding": "utf-8",
+    }
+    PROPERTIES = "properties"
+    REPORTED = "reported"
+
+
+class Fields(object):
+    class Deprecated(object):
+        PAIRING_ID = "pairingId"
+        SERVICE_ACK_TYPE = "serviceAckType"
+        ACCEPTED_PAIRING = "acceptedPairing"
+        MAX_FILLER_SIZE = "maxFillerSize"
+        FILLER = "filler"
+
+    class Telemetry(object):
+        THIEF = "thief"
+        CMD = "cmd"
+        SERVICE_ACK_ID = "serviceAckId"
+        SERVICE_RUN_ID = "serviceRunId"
+
+    class Reported(object):
+        THIEF = "thief"
+        SYSTEM_PROPERTIES = "systemProperties"
+        SESSION_METRICS = "sessionMetrics"
+        TEST_METRICS = "testMetrics"
+        SYSTEM_HEALTH_METRICS = "systemHealthMetrics"
+        CONFIG = "config"
+
+        PAIRING = "pairing"
+
+        class Pairing(object):
+            REQUESTED_SERVICE_POOL = "requestedServicePool"
+            SERVICE_RUN_ID = "serviceRunId"
+            DEVICE_RUN_ID = "deviceRunId"
+
+        TEST_CONTENT = "testContent"
+
+        class TestContent(object):
+            REPORTED_PROPERTY_TEST = "reportedPropertyTest"
+
+            class ReportedPropertyTest(object):
+                ADD_SERVICE_ACK_ID = "addServiceAckId"
+                REMOVE_SERVICE_ACK_ID = "removeServiceAckId"
+
+        TEST_CONTROL = "testControl"
+
+        class TestControl(object):
+            C2D = "c2d"
+
+            class C2d(object):
+                SEND = "send"
+                MESSAGE_INTERVAL_IN_SECONDS = "messageIntervalInSeconds"
+
+    class Desired(object):
+        THIEF = "thief"
+
+        PAIRING = "pairing"
+
+        class Pairing(object):
+            SERVICE_RUN_ID = "serviceRunId"
+
+    class C2d(object):
+        THIEF = "thief"
+        SERVICE_RUN_ID = "serviceRunId"
+
+        SERVICE_ACKS = "serviceAcks"
+        SERVICE_ACK_ID = "serviceAckId"  # DEPRECATED
+        CMD = "cmd"
+
+        FIRST_MESSAGE = "firstMessage"
+        TEST_C2D_MESSAGE_INDEX = "testC2dMessageIndex"
+
+
+class Types(object):
+    class ServiceAck(object):
+        TELEMETRY_SERVICE_ACK = "telemetry"
+        ADD_REPORTED_PROPERTY_SERVICE_ACK = "add_reported"
+        REMOVE_REPORTED_PROPERTY_SERVICE_ACK = "remove_reported"
+
+    class Message(object):
+        SERVICE_ACK_REQUEST = "serviceAckRequest"
+        SERVICE_ACK_RESPONSE = "serviceAckResponse"
+        TEST_C2D = "testC2d"

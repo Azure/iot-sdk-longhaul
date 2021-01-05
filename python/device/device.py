@@ -20,7 +20,11 @@ from measurement import ThreadSafeCounter
 import azure_monitor
 from azure_monitor_metrics import MetricsReporter
 from out_of_order_message_tracker import OutOfOrderMessageTracker
-from thief_constants import ServiceAckType
+from thief_constants import (
+    Const,
+    Fields,
+    Types,
+)
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("paho").setLevel(level=logging.DEBUG)
@@ -310,7 +314,7 @@ class DeviceApp(app_base.AppBase):
             "runTime": str(self.metrics.run_time),
             "runState": str(self.metrics.run_state),
             "exitReason": self.metrics.exit_reason,
-            "pairingId": self.pairing_id,
+            Fields.Deprecated.PAIRING_ID: self.pairing_id,
         }
         return props
 
@@ -369,13 +373,15 @@ class DeviceApp(app_base.AppBase):
         Update reported properties at the start of a run
         """
         props = {
-            "thief": {
-                "systemProperties": self.get_system_properties(azure.iot.device.constant.VERSION),
-                "sessionMetrics": self.get_session_metrics(),
-                "testMetrics": self.get_test_metrics(),
-                "config": self.get_longhaul_config_properties(),
-                "testContent": None,
-                "testControl": None,
+            Fields.Reported.THIEF: {
+                Fields.Reported.SYSTEM_PROPERTIES: self.get_system_properties(
+                    azure.iot.device.constant.VERSION
+                ),
+                Fields.Reported.SESSION_METRICS: self.get_session_metrics(),
+                Fields.Reported.TEST_METRICS: self.get_test_metrics(),
+                Fields.Reported.CONFIG: self.get_longhaul_config_properties(),
+                Fields.Reported.TEST_CONTENT: None,
+                Fields.Reported.TEST_CONTROL: None,
             }
         }
         self.client.patch_twin_reported_properties(props)
@@ -388,13 +394,13 @@ class DeviceApp(app_base.AppBase):
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
         if self.service_run_id:
-            props["thief"]["serviceRunId"] = self.service_run_id
-        props["thief"]["pairingId"] = self.pairing_id
+            props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_RUN_ID] = self.service_run_id
+        props[Fields.Telemetry.THIEF][Fields.Deprecated.PAIRING_ID] = self.pairing_id
 
         # This function only creates the message.  The caller needs to queue it up for sending.
         msg = Message(json.dumps(props))
-        msg.content_type = "application/json"
-        msg.content_encoding = "utf-8"
+        msg.content_type = Const.JSON_CONTENT_TYPE
+        msg.content_encoding = Const.JSON_CONTENT_ENCODING
 
         msg.custom_properties["eventDateTimeUtc"] = datetime.datetime.now(
             datetime.timezone.utc
@@ -413,10 +419,10 @@ class DeviceApp(app_base.AppBase):
 
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
-        assert props["thief"].get("cmd", None) is None
-        props["thief"]["cmd"] = "serviceAckRequest"
-        props["thief"]["serviceAckId"] = service_ack_id
-        props["thief"]["serviceAckType"] = service_ack_type
+        assert props[Fields.Telemetry.THIEF].get(Fields.Telemetry.CMD, None) is None
+        props[Fields.Telemetry.THIEF][Fields.Telemetry.CMD] = Types.Message.SERVICE_ACK_REQUEST
+        props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_ACK_ID] = service_ack_id
+        props[Fields.Telemetry.THIEF][Fields.Deprecated.SERVICE_ACK_TYPE] = service_ack_type
 
         with self.service_ack_list_lock:
             self.service_ack_wait_list[service_ack_id] = ServiceAckWaitInfo(
@@ -505,12 +511,12 @@ class DeviceApp(app_base.AppBase):
                 self.pairing_id = str(uuid.uuid4())
                 self.service_run_id = None
                 props = {
-                    "thief": {
-                        "pairing": {
-                            "requestedServicePool": requested_service_pool,
-                            "serviceRunId": None,
-                            "pairingId": self.pairing_id,
-                            "deviceRunId": run_id,
+                    Fields.Reported.THIEF: {
+                        Fields.Reported.PAIRING: {
+                            Fields.Reported.Pairing.REQUESTED_SERVICE_POOL: requested_service_pool,
+                            Fields.Reported.Pairing.SERVICE_RUN_ID: None,
+                            Fields.Deprecated.PAIRING_ID: self.pairing_id,
+                            Fields.Reported.Pairing.DEVICE_RUN_ID: run_id,
                         }
                     }
                 }
@@ -524,10 +530,10 @@ class DeviceApp(app_base.AppBase):
                 # might be trying to pair with us.
                 logger.info("Received pairing desired props: {}".format(pprint.pformat(msg)))
 
-                pairing = msg.get("thief", {}).get("pairing", {})
-                pairing_id = pairing.get("pairingId", None)
-                service_run_id = pairing.get("serviceRunId", None)
-                accepted_pairing = pairing.get("acceptedPairing", None)
+                pairing = msg.get(Fields.Desired.THIEF, {}).get(Fields.Desired.PAIRING, {})
+                pairing_id = pairing.get(Fields.Deprecated.PAIRING_ID, None)
+                service_run_id = pairing.get(Fields.Desired.Pairing.SERVICE_RUN_ID, None)
+                accepted_pairing = pairing.get(Fields.Deprecated.ACCEPTED_PAIRING, None)
 
                 if accepted_pairing == "{},{}".format(self.pairing_id, self.service_run_id):
                     # This is the final part of the pairing.  Once `acceptedPairing` is set, we're
@@ -566,10 +572,10 @@ class DeviceApp(app_base.AppBase):
                     currently_pairing = False
                     self.service_run_id = service_run_id
                     props = {
-                        "thief": {
-                            "pairing": {
-                                "serviceRunId": self.service_run_id,
-                                "pairingId": self.pairing_id,
+                        Fields.Desired.THIEF: {
+                            Fields.Desired.PAIRING: {
+                                Fields.Desired.Pairing.SERVICE_RUN_ID: self.service_run_id,
+                                Fields.Deprecated.PAIRING_ID: self.pairing_id,
                             }
                         }
                     }
@@ -635,7 +641,7 @@ class DeviceApp(app_base.AppBase):
         """
         # we don't record session_metrics to azure monitor
 
-        system_health_metrics = props["systemHealthMetrics"]
+        system_health_metrics = props[Fields.Reported.SYSTEM_HEALTH_METRICS]
         self.reporter.set_process_cpu_percent(system_health_metrics["processCpuPercent"])
         self.reporter.set_process_working_set(system_health_metrics["processWorkingSet"])
         self.reporter.set_process_bytes_in_all_heaps(
@@ -644,7 +650,7 @@ class DeviceApp(app_base.AppBase):
         self.reporter.set_process_private_bytes(system_health_metrics["processPrivateBytes"])
         self.reporter.set_process_working_set_private(system_health_metrics["processCpuPercent"])
 
-        test_metrics = props["testMetrics"]
+        test_metrics = props[Fields.Reported.TEST_METRICS]
         self.reporter.set_send_message_count_sent(test_metrics["sendMessageCountSent"])
         self.reporter.set_send_message_count_received_by_service_app(
             test_metrics["sendMessageCountReceivedByServiceApp"]
@@ -676,15 +682,15 @@ class DeviceApp(app_base.AppBase):
 
             if self.is_pairing_complete():
                 props = {
-                    "thief": {
-                        "sessionMetrics": self.get_session_metrics(),
-                        "testMetrics": self.get_test_metrics(),
-                        "systemHealthMetrics": self.get_system_health_telemetry(),
+                    Fields.Reported.THIEF: {
+                        Fields.Reported.SESSION_METRICS: self.get_session_metrics(),
+                        Fields.Reported.TEST_METRICS: self.get_test_metrics(),
+                        Fields.Reported.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
                     }
                 }
 
                 # push these same metrics to Azure Monitor
-                self.send_metrics_to_azure_monitor(props["thief"])
+                self.send_metrics_to_azure_monitor(props[Fields.Reported.THIEF])
 
                 def on_service_ack_received(service_ack_id, user_data):
                     logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
@@ -695,7 +701,7 @@ class DeviceApp(app_base.AppBase):
                 msg = self.create_message_from_dict_with_service_ack(
                     props=props,
                     on_service_ack_received=on_service_ack_received,
-                    service_ack_type=ServiceAckType.TELEMETRY_SERVICE_ACK,
+                    service_ack_type=Types.ServiceAck.TELEMETRY_SERVICE_ACK,
                 )
                 self.outgoing_test_message_queue.put(msg)
 
@@ -725,10 +731,10 @@ class DeviceApp(app_base.AppBase):
                 done = True
 
             props = {
-                "thief": {
-                    "sessionMetrics": self.get_session_metrics(),
-                    "testMetrics": self.get_test_metrics(),
-                    # system_health_metrics don't go into reported properties
+                Fields.Reported.THIEF: {
+                    Fields.Reported.SESSION_METRICS: self.get_session_metrics(),
+                    Fields.Reported.TEST_METRICS: self.get_test_metrics(),
+                    # systemHealthMetrics don't go into reported properties
                 }
             }
 
@@ -751,7 +757,7 @@ class DeviceApp(app_base.AppBase):
             props = self.client.receive_twin_desired_properties_patch(timeout=30)
             if props:
                 # props that have the pairing structure go to `incoming_pairing_message_queue`
-                if props.get("thief", {}).get("pairing", {}):
+                if props.get(Fields.Desired.THIEF, {}).get(Fields.Desired.PAIRING, {}):
                     self.incoming_pairing_message_queue.put(props)
 
                 # Other props get dropped.  Eventually we'll use this to test desired properties.
@@ -774,23 +780,27 @@ class DeviceApp(app_base.AppBase):
 
             if msg:
                 obj = json.loads(msg.data.decode())
-                thief = obj.get("thief")
+                thief = obj.get(Fields.Telemetry.THIEF)
 
-                if thief and thief["pairingId"] == self.pairing_id:
+                if thief and thief[Fields.Deprecated.PAIRING_ID] == self.pairing_id:
                     # We only inspect messages that have `thief/pairingId` set to our `pairingId` value.
-                    cmd = thief["cmd"]
-                    if cmd == "serviceAckResponse":
+                    cmd = thief[Fields.C2d.CMD]
+                    if cmd == Types.Message.SERVICE_ACK_RESPONSE:
                         # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
                         # for another thread to handle.
-                        logger.info("Received {} message with {}".format(cmd, thief["serviceAcks"]))
+                        logger.info(
+                            "Received {} message with {}".format(
+                                cmd, thief[Fields.C2d.SERVICE_ACKS]
+                            )
+                        )
                         self.incoming_service_ack_response_queue.put(msg)
 
-                    elif cmd == "testC2d":
+                    elif cmd == Types.Message.TEST_C2D:
                         # If this is a test C2D messages, we put it into `incoming_test_c2d_message_queue`
                         # for another thread to handle.
                         logger.info(
                             "Received {} message with index {}".format(
-                                cmd, thief["testC2dMessageIndex"]
+                                cmd, thief[Fields.C2d.TEST_C2D_MESSAGE_INDEX]
                             )
                         )
                         self.incoming_test_c2d_message_queue.put(msg)
@@ -821,11 +831,11 @@ class DeviceApp(app_base.AppBase):
 
             if msg:
                 arrivals = []
-                thief = json.loads(msg.data.decode())["thief"]
+                thief = json.loads(msg.data.decode())[Fields.Telemetry.THIEF]
 
                 with self.service_ack_list_lock:
-                    for service_ack in thief["serviceAcks"]:
-                        service_ack_id = service_ack["serviceAckId"]
+                    for service_ack in thief[Fields.C2d.SERVICE_ACKS]:
+                        service_ack_id = service_ack[Fields.C2d.SERVICE_ACK_ID]
 
                         if service_ack_id in self.service_ack_wait_list:
                             # we've received a service_ack.  Don't call back here because we're holding
@@ -869,7 +879,7 @@ class DeviceApp(app_base.AppBase):
 
             with self.service_ack_list_lock:
                 for wait_info in self.service_ack_wait_list.values():
-                    if (wait_info.service_ack_type == ServiceAckType.TELEMETRY_SERVICE_ACK) and (
+                    if (wait_info.service_ack_type == Types.ServiceAck.TELEMETRY_SERVICE_ACK) and (
                         now - wait_info.send_epochtime
                     ) > self.config.send_message_arrival_failure_interval_in_seconds:
                         logger.warning(
@@ -884,7 +894,7 @@ class DeviceApp(app_base.AppBase):
                     elif (
                         (
                             wait_info.service_ack_type
-                            == ServiceAckType.ADD_REPORTED_PROPERTY_SERVICE_ACK
+                            == Types.ServiceAck.ADD_REPORTED_PROPERTY_SERVICE_ACK
                         )
                         and (now - wait_info.send_epochtime)
                         > self.config.reported_properties_update_interval_in_seconds
@@ -901,7 +911,7 @@ class DeviceApp(app_base.AppBase):
                     elif (
                         (
                             wait_info.service_ack_type
-                            == ServiceAckType.REMOVE_REPORTED_PROPERTY_SERVICE_ACK
+                            == Types.ServiceAck.REMOVE_REPORTED_PROPERTY_SERVICE_ACK
                         )
                         and (now - wait_info.send_epochtime)
                         > self.config.reported_properties_update_interval_in_seconds
@@ -928,7 +938,7 @@ class DeviceApp(app_base.AppBase):
                 > self.config.reported_properties_update_allowed_failure_count
             ):
                 raise Exception(
-                    "count of failed reported property sets of {} is greater than maximum count of {}".format(
+                    "count of failed reported property adds of {} is greater than maximum count of {}".format(
                         reported_properties_add_failure_count,
                         self.config.reported_properties_update_allowed_failure_count,
                     )
@@ -939,7 +949,7 @@ class DeviceApp(app_base.AppBase):
                 > self.config.reported_properties_update_allowed_failure_count
             ):
                 raise Exception(
-                    "count of failed reported property clears of {} is greater than maximum count of {}".format(
+                    "count of failed reported property removes of {} is greater than maximum count of {}".format(
                         reported_properties_remove_failure_count,
                         self.config.reported_properties_update_allowed_failure_count,
                     )
@@ -998,12 +1008,12 @@ class DeviceApp(app_base.AppBase):
         # TODO: add a timeout here, make sure the messages are correct, and make sure messages actually flow
 
         props = {
-            "thief": {
-                "testControl": {
-                    "c2d": {
-                        "send": True,
-                        "messageIntervalInSeconds": self.config.receive_message_interval_in_seconds,
-                        "maxFillerSize": self.config.receive_message_max_filler_size,
+            Fields.Reported.THIEF: {
+                Fields.Reported.TEST_CONTROL: {
+                    Fields.Reported.TestControl.C2D: {
+                        Fields.Reported.TestControl.C2d.SEND: True,
+                        Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS: self.config.receive_message_interval_in_seconds,
+                        Fields.Deprecated.MAX_FILLER_SIZE: self.config.receive_message_max_filler_size,
                     }
                 }
             }
@@ -1029,9 +1039,11 @@ class DeviceApp(app_base.AppBase):
                 msg = None
 
             if msg:
-                thief = json.loads(msg.data.decode())["thief"]
+                thief = json.loads(msg.data.decode())[Fields.C2d.THIEF]
                 self.metrics.receive_message_count_received.increment()
-                self.out_of_order_message_tracker.add_message(thief.get("testC2dMessageIndex"))
+                self.out_of_order_message_tracker.add_message(
+                    thief.get(Fields.C2d.TEST_C2D_MESSAGE_INDEX)
+                )
 
     def test_reported_properties_threads(self, worker_thread_info):
         """
@@ -1057,8 +1069,8 @@ class DeviceApp(app_base.AppBase):
 
                 property_name = "prop_{}".format(property_index)
                 property_value = {
-                    "addServiceAckId": add_service_ack_id,
-                    "removeServiceAckId": remove_service_ack_id,
+                    Fields.Reported.TestContent.ReportedPropertyTest.ADD_SERVICE_ACK_ID: add_service_ack_id,
+                    Fields.Reported.TestContent.ReportedPropertyTest.REMOVE_SERVICE_ACK_ID: remove_service_ack_id,
                 }
 
                 def on_property_added(service_ack_id, user_data):
@@ -1071,8 +1083,12 @@ class DeviceApp(app_base.AppBase):
                     )
 
                     reported_properties = {
-                        "thief": {
-                            "testContent": {"reportedPropertyTest": {added_property_name: None}}
+                        Fields.Reported.THIEF: {
+                            Fields.Reported.TEST_CONTENT: {
+                                Fields.Reported.TestContent.REPORTED_PROPERTY_TEST: {
+                                    added_property_name: None
+                                }
+                            }
                         }
                     }
                     logger.info("Removing test property {}".format(added_property_name))
@@ -1093,20 +1109,24 @@ class DeviceApp(app_base.AppBase):
                         on_service_ack_received=on_property_added,
                         service_ack_id=add_service_ack_id,
                         send_epochtime=time.time(),
-                        service_ack_type=ServiceAckType.ADD_REPORTED_PROPERTY_SERVICE_ACK,
+                        service_ack_type=Types.ServiceAck.ADD_REPORTED_PROPERTY_SERVICE_ACK,
                         user_data=property_name,
                     )
                     self.service_ack_wait_list[remove_service_ack_id] = ServiceAckWaitInfo(
                         on_service_ack_received=on_property_removed,
                         service_ack_id=remove_service_ack_id,
                         send_epochtime=time.time(),
-                        service_ack_type=ServiceAckType.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
+                        service_ack_type=Types.ServiceAck.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
                         user_data=property_name,
                     )
 
                 reported_properties = {
-                    "thief": {
-                        "testContent": {"reportedPropertyTest": {property_name: property_value}}
+                    Fields.Reported.THIEF: {
+                        Fields.Reported.TEST_CONTENT: {
+                            Fields.Reported.TestContent.REPORTED_PROPERTY_TEST: {
+                                property_name: property_value
+                            }
+                        }
                     }
                 }
                 logger.info("Adding test property {}".format(property_name))
