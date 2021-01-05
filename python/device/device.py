@@ -892,13 +892,13 @@ class DeviceApp(app_base.AppBase):
                             == Types.ServiceAck.ADD_REPORTED_PROPERTY_SERVICE_ACK
                         )
                         and (now - wait_info.send_epochtime)
-                        > self.config.reported_properties_update_interval_in_seconds
+                        > self.config.reported_properties_verify_failure_interval_in_seconds
                     ):
                         logger.warning(
                             "Reported property set time for {} of {} seconds is longer than failure interval of {}".format(
                                 wait_info.service_ack_id,
                                 (now - wait_info.send_epochtime),
-                                self.config.reported_properties_update_interval_in_seconds,
+                                self.config.reported_properties_verify_failure_interval_in_seconds,
                             )
                         )
                         reported_properties_add_failure_count += 1
@@ -909,16 +909,22 @@ class DeviceApp(app_base.AppBase):
                             == Types.ServiceAck.REMOVE_REPORTED_PROPERTY_SERVICE_ACK
                         )
                         and (now - wait_info.send_epochtime)
-                        > self.config.reported_properties_update_interval_in_seconds
+                        > self.config.reported_properties_verify_failure_interval_in_seconds
                     ):
                         logger.warning(
                             "Reported property clear time for {} of {} seconds is longer than failure interval of {}".format(
                                 wait_info.service_ack_id,
                                 (now - wait_info.send_epochtime),
-                                self.config.reported_properties_update_interval_in_seconds,
+                                self.config.reported_properties_verify_failure_interval_in_seconds,
                             )
                         )
                         reported_properties_remove_failure_count += 1
+
+            # For reported properties, we allocate the serviceAck for ADD_REPORTED_PROPERTY and
+            # REMOVE_REPORTED_PROPERTY at the same time.  This means every add failure will also
+            # be counted as a remove failure.  We subtract here to avoid double-counting the
+            # add failures.  
+            reported_properties_remove_failure_count -= reported_properties_add_failure_count
 
             if arrival_failure_count > self.config.send_message_arrival_allowed_failure_count:
                 raise Exception(
