@@ -925,8 +925,10 @@ class DeviceApp(app_base.AppBase):
                         )
                         reported_properties_remove_failure_count += 1
 
-            # because we add a remove serviceAck to service_ack_wait_list before we even add the prop,
-            # each add failure will also be counted as a remove failure.
+            # For reported properties, we allocate the serviceAck for ADD_REPORTED_PROPERTY and
+            # REMOVE_REPORTED_PROPERTY at the same time.  This means every add failure will also
+            # be counted as a remove failure.  We subtract here to avoid double-counting the
+            # add failures.  
             reported_properties_remove_failure_count -= reported_properties_add_failure_count
 
             if arrival_failure_count > self.config.send_message_arrival_allowed_failure_count:
