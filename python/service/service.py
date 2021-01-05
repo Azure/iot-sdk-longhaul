@@ -18,7 +18,11 @@ import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
 import azure_monitor
 from utilities import get_random_length_string
-from thief_constants import ServiceAckType
+from thief_constants import (
+    Const,
+    Fields,
+    Types,
+)
 
 
 logging.basicConfig(format="%(asctime)s %(levelname)s:%(message)s", level=logging.WARNING)
@@ -61,7 +65,7 @@ def custom_props(device_id, pairing_id=None):
     """
     props = {"deviceId": device_id}
     if pairing_id:
-        props["pairingId"] = pairing_id
+        props[Fields.Deprecated.PAIRING_ID] = pairing_id
     return {"custom_dimensions": props}
 
 
@@ -201,46 +205,48 @@ class ServiceApp(app_base.AppBase):
             device_id = get_device_id_from_event(event)
 
             body = event.body_as_json()
-            thief = body.get("thief", {})
-            passed_run_id = thief.get("serviceRunId", None)
-            pairing_id = thief.get("pairingId", None)
-            cmd = thief.get("cmd", None)
+            thief = body.get(Fields.Telemetry.THIEF, {})
+            passed_run_id = thief.get(Fields.Telemetry.SERVICE_RUN_ID, None)
+            pairing_id = thief.get(Fields.Deprecated.PAIRING_ID, None)
 
             with self.pairing_list_lock:
                 device_data = self.paired_devices.get(device_id, None)
 
             if get_message_source_from_event(event) == "twinChangeEvents":
                 if (
-                    body.get("properties", {})
-                    .get("reported", {})
-                    .get("thief", {})
-                    .get("pairing", {})
+                    body.get(Const.PROPERTIES, {})
+                    .get(Const.REPORTED, {})
+                    .get(Fields.Reported.THIEF, {})
+                    .get(Fields.Reported.PAIRING, {})
                 ):
                     self.incoming_pairing_request_queue.put(event)
                 if device_data:
                     self.incoming_twin_changes.put(event)
 
             elif pairing_id and passed_run_id:
+                cmd = thief.get(Fields.Telemetry.CMD, None)
 
                 with self.pairing_list_lock:
                     device_data = self.paired_devices.get(device_id, None)
 
                 if device_data:
-                    if cmd == "serviceAckRequest":
+                    if cmd == Types.Message.SERVICE_ACK_REQUEST:
                         service_ack_type = thief.get(
-                            "serviceAckType", ServiceAckType.TELEMETRY_SERVICE_ACK
+                            Fields.Deprecated.SERVICE_ACK_TYPE,
+                            Types.ServiceAck.TELEMETRY_SERVICE_ACK,
                         )
 
-                        if service_ack_type == ServiceAckType.TELEMETRY_SERVICE_ACK:
+                        if service_ack_type == Types.ServiceAck.TELEMETRY_SERVICE_ACK:
                             logger.info(
                                 "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
-                                    device_id, thief["serviceAckId"]
+                                    device_id, thief[Fields.Telemetry.SERVICE_ACK_ID]
                                 ),
                                 extra=custom_props(device_id, pairing_id),
                             )
                             self.outgoing_service_ack_response_queue.put(
                                 ServiceAck(
-                                    device_id=device_id, service_ack_id=thief.get("serviceAckId")
+                                    device_id=device_id,
+                                    service_ack_id=thief[Fields.Telemetry.SERVICE_ACK_ID],
                                 )
                             )
                         else:
@@ -378,7 +384,7 @@ class ServiceApp(app_base.AppBase):
                 if service_ack.device_id not in service_acks:
                     service_acks[service_ack.device_id] = []
                 service_acks[service_ack.device_id].append(
-                    {"serviceAckId": service_ack.service_ack_id}
+                    {Fields.C2d.SERVICE_ACK_ID: service_ack.service_ack_id}
                 )
 
             for device_id in service_acks:
@@ -401,22 +407,16 @@ class ServiceApp(app_base.AppBase):
 
                     message = json.dumps(
                         {
-                            "thief": {
-                                "cmd": "serviceAckResponse",
-                                "serviceRunId": run_id,
-                                "pairingId": pairing_id,
-                                "serviceAcks": service_acks[device_id],
+                            Fields.C2d.THIEF: {
+                                Fields.C2d.CMD: Types.Message.SERVICE_ACK_RESPONSE,
+                                Fields.C2d.SERVICE_RUN_ID: run_id,
+                                Fields.Deprecated.PAIRING_ID: pairing_id,
+                                Fields.C2d.SERVICE_ACKS: service_acks[device_id],
                             }
                         }
                     )
 
-                    self.outgoing_c2d_queue.put(
-                        (
-                            device_id,
-                            message,
-                            {"contentType": "application/json", "contentEncoding": "utf-8"},
-                        )
-                    )
+                    self.outgoing_c2d_queue.put((device_id, message, Const.JSON_TYPE_AND_ENCODING,))
 
             # TODO: this should be configurable
             # Too small and this causes C2D throttling
@@ -477,13 +477,15 @@ class ServiceApp(app_base.AppBase):
                     # but not the structures inside the list.
                     message = json.dumps(
                         {
-                            "thief": {
-                                "cmd": "testC2d",
-                                "serviceRunId": run_id,
-                                "pairingId": device_data.pairing_id,
-                                "firstMessage": not device_data.first_c2d_sent,
-                                "testC2dMessageIndex": device_data.next_c2d_message_index,
-                                "filler": get_random_length_string(device_data.c2d_max_filler_size),
+                            Fields.C2d.THIEF: {
+                                Fields.C2d.CMD: Types.Message.TEST_C2D,
+                                Fields.C2d.SERVICE_RUN_ID: run_id,
+                                Fields.Deprecated.PAIRING_ID: device_data.pairing_id,
+                                Fields.C2d.FIRST_MESSAGE: not device_data.first_c2d_sent,
+                                Fields.C2d.TEST_C2D_MESSAGE_INDEX: device_data.next_c2d_message_index,
+                                Fields.Deprecated.FILLER: get_random_length_string(
+                                    device_data.c2d_max_filler_size
+                                ),
                             }
                         }
                     )
@@ -501,13 +503,7 @@ class ServiceApp(app_base.AppBase):
                         now + device_data.c2d_interval_in_seconds
                     )
 
-                    self.outgoing_c2d_queue.put(
-                        (
-                            device_id,
-                            message,
-                            {"contentType": "application/json", "contentEncoding": "utf-8"},
-                        )
-                    )
+                    self.outgoing_c2d_queue.put((device_id, message, Const.JSON_TYPE_AND_ENCODING,))
 
             # loop through devices and see when our next outgoing c2d message is due to be sent.
             next_iteration_epochtime = now + 10
@@ -548,12 +544,17 @@ class ServiceApp(app_base.AppBase):
             device_id = get_device_id_from_event(event)
             body = event.body_as_json()
             pairing = (
-                body.get("properties", {}).get("reported", {}).get("thief", {}).get("pairing", {})
+                body.get(Const.PROPERTIES, {})
+                .get(Const.REPORTED, {})
+                .get(Fields.Reported.THIEF, {})
+                .get(Fields.Reported.PAIRING, {})
             )
 
-            pairing_id = pairing.get("pairingId", None)
-            requested_service_pool = pairing.get("requestedServicePool", None)
-            selected_run_id = pairing.get("serviceRunId", None)
+            pairing_id = pairing.get(Fields.Deprecated.PAIRING_ID, None)
+            requested_service_pool = pairing.get(
+                Fields.Reported.Pairing.REQUESTED_SERVICE_POOL, None
+            )
+            selected_run_id = pairing.get(Fields.Reported.Pairing.SERVICE_RUN_ID, None)
 
             logger.info(
                 "Received pairing request for device {}: {}".format(device_id, pairing),
@@ -604,8 +605,12 @@ class ServiceApp(app_base.AppBase):
 
                     # Tell the device that we've accepted the pairing.
                     desired = {
-                        "thief": {
-                            "pairing": {"acceptedPairing": "{},{}".format(pairing_id, run_id)}
+                        Fields.Desired.THIEF: {
+                            Fields.Desired.PAIRING: {
+                                Fields.Deprecated.ACCEPTED_PAIRING: "{},{}".format(
+                                    pairing_id, run_id
+                                )
+                            }
                         }
                     }
 
@@ -628,11 +633,11 @@ class ServiceApp(app_base.AppBase):
                     )
 
                     desired = {
-                        "thief": {
-                            "pairing": {
-                                "serviceRunId": run_id,
-                                "pairingId": pairing_id,
-                                "acceptedPairing": None,
+                        Fields.Desired.THIEF: {
+                            Fields.Desired.PAIRING: {
+                                Fields.Desired.Pairing.SERVICE_RUN_ID: run_id,
+                                Fields.Deprecated.PAIRING_ID: pairing_id,
+                                Fields.Deprecated.ACCEPTED_PAIRING: None,
                             }
                         }
                     }
@@ -662,12 +667,14 @@ class ServiceApp(app_base.AppBase):
 
         test_content = (
             event.body_as_json()
-            .get("properties", {})
-            .get("reported", {})
-            .get("thief", {})
-            .get("testContent", {})
+            .get(Const.PROPERTIES, {})
+            .get(Const.REPORTED, {})
+            .get(Fields.Reported.THIEF, {})
+            .get(Fields.Reported.TEST_CONTENT, {})
         )
-        reported_property_test = test_content.get("reportedPropertyTest")
+        reported_property_test = test_content.get(
+            Fields.Reported.TestContent.REPORTED_PROPERTY_TEST
+        )
 
         for property_name in reported_property_test:
             if property_name.startswith("prop_"):
@@ -675,11 +682,13 @@ class ServiceApp(app_base.AppBase):
 
                 with device_data.reported_property_list_lock:
                     if property_value:
-                        service_ack_id = property_value["addServiceAckId"]
+                        service_ack_id = property_value[
+                            Fields.Reported.TestContent.ReportedPropertyTest.ADD_SERVICE_ACK_ID
+                        ]
                         device_data.reported_property_values[property_name] = property_value
                     else:
                         service_ack_id = device_data.reported_property_values[property_name][
-                            "removeServiceAckId"
+                            Fields.Reported.TestContent.ReportedPropertyTest.REMOVE_SERVICE_ACK_ID
                         ]
                         del device_data.reported_property_values[property_name]
 
@@ -699,20 +708,20 @@ class ServiceApp(app_base.AppBase):
 
         test_control = (
             event.body_as_json()
-            .get("properties", {})
-            .get("reported", {})
-            .get("thief", {})
-            .get("testControl", {})
+            .get(Const.PROPERTIES, {})
+            .get(Const.REPORTED, {})
+            .get(Fields.Reported.THIEF, {})
+            .get(Fields.Reported.TEST_CONTROL, {})
         )
 
-        c2d = test_control.get("c2d")
+        c2d = test_control.get(Fields.Reported.TestControl.C2D)
         if c2d:
-            send = c2d["send"]
+            send = c2d[Fields.Reported.TestControl.C2d.SEND]
             if send is False:
                 self.stop_c2d_message_sending(device_id)
             elif send is True:
-                interval = c2d["messageIntervalInSeconds"]
-                max_filler_size = c2d["maxFillerSize"]
+                interval = c2d[Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS]
+                max_filler_size = c2d[Fields.Deprecated.MAX_FILLER_SIZE]
                 self.start_c2d_message_sending(device_id, interval, max_filler_size)
 
     def dispatch_twin_change_thread(self, worker_thread_info):
@@ -739,14 +748,19 @@ class ServiceApp(app_base.AppBase):
                 "Twin change for {}: {}".format(device_id, event.body_as_json()),
                 extra=custom_props(device_id, device_data.pairing_id),
             )
-            thief = event.body_as_json().get("properties", {}).get("reported", {}).get("thief", {})
+            thief = (
+                event.body_as_json()
+                .get(Const.PROPERTIES, {})
+                .get(Const.REPORTED, {})
+                .get(Fields.Reported.THIEF, {})
+            )
 
-            if thief.get("testContent"):
+            if thief.get(Fields.Reported.TEST_CONTENT):
                 self.respond_to_test_content_properties(event)
-            if thief.get("testControl"):
+            if thief.get(Fields.Reported.TEST_CONTROL):
                 self.respond_to_test_control_properties(event)
 
-            run_state = thief.get("sessionMetrics", {}).get("runState")
+            run_state = thief.get(Fields.Reported.SESSION_METRICS, {}).get("runState")
             if run_state and run_state != app_base.RUNNING:
                 logger.info("Device {} no longer running.".format(device_id))
                 self.remove_device_from_pairing_list(device_id)
