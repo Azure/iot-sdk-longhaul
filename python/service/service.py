@@ -198,7 +198,7 @@ class ServiceApp(app_base.AppBase):
                 continue
 
             try:
-                event, partition_id = self.incoming_eventhub_event_queue.get(timeout=1)
+                event = self.incoming_eventhub_event_queue.get(timeout=1)
             except queue.Empty:
                 continue
 
@@ -283,7 +283,20 @@ class ServiceApp(app_base.AppBase):
         def on_event(partition_context, event):
             worker_thread_info.watchdog_epochtime = time.time()
             if event:
-                self.incoming_eventhub_event_queue.put((event, partition_context.partition_id))
+                service_ack_id = (
+                    event.body_as_json()
+                    .get(Fields.Telemetry.THIEF, {})
+                    .get(Fields.Telemetry.SERVICE_ACK_ID, "")
+                )
+                if service_ack_id:
+                    device_id = get_device_id_from_event(event)
+                    with self.pairing_list_lock:
+                        if device_id in self.paired_devices:
+                            logger.info(
+                                "onEvent for serviceAckId {}".format(service_ack_id),
+                                extra=custom_props(device_id, ""),
+                            )
+                self.incoming_eventhub_event_queue.put(event)
 
         logger.info("Starting EventHub receive")
         with self.eventhub_consumer_client:
