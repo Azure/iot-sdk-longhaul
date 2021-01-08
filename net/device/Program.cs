@@ -9,6 +9,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using static Microsoft.Azure.Iot.Thief.Device.LoggingConstants;
 
 namespace ThiefDevice
 {
@@ -21,15 +22,15 @@ namespace ThiefDevice
 
         static async Task Main(string[] args)
         {
-            _commonProperties.Add("runId", Guid.NewGuid().ToString());
-            _commonProperties.Add("sdkLanguage", ".NET");
-            _commonProperties.Add("sdkVersion", "1.27.0");
+            _commonProperties.Add(RunId, Guid.NewGuid().ToString());
+            _commonProperties.Add(SdkLanguage, ".NET");
+            _commonProperties.Add(SdkVersion, "1.27.0");
 
             _settings = InitializeSettings();
             _logger = InitializeLogging(_settings.DeviceConnectionString, _settings.AiKey, _settings.Transport);
             _iotHub = InitializeHub(_logger);
 
-            _logger.Event("StartingRun");
+            _logger.Event(StartingRun);
 
             await _iotHub.InitializeAsync().ConfigureAwait(false);
             using CancellationTokenSource cancellationTokenSource = ConfigureAppExit();
@@ -85,9 +86,9 @@ namespace ThiefDevice
             {
                 AppContext =
                 {
-                    { "hub", csBuilder.HostName },
-                    { "deviceId", csBuilder.DeviceId },
-                    { "transport", transportType.ToString() },
+                    { Hub, csBuilder.HostName },
+                    { DeviceId, csBuilder.DeviceId },
+                    { Transport, transportType.ToString() },
                 },
             };
             foreach (var kvp in _commonProperties)
