@@ -13,8 +13,8 @@ Because c2d is a fairly expensive operation, the service app gathers `serviceAck
   {
     "thief": {
       "cmd": "serviceAckResponse",
-      "serviceRunId": "ca3ceadb-ac57-4cca-8f9b-c5d1e4dc189d",
-      "pairingId": "3887e97e-6f06-484b-a5bf-1753913866d3",
+      "serviceInstance": "ca3ceadb-ac57-4cca-8f9b-c5d1e4dc189d",
+      "runId": "3887e97e-6f06-484b-a5bf-1753913866d3",
       "serviceAcks": [
           "3fcef06d-1240-4323-bc20-da664cbcdac7",
           "7157db96-4da3-4192-a789-9082ee782a5c"
@@ -26,8 +26,8 @@ Because c2d is a fairly expensive operation, the service app gathers `serviceAck
 | field | format | meaning |
 | - | - | - |
 | `cmd` | string | Must be `serviceAckResponse` to indicate that this c2d message is a `serviceAckResponse`. |
-| `serviceRunId` | guid | `serviceRunId` for the service app sending the `serviceAckResponse`. |
-| `pairingId` |  guid | `pairingId` that represents the pairing between the device and service apps. |
+| `serviceInstance` | guid | Guid for the service app sending the `serviceAckResponse`. |
+| `runId` |  guid | Guid for the device app that the `serviceAckResponse` is intended for. |
 | `serviceAcks` | array | Array of service ack IDs being acknowledge |
 
 ## test telemetry with serviceAckRequest properties
@@ -39,12 +39,13 @@ When the service app receives telemetry with `cmd` == `serviceAckRequest`, it ac
   {
     "thief": {
       "cmd": "serviceAckRequest",
+      "serviceInstance": "ca3ceadb-ac57-4cca-8f9b-c5d1e4dc189d",
+      "runId": "3887e97e-6f06-484b-a5bf-1753913866d3",
       "serviceAckId": "c9d16db5-18b9-44c5-a8a6-c50623b6b050",
       "serviceAckType": "telemetry",
       "sessionMetrics": {
         "exitReason": null,
         "latestUpdateTimeUtc": "2020-12-14T21:29:18.545099",
-        "pairingId": "66197452-3132-491a-8977-154665ab853c",
         "runEndUtc": null,
         "runStartUtc": "2020-12-14T21:29:13.569490+00:00",
         "runState": "running",
@@ -78,11 +79,13 @@ When the service app receives telemetry with `cmd` == `serviceAckRequest`, it ac
 | field | format | meaning |
 | - | - | - |
 | `cmd | string | must be `serviceAckRequest` in order to cause a `serviceAckResponse` from the service. |
-| `serviceAckId` | guid | guid allocated by the device app to represent this operation.  Returned in a `serviceAckResponse` message when this telemetry is received by the service app. |
+| `serviceAckId` | guid | Guid allocated by the device app to represent this operation.  Returned in a `serviceAckResponse` message when this telemetry is received by the service app. |
 | `serviceAckType` | string | must be `telemetry` to represent the type of service ack to return. |
-| `sessionMetrics` | dict | Arbitrary content to inflate the message size for testing.  See [metrics.md](./metrics.md) for details |
-| `systemHealthMetrics` | dict | Arbitrary content to inflate the message size for testing.  See [metrics.md](./metrics.md) for details |
-| `sendMessageCountUnacked` | dict | Arbitrary content to inflate the message size for testing.  See [metrics.md](./metrics.md) for details |
+| `serviceInstance` | guid | Guid for the service app that is paired with the device. |
+| `runId` |  guid | Guid for the device app that is sending the telemetry. |
+| `sessionMetrics` | dict | Optional session metrics. Not parsed by service app.  See [metrics.md](./metrics.md) for details |
+| `systemHealthMetrics` | dict | Optional system health metrics.  Not parsed by service app.  See [metrics.md](./metrics.md) for details |
+| `testMetrics` | dict | Optional test metrics.  Not parserd by service app.  See [metrics.md](./metrics.md) for details |
 
 ## test reported properties
 
@@ -128,8 +131,8 @@ The device app uses the `testC2dMessageIndex` value to keep track of messages re
   {
     "thief": {
       "cmd": "testC2d",
-      "serviceRunId": "3e5917f2-3625-4431-92fa-45b184a25498",
-      "pairingId": "64186b84-48d3-4831-8f09-85edc31dc133",
+      "serviceInstance": "3e5917f2-3625-4431-92fa-45b184a25498",
+      "runId": "64186b84-48d3-4831-8f09-85edc31dc133",
       "testC2dMessageIndex": 0
     }
   }
@@ -138,6 +141,7 @@ The device app uses the `testC2dMessageIndex` value to keep track of messages re
 | field | format | meaning |
 | - | - | - |
 | `cmd` | string | must be `testC2d` |
-| `serviceRunId` | guid |  `runid` for the service app sending this message |
-| `pairingId` | guid | `pairingid` representing the device/service app pairing |
+| `serviceInstance` | guid | Guid for the service app sending this message |
+| `runId` | guid | Guid for the device app that is the intended recipient of this message. |
 | `testC2dMessageIndex` | integer | index for this message, starts at 0 and increments by 1 for each message sent |
+

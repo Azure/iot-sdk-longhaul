@@ -174,7 +174,7 @@ class DeviceApp(app_base.AppBase):
         self.device_id = None
         self.metrics = DeviceRunMetrics()
         self.config = DeviceRunConfig()
-        self.service_run_id = None
+        self.service_instance = None
         # for service_acks
         self.service_ack_list_lock = threading.Lock()
         self.service_ack_wait_list = {}
@@ -187,7 +187,6 @@ class DeviceApp(app_base.AppBase):
         # for pairing
         self.pairing_complete = False
         self.incoming_pairing_message_queue = queue.Queue()
-        self.pairing_id = None
         # for c2d
         self.out_of_order_message_tracker = OutOfOrderMessageTracker()
         self.incoming_test_c2d_message_queue = queue.Queue()
@@ -311,7 +310,6 @@ class DeviceApp(app_base.AppBase):
             "runTime": str(self.metrics.run_time),
             "runState": str(self.metrics.run_state),
             "exitReason": self.metrics.exit_reason,
-            Fields.Deprecated.PAIRING_ID: self.pairing_id,
         }
         return props
 
@@ -389,9 +387,9 @@ class DeviceApp(app_base.AppBase):
 
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
-        if self.service_run_id:
-            props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_RUN_ID] = self.service_run_id
-        props[Fields.Telemetry.THIEF][Fields.Deprecated.PAIRING_ID] = self.pairing_id
+        if self.service_instance:
+            props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_INSTANCE] = self.service_instance
+        props[Fields.Telemetry.THIEF][Fields.Telemetry.RUN_ID] = run_id
 
         # This function only creates the message.  The caller needs to queue it up for sending.
         msg = Message(json.dumps(props))
@@ -405,7 +403,7 @@ class DeviceApp(app_base.AppBase):
         return msg
 
     def create_message_from_dict_with_service_ack(
-        self, props, on_service_ack_received, service_ack_type, user_data=None
+        self, props, on_service_ack_received, user_data=None
     ):
         """
         helper function to create a message from a dict and add service_ack
@@ -418,22 +416,17 @@ class DeviceApp(app_base.AppBase):
         assert props[Fields.Telemetry.THIEF].get(Fields.Telemetry.CMD, None) is None
         props[Fields.Telemetry.THIEF][Fields.Telemetry.CMD] = Types.Message.SERVICE_ACK_REQUEST
         props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_ACK_ID] = service_ack_id
-        props[Fields.Telemetry.THIEF][Fields.Deprecated.SERVICE_ACK_TYPE] = service_ack_type
 
         with self.service_ack_list_lock:
             self.service_ack_wait_list[service_ack_id] = ServiceAckWaitInfo(
                 on_service_ack_received=on_service_ack_received,
                 service_ack_id=service_ack_id,
+                service_ack_type=Types.ServiceAck.TELEMETRY_SERVICE_ACK,
                 send_epochtime=time.time(),
-                service_ack_type=service_ack_type,
                 user_data=user_data,
             )
 
-        logger.info(
-            "Requesting {} service_ack for serviceAckId = {}".format(
-                service_ack_type, service_ack_id
-            )
-        )
+        logger.info("Requesting service_ack for serviceAckId = {}".format(service_ack_id))
         return self.create_message_from_dict(props)
 
     def pairing_thread(self, worker_thread_info):
@@ -448,16 +441,11 @@ class DeviceApp(app_base.AppBase):
             app's `runId` value
         3. The device sets `properties/reported/thief/pairing/serviceRunId` to the serivce app's
             `runId` value.
-        4. When the service sees that the device accepted it, it sets
-            `properties/desired/thief/pairing/acceptedPairing`.  At this point, the pairing is
-            considered to be "complete" and testing can begin.
 
-        Right now, there is no provision for a failing service app.  In the future, the device
-        code _could_ see that the service app isn't responding and start the pairing process
-        over again.
+        Once the device starts sending telemetry with `thief/serviceRunId` set to the service app's
+            `runId` value, the pairing is complete.
         """
 
-        currently_pairing = False
         pairing_start_epochtime = 0
         pairing_last_request_epochtime = 0
 
@@ -472,90 +460,72 @@ class DeviceApp(app_base.AppBase):
             except queue.Empty:
                 msg = None
 
-            repeat_pairing_request = False
-            if not msg and currently_pairing:
-                # if we're trying to pair and we haven't seen a response yet, we may need to
-                # re-send our request (by setting the desired property again), or it may be
-                # time to fail the pairing operation
-                if (
+            send_pairing_request = False
+            if not msg and not self.service_instance:
+                if not pairing_start_epochtime:
+                    self.pairing_complete = False
+                    pairing_start_epochtime = time.time()
+                    send_pairing_request = True
+                elif (
                     time.time() - pairing_start_epochtime
                 ) > self.config.pairing_request_timeout_interval_in_seconds:
+                    # if we're trying to pair and we haven't seen a response yet, we may need to
+                    # re-send our request (by setting the desired property again), or it may be
+                    # time to fail the pairing operation
                     raise Exception(
                         "No resopnse to pairing requests after trying for {} seconds".format(
                             self.config.pairing_request_timeout_interval_in_seconds
                         )
                     )
-
                 elif (
                     time.time() - pairing_last_request_epochtime
                 ) > self.config.pairing_request_send_interval_in_seconds:
                     logger.info("Pairing response timeout.  Requesting again")
-                    repeat_pairing_request = True
+                    send_pairing_request = True
 
-            # We trigger a pairing operation by pushing this string into our incoming queue.
-            # Not a great design, but it lets us group this functionality into a single thread
-            # without adding another signalling mechanism.
-            if msg == "START_PAIRING":
-                pairing_start_epochtime = time.time()
-            if msg == "START_PAIRING" or repeat_pairing_request:
+            if send_pairing_request:
                 # Set our reported properties to start a pairing operation or to try again if no
                 # service has responded yet.
                 logger.info("Starting pairing operation")
-                currently_pairing = True
-                self.pairing_complete = False
                 pairing_last_request_epochtime = time.time()
-                self.pairing_id = str(uuid.uuid4())
-                self.service_run_id = None
                 props = {
                     Fields.Reported.THIEF: {
                         Fields.Reported.PAIRING: {
                             Fields.Reported.Pairing.REQUESTED_SERVICE_POOL: requested_service_pool,
-                            Fields.Reported.Pairing.SERVICE_RUN_ID: None,
-                            Fields.Deprecated.PAIRING_ID: self.pairing_id,
-                            Fields.Reported.Pairing.DEVICE_RUN_ID: run_id,
+                            Fields.Reported.Pairing.SERVICE_INSTANCE: None,
+                            Fields.Reported.Pairing.RUN_ID: run_id,
                         }
                     }
                 }
                 logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
                 self.client.patch_twin_reported_properties(props)
-                azure_monitor.add_logging_properties(pairing_id=self.pairing_id)
 
-            # TODO: basing this off isinstance is a weak design.  There should be a different way to decide what kind of operation this is.
-            elif msg and isinstance(msg, dict):
-                # is msg is a dict, that means we have a desired property change.  A service
-                # might be trying to pair with us.
+            elif msg:
                 logger.info("Received pairing desired props: {}".format(pprint.pformat(msg)))
 
                 pairing = msg.get(Fields.Desired.THIEF, {}).get(Fields.Desired.PAIRING, {})
-                pairing_id = pairing.get(Fields.Deprecated.PAIRING_ID, None)
-                service_run_id = pairing.get(Fields.Desired.Pairing.SERVICE_RUN_ID, None)
-                accepted_pairing = pairing.get(Fields.Deprecated.ACCEPTED_PAIRING, None)
+                received_run_id = pairing.get(Fields.Desired.Pairing.RUN_ID, None)
+                received_service_instance = pairing.get(
+                    Fields.Desired.Pairing.SERVICE_INSTANCE, None
+                )
 
-                if accepted_pairing == "{},{}".format(self.pairing_id, self.service_run_id):
-                    # This is the final part of the pairing.  Once `acceptedPairing` is set, we're
-                    # done
-                    logger.info("Pairing accepted by service")
-                    self.on_pairing_complete()
-
-                elif self.service_run_id:
+                if self.service_instance:
                     # It's possible that a second service app tried to pair with us after we
                     # already chose someone else.  Ignore this
                     logger.info("Already paired.  Ignoring.")
 
-                elif not pairing_id or not service_run_id:
+                elif not received_run_id or not received_service_instance:
                     # Or maybe something is wrong with the desired properties.  Probably a
                     # service app that goes by different rules. Ignoring it is better than
                     # crashing.
-                    logger.info("pairingId and/or serviceRunId missing.  Ignoring.")
+                    logger.info("deviceRunId and/or serviceRunId missing.  Ignoring.")
 
-                elif pairing_id != self.pairing_id:
-                    # Another strange case.  A service app is trying to pair with us, but it's
-                    # using a different `pairingId` value.  It's possible that we had to
-                    # repeat the pairing request and a service is responding to the older
-                    # request.  Ignore this.
+                elif received_run_id != run_id:
+                    # Another strange case.  A service app is trying to pair with our device_id,
+                    # but the `run_id` is wong.
                     logger.info(
-                        "pairingId mismatch.  Ignoring. (received {}, expected {})".format(
-                            pairing_id, self.pairing_id
+                        "runId mismatch.  Ignoring. (received {}, expected {})".format(
+                            received_run_id, run_id
                         )
                     )
 
@@ -563,40 +533,45 @@ class DeviceApp(app_base.AppBase):
                     # It looks like a service app has decided to pair with us.  Set reported
                     # properties to "select" this service instance as our partner.
                     logger.info(
-                        "Service app {} claimed this device instance".format(service_run_id)
+                        "Service app {} claimed this device instance".format(
+                            received_service_instance
+                        )
                     )
-                    currently_pairing = False
-                    self.service_run_id = service_run_id
+                    self.service_instance = received_service_instance
+                    self.pairing_complete = True
+                    pairing_start_epochtime = None
+                    pairing_last_request_epochtime = None
+
                     props = {
-                        Fields.Desired.THIEF: {
-                            Fields.Desired.PAIRING: {
-                                Fields.Desired.Pairing.SERVICE_RUN_ID: self.service_run_id,
-                                Fields.Deprecated.PAIRING_ID: self.pairing_id,
+                        Fields.Reported.THIEF: {
+                            Fields.Reported.PAIRING: {
+                                Fields.Reported.Pairing.SERVICE_INSTANCE: self.service_instance,
+                                Fields.Reported.Pairing.RUN_ID: run_id,
                             }
                         }
                     }
-                    currently_pairing = False
                     logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
                     self.client.patch_twin_reported_properties(props)
+
+                    self.on_pairing_complete()
 
     def start_pairing(self):
         """
         trigger the pairing process
         """
-        self.incoming_pairing_message_queue.put("START_PAIRING")
+        self.service_instance = None
 
     def is_pairing_complete(self):
         """
         return True if the pairing process is complete
         """
-        return self.pairing_id and self.service_run_id and self.pairing_complete
+        return self.service_instance and self.pairing_complete
 
     def on_pairing_complete(self):
         """
         Called when pairing is complete
         """
         logger.info("Pairing is complete.  Starting c2d")
-        self.pairing_complete = True
         self.start_c2d_message_sending()
 
     def send_message_thread(self, worker_thread_info):
@@ -695,9 +670,7 @@ class DeviceApp(app_base.AppBase):
                 # This function only queues the message.  A send_message_thread instance will pick
                 # it up and send it.
                 msg = self.create_message_from_dict_with_service_ack(
-                    props=props,
-                    on_service_ack_received=on_service_ack_received,
-                    service_ack_type=Types.ServiceAck.TELEMETRY_SERVICE_ACK,
+                    props=props, on_service_ack_received=on_service_ack_received,
                 )
                 self.outgoing_test_message_queue.put(msg)
 
@@ -778,8 +751,12 @@ class DeviceApp(app_base.AppBase):
                 obj = json.loads(msg.data.decode())
                 thief = obj.get(Fields.Telemetry.THIEF)
 
-                if thief and thief[Fields.Deprecated.PAIRING_ID] == self.pairing_id:
-                    # We only inspect messages that have `thief/pairingId` set to our `pairingId` value.
+                if (
+                    thief
+                    and thief[Fields.C2d.RUN_ID] == run_id
+                    and thief[Fields.C2d.SERVICE_INSTANCE] == self.service_instance
+                ):
+                    # We only inspect messages that have `thief/deviceRunId` and `thief/serviceRunId` set to the expected values
                     cmd = thief[Fields.C2d.CMD]
                     if cmd == Types.Message.SERVICE_ACK_RESPONSE:
                         # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
@@ -923,7 +900,7 @@ class DeviceApp(app_base.AppBase):
             # For reported properties, we allocate the serviceAck for ADD_REPORTED_PROPERTY and
             # REMOVE_REPORTED_PROPERTY at the same time.  This means every add failure will also
             # be counted as a remove failure.  We subtract here to avoid double-counting the
-            # add failures.  
+            # add failures.
             reported_properties_remove_failure_count -= reported_properties_add_failure_count
 
             if arrival_failure_count > self.config.send_message_arrival_allowed_failure_count:

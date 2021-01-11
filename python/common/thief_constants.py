@@ -15,16 +15,12 @@ class Const(object):
 
 
 class Fields(object):
-    class Deprecated(object):
-        PAIRING_ID = "pairingId"
-        SERVICE_ACK_TYPE = "serviceAckType"
-        ACCEPTED_PAIRING = "acceptedPairing"
-
     class Telemetry(object):
         THIEF = "thief"
         CMD = "cmd"
         SERVICE_ACK_ID = "serviceAckId"
-        SERVICE_RUN_ID = "serviceRunId"
+        SERVICE_INSTANCE = "serviceInstance"
+        RUN_ID = "runId"
 
     class Reported(object):
         THIEF = "thief"
@@ -38,8 +34,8 @@ class Fields(object):
 
         class Pairing(object):
             REQUESTED_SERVICE_POOL = "requestedServicePool"
-            SERVICE_RUN_ID = "serviceRunId"
-            DEVICE_RUN_ID = "deviceRunId"
+            SERVICE_INSTANCE = "serviceInstance"
+            RUN_ID = "runId"
 
         TEST_CONTENT = "testContent"
 
@@ -65,11 +61,13 @@ class Fields(object):
         PAIRING = "pairing"
 
         class Pairing(object):
-            SERVICE_RUN_ID = "serviceRunId"
+            SERVICE_INSTANCE = "serviceInstance"
+            RUN_ID = "runId"
 
     class C2d(object):
         THIEF = "thief"
-        SERVICE_RUN_ID = "serviceRunId"
+        SERVICE_INSTANCE = "serviceInstance"
+        RUN_ID = "runId"
 
         SERVICE_ACKS = "serviceAcks"
         CMD = "cmd"

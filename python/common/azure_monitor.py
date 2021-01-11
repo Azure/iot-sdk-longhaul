@@ -11,13 +11,28 @@ from opencensus.ext.azure.log_exporter import AzureLogHandler
 app_insights_connection_string = os.environ["THIEF_APP_INSIGHTS_CONNECTION_STRING"]
 
 _client_type = None
+_service_instance = None
 _run_id = None
 _hub = None
 _sdk_version = None
 _device_id = None
-_pairing_id = None
 _pool_id = None
 _transport = None
+
+
+class CustomDimensionNames(object):
+    OS_TYPE = "osType"
+    SDK_LANGUAGE = "sdkLanguage"
+    SDK_LANGUAGE_VERSION = "sdkLanguageVersion"
+    SDK_VERSION = "sdkVersion"
+
+    SERVICE_INSTANCE = "serviceIntsance"
+    RUN_ID = "runId"
+    POOL_ID = "poolId"
+
+    HUB = "hub"
+    DEVICE_ID = "deviceId"
+    TRANSPORT = "transport"
 
 
 def _default_value():
@@ -33,11 +48,11 @@ def add_logging_properties(
     hub=_default_value,
     sdk_version=_default_value,
     device_id=_default_value,
-    pairing_id=_default_value,
+    service_instance=_default_value,
     pool_id=_default_value,
     transport=_default_value,
 ):
-    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pairing_id, _pool_id, _transport
+    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport, _service_instance
     if client_type != _default_value:
         _client_type = client_type
     if run_id != _default_value:
@@ -48,8 +63,8 @@ def add_logging_properties(
         _sdk_version = sdk_version
     if device_id != _default_value:
         _device_id = device_id
-    if pairing_id != _default_value:
-        _pairing_id = pairing_id
+    if service_instance != _default_value:
+        _service_instance = service_instance
     if pool_id != _default_value:
         _pool_id = pool_id
     if transport != _default_value:
@@ -57,24 +72,32 @@ def add_logging_properties(
 
 
 def telemetry_processor_callback(envelope):
-    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pairing_id, _pool_id, _transport
+    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport
     envelope.tags["ai.cloud.role"] = _client_type
-    envelope.tags["ai.cloud.roleInstance"] = _run_id
-    envelope.data.baseData.properties["osType"] = platform.system()
+    if _service_instance:
+        envelope.tags["ai.cloud.roleInstance"] = _service_instance
+    else:
+        envelope.tags["ai.cloud.roleInstance"] = _run_id
+    envelope.data.baseData.properties[CustomDimensionNames.OS_TYPE] = platform.system()
     if _device_id:
-        envelope.data.baseData.properties["deviceId"] = _device_id
+        envelope.data.baseData.properties[CustomDimensionNames.DEVICE_ID] = _device_id
     if _hub:
-        envelope.data.baseData.properties["hub"] = _hub
-    envelope.data.baseData.properties["runId"] = _run_id
-    envelope.data.baseData.properties["sdkLanguage"] = "python"
-    envelope.data.baseData.properties["sdkLanguageVersion"] = platform.python_version()
-    envelope.data.baseData.properties["sdkVersion"] = _sdk_version
+        envelope.data.baseData.properties[CustomDimensionNames.HUB] = _hub
+    if _run_id:
+        envelope.data.baseData.properties[CustomDimensionNames.RUN_ID] = _run_id
+    if _service_instance:
+        envelope.data.baseData.properties[CustomDimensionNames.SERVICE_INSTANCE] = _service_instance
+    envelope.data.baseData.properties[CustomDimensionNames.SDK_LANGUAGE] = "python"
+
+    envelope.data.baseData.properties[
+        CustomDimensionNames.SDK_LANGUAGE_VERSION
+    ] = platform.python_version()
+    envelope.data.baseData.properties[CustomDimensionNames.SDK_VERSION] = _sdk_version
     if _transport:
-        envelope.data.baseData.properties["transport"] = _transport
-    if _pairing_id:
-        envelope.data.baseData.properties["pairingId"] = _pairing_id
+        envelope.data.baseData.properties[CustomDimensionNames.TRANSPORT] = _transport
+
     if _pool_id:
-        envelope.data.baseData.properties["poolId"] = _pool_id
+        envelope.data.baseData.properties[CustomDimensionNames.POOL_ID] = _pool_id
 
     return True
 

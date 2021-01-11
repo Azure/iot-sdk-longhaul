@@ -24,7 +24,6 @@ They record details on the progress of the current run.
         "sessionMetrics": {
           "exitReason": "Main thread raised <class KeyboardInterrupt>",
           "latestUpdateTimeUtc": "2020-12-14T21:14:57.447061",
-          "pairingId": "176e7469-9755-4a7a-af74-85f735f0f296",
           "runEndUtc": "2020-12-14T21:14:57.441870+00:00",
           "runStartUtc": "2020-12-14T21:13:22.430280+00:00",
           "runState": "interrupted",
@@ -43,7 +42,6 @@ They record details on the progress of the current run.
 | `runTime` | string | Elapsed time for current run |
 | `latestUpdateTimeUtc` | string | DateTime in UTC for most recent update to thie structure. |
 | `exitReason` | string | free-form string indicating reason for test to exit.  Most likely exception text or other error string.  Only valid for `failed`, `complete`, or `interrupted`. |
-| `pairingId` | guid | `pairingId` for the current run |
 
 ## Test Metrics
 
