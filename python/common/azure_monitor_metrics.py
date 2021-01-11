@@ -17,6 +17,12 @@ stats_recorder = stats.stats_recorder
 app_insights_connection_string = os.environ["THIEF_APP_INSIGHTS_CONNECTION_STRING"]
 
 
+def json_name_to_metric_name(metric_name):
+    # Change first character to upper case:
+    # e.g. metricName -> MetricName
+    return metric_name[:1].upper() + metric_name[1:]
+
+
 class MetricsReporter(object):
     def __init__(self):
         self.exporter = metrics_exporter.new_metrics_exporter(
@@ -26,8 +32,11 @@ class MetricsReporter(object):
         view_manager.register_exporter(self.exporter)
         self.mmap = stats_recorder.new_measurement_map()
         self.tmap = tag_map_module.TagMap()
+        self.metrics = {}
 
-    def add_integer_measurement(self, python_name, metric_name, description, units):
+    def add_integer_measurement(self, json_name, description, units):
+        metric_name = json_name_to_metric_name(json_name)
+
         new_measure = measure_module.MeasureInt(metric_name, description, units)
         new_view = view_module.View(
             metric_name, description, [], new_measure, aggregation_module.LastValueAggregation()
@@ -37,9 +46,11 @@ class MetricsReporter(object):
         def new_setter(value):
             self.mmap.measure_int_put(new_measure, value)
 
-        setattr(self, "set_{}".format(python_name), new_setter)
+        self.metrics[json_name] = new_setter
 
-    def add_float_measurement(self, python_name, metric_name, description, units):
+    def add_float_measurement(self, json_name, description, units):
+        metric_name = json_name_to_metric_name(json_name)
+
         new_measure = measure_module.MeasureFloat(metric_name, description, units)
         new_view = view_module.View(
             metric_name, description, [], new_measure, aggregation_module.LastValueAggregation()
@@ -49,7 +60,17 @@ class MetricsReporter(object):
         def new_setter(value):
             self.mmap.measure_float_put(new_measure, value)
 
-        setattr(self, "set_{}".format(python_name), new_setter)
+        self.metrics[json_name] = new_setter
+
+    def set_metrics_from_dict(self, metrics):
+        """
+        Given a dict with metrics, indexed by json name, record measurements using the
+        appropriate metric name
+        """
+        for key in metrics:
+            setter = self.metrics[key]
+            value = metrics[key]
+            setter(value)
 
     def record(self):
         self.mmap.record(self.tmap)

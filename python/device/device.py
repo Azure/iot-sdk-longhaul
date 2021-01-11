@@ -193,104 +193,77 @@ class DeviceApp(app_base.AppBase):
 
     def _configure_azure_monitor_metrics(self):
         self.reporter.add_float_measurement(
-            "process_cpu_percent",
-            "processCpuPercent",
-            "Amount of CPU usage by the process",
-            "percentage",
+            "processCpuPercent", "Amount of CPU usage by the process", "percentage",
         )
         self.reporter.add_integer_measurement(
-            "process_working_set",
-            "processWorkingSet",
-            "All physical memory used by the process",
-            "bytes",
+            "processWorkingSet", "All physical memory used by the process", "bytes",
         )
         self.reporter.add_integer_measurement(
-            "process_bytes_in_all_heaps",
-            "processBytesInAllHeaps",
-            "All virtual memory used by the process",
-            "bytes",
+            "processBytesInAllHeaps", "All virtual memory used by the process", "bytes",
         )
         self.reporter.add_integer_measurement(
-            "process_private_bytes",
             "processPrivateBytes",
             "Amount of non-shared physical memory used by the process",
             "bytes",
         )
         self.reporter.add_integer_measurement(
-            "process_working_set_private",
             "processWorkingSetPrivate",
             "Amount of non-shared physical memory used by the process",
             "bytes",
         )
         self.reporter.add_integer_measurement(
-            "send_message_count_sent",
             "sendMessageCountSent",
             "Count of messages sent and ack'd by the transport",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "send_message_count_received_by_service_app",
             "sendMessageCountReceivedByServiceApp",
             "Count of messages sent to iothub with receipt verified via service sdk",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "send_message_count_in_backlog",
-            "sendMessageCountInBacklog",
-            "Count of messages waiting to be sent",
-            "message(s)",
+            "sendMessageCountInBacklog", "Count of messages waiting to be sent", "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "send_message_count_unacked",
             "sendMessageCountUnacked",
             "Count of messages sent to iothub but not ack'd by the transport",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "send_message_count_not_received_by_service_app",
             "sendMessageCountNotReceivedByServiceApp",
             "Count of messages sent to iothub and acked by the transport, but receipt not (yet) verified via service sdk",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "send_message_count_failures",
-            "sendMessageCountFailures",
-            "Count of messages that failed to send",
-            "message(s)",
+            "sendMessageCountFailures", "Count of messages that failed to send", "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "receive_message_count_received",
             "receiveMessageCountReceived",
             "Count of messages received from the service",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "receive_message_count_missing",
             "receiveMessageCountMissing",
             "Count of messages sent my the service but not received",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
             "reportedPropertiesCountAdded",
-            "reported_properties_count_added",
             "Count of reported properties added",
             "patches with add operation(s)",
         )
         self.reporter.add_integer_measurement(
             "reportedPropertiesCountAddedAndVerifiedByServiceApp",
-            "reported_properties_count_added_and_verified_by_service_app",
             "Count of reported properties added and verified by the service app",
             "patches with add operation(s)",
         )
         self.reporter.add_integer_measurement(
             "reportedPropertiesCountRemoved",
-            "reported_properties_count_removed",
             "Count of reported properties removed",
             "patches with remove operation(s)",
         )
         self.reporter.add_integer_measurement(
             "reportedPropertiesCountRemovedAndVerifiedByServiceApp",
-            "reported_properties_count_removed_and_verified_by_service_app",
             "Count of reported properties removed and verified by the service app",
             "patches with remove operations(s)",
         )
@@ -610,31 +583,10 @@ class DeviceApp(app_base.AppBase):
         Send metrics to azure monitor, based on the reported properties that we probably just
         sent to the hub
         """
-        # we don't record session_metrics to azure monitor
-
-        system_health_metrics = props[Fields.Reported.SYSTEM_HEALTH_METRICS]
-        self.reporter.set_process_cpu_percent(system_health_metrics["processCpuPercent"])
-        self.reporter.set_process_working_set(system_health_metrics["processWorkingSet"])
-        self.reporter.set_process_bytes_in_all_heaps(
-            system_health_metrics["processBytesInAllHeaps"]
-        )
-        self.reporter.set_process_private_bytes(system_health_metrics["processPrivateBytes"])
-        self.reporter.set_process_working_set_private(system_health_metrics["processCpuPercent"])
-
-        test_metrics = props[Fields.Reported.TEST_METRICS]
-        self.reporter.set_send_message_count_sent(test_metrics["sendMessageCountSent"])
-        self.reporter.set_send_message_count_received_by_service_app(
-            test_metrics["sendMessageCountReceivedByServiceApp"]
-        )
-        self.reporter.set_send_message_count_in_backlog(test_metrics["sendMessageCountInBacklog"])
-        self.reporter.set_send_message_count_unacked(test_metrics["sendMessageCountUnacked"])
-        self.reporter.set_send_message_count_not_received_by_service_app(
-            test_metrics["sendMessageCountNotReceivedByServiceApp"]
-        )
-        self.reporter.set_receive_message_count_received(
-            test_metrics["receiveMessageCountReceived"]
-        )
-        self.reporter.set_receive_message_count_missing(test_metrics["receiveMessageCountMissing"])
+        # we don't record session_metrics to azure monitor because they're all about time and i
+        # there's no value to pushing things like "current time" as metrics
+        self.reporter.set_metrics_from_dict(props[Fields.Reported.SYSTEM_HEALTH_METRICS])
+        self.reporter.set_metrics_from_dict(props[Fields.Reported.TEST_METRICS])
         self.reporter.record()
 
     def test_send_message_thread(self, worker_thread_info):
