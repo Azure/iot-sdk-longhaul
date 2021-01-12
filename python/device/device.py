@@ -84,7 +84,7 @@ class DeviceRunMetrics(object):
         self.send_message_count_received_by_service_app = ThreadSafeCounter()
         self.send_message_count_failures = ThreadSafeCounter()
 
-        self.receive_message_count_received = ThreadSafeCounter()
+        self.receive_c2d_count_received = ThreadSafeCounter()
 
         self.reported_properties_count_added = ThreadSafeCounter()
         self.reported_properties_count_added_and_verified_by_service_app = ThreadSafeCounter()
@@ -144,10 +144,10 @@ class DeviceRunConfig(object):
 
         # How often do we want the service to send test C2D messages?
         # Be careful with this.  Too often will result in throttling on the service, which has 1.83  messages/sec/unit as a shared limit for all devices
-        self.receive_message_interval_in_seconds = 20
+        self.receive_c2d_interval_in_seconds = 20
 
         # How many missing C2D messages will cause the test to fail?
-        self.receive_message_missing_message_allowed_failure_count = 100
+        self.receive_c2d_missing_message_allowed_failure_count = 100
 
         # How many seconds between reported property patches
         self.reported_properties_update_interval_in_seconds = 10
@@ -239,13 +239,13 @@ class DeviceApp(app_base.AppBase):
             "sendMessageCountFailures", "Count of messages that failed to send", "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "receiveMessageCountReceived",
-            "Count of messages received from the service",
+            "receiveC2dCountReceived",
+            "Count of c2d messages received from the service",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "receiveMessageCountMissing",
-            "Count of messages sent my the service but not received",
+            "receiveC2dCountMissing",
+            "Count of c2d messages sent my the service but not received",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
@@ -303,8 +303,8 @@ class DeviceApp(app_base.AppBase):
             "sendMessageCountInBacklog": self.outgoing_test_message_queue.qsize(),
             "sendMessageCountUnacked": self.metrics.send_message_count_unacked.get_count(),
             "sendMessageCountNotReceivedByServiceApp": sent - received_by_service_app,
-            "receiveMessageCountReceived": self.metrics.receive_message_count_received.get_count(),
-            "receiveMessageCountMissing": self.out_of_order_message_tracker.get_missing_count(),
+            "receiveC2dCountReceived": self.metrics.receive_c2d_count_received.get_count(),
+            "receiveC2dCountMissing": self.out_of_order_message_tracker.get_missing_count(),
             "reportedPropertiesCountAdded": self.metrics.reported_properties_count_added.get_count(),
             "reportedPropertiesCountAddedAndVerifiedByServiceApp": self.metrics.reported_properties_count_added_and_verified_by_service_app.get_count(),
             "reportedPropertiesCountRemoved": self.metrics.reported_properties_count_removed.get_count(),
@@ -329,8 +329,8 @@ class DeviceApp(app_base.AppBase):
             "sendMessageBacklogAllowedFailureCount": self.config.send_message_backlog_allowed_failure_count,
             "sendMessageUnackedAllowedFailureCount": self.config.send_message_unacked_allowed_failure_count,
             "sendMessageExceptionAllowedFailureCount": self.config.send_message_exception_allowed_failure_count,
-            "receiveMessageIntervalInSeconds": self.config.receive_message_interval_in_seconds,
-            "receiveMessageMissingMessageAllowedFailureCount": self.config.receive_message_missing_message_allowed_failure_count,
+            "receiveC2dIntervalInSeconds": self.config.receive_c2d_interval_in_seconds,
+            "receiveC2dMissingMessageAllowedFailureCount": self.config.receive_c2d_missing_message_allowed_failure_count,
             "reportedPropertiesUpdateIntervalInSeconds": self.config.reported_properties_update_interval_in_seconds,
             "reportedPropertiesVerifyFailureIntervalInSeconds": self.config.reported_properties_verify_failure_interval_in_seconds,
             "reportedPropertiesUpdateAllowedFailureCount": self.config.reported_properties_update_allowed_failure_count,
@@ -924,12 +924,12 @@ class DeviceApp(app_base.AppBase):
 
             if (
                 self.out_of_order_message_tracker.get_missing_count()
-                > self.config.receive_message_missing_message_allowed_failure_count
+                > self.config.receive_c2d_missing_message_allowed_failure_count
             ):
                 raise Exception(
-                    "missing received message count of {} exceeds maximum count of {} missing".format(
+                    "missing c2d message count of {} exceeds maximum count of {} missing".format(
                         self.out_of_order_message_tracker.get_missing_count(),
-                        self.config.receive_message_missing_message_allowed_failure_count,
+                        self.config.receive_c2d_missing_message_allowed_failure_count,
                     )
                 )
 
@@ -946,7 +946,7 @@ class DeviceApp(app_base.AppBase):
                 Fields.Reported.TEST_CONTROL: {
                     Fields.Reported.TestControl.C2D: {
                         Fields.Reported.TestControl.C2d.SEND: True,
-                        Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS: self.config.receive_message_interval_in_seconds,
+                        Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS: self.config.receive_c2d_interval_in_seconds,
                     }
                 }
             }
@@ -973,7 +973,7 @@ class DeviceApp(app_base.AppBase):
 
             if msg:
                 thief = json.loads(msg.data.decode())[Fields.C2d.THIEF]
-                self.metrics.receive_message_count_received.increment()
+                self.metrics.receive_c2d_count_received.increment()
                 self.out_of_order_message_tracker.add_message(
                     thief.get(Fields.C2d.TEST_C2D_MESSAGE_INDEX)
                 )

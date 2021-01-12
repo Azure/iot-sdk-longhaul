@@ -67,8 +67,8 @@ Test configuration is set one time at the beginning of the run and used to recor
         "config": {
           "pairingRequestSendIntervalInSeconds": 30,
           "pairingRequestTimeoutIntervalInSeconds": 900,
-          "receiveMessageIntervalInSeconds": 20,
-          "receiveMessageMissingMessageAllowedFailureCount": 100,
+          "receiveC2dIntervalInSeconds": 20,
+          "receiveC2dMissingMessageAllowedFailureCount": 100,
           "reportedPropertiesUpdateAllowedFailureCount": 100,
           "reportedPropertiesUpdateIntervalInSeconds": 10,
           "reportedPropertiesVerifyFailureIntervalInSeconds": 3600,
@@ -108,12 +108,11 @@ These numbers define operational parameters for execution of the test harness.
 ### c2d test configuration
 
 These numbers define operational parameters for testing c2d.
-The name `receiveMessage` is used for these properties even though the specific SDK may use a funtion with a different name, such as `receive_meeesage` or  `getNextIncomingMessageAsync`
 
 | field | format | meaning |
 | - | - | - |
-| `receiveMessageIntervalInSeconds` | integer | When testing c2d, how many seconds to wait between c2d message.  This only applies to test c2d messages and does not apply to serverAck messages. |
-| `receiveMessageMissingMessageAllowedFailureCount` | integer | When testing c2d, how many mesages are allowed to be "missing" before the test fails. |
+| `receiveC2dIntervalInSeconds` | integer | When testing c2d, how many seconds to wait between c2d message.  This only applies to test c2d messages and does not apply to serverAck messages. |
+| `receiveC2dMissingMessageAllowedFailureCount` | integer | When testing c2d, how many mesages are allowed to be "missing" before the test fails. |
 
 ### reported property test configuration
 

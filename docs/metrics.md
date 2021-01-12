@@ -53,8 +53,8 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
     "reported": {
       "thief": {
         "testMetrics": {
-          "receiveMessageCountMissing": 0,
-          "receiveMessageCountReceived": 0,
+          "receiveC2dCountMissing": 0,
+          "receiveC2dCountReceived": 0,
           "reportedPropertiesCountAdded": 0,
           "reportedPropertiesCountAddedAndVerifiedByServiceApp": 0,
           "reportedPropertiesCountRemoved": 0,
@@ -73,8 +73,8 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
 
 | field | format | meaning |
 | - | - | - |
-| `receiveMessageCountMissing` | integer | Count of c2d messages sent by service app but not (yet) received by device app.  Only applies to test c2d messages. |
-| `receiveMessageCountReceived` | integer | Count of c2d messges received by device app.  Only applies to test c2d messges |
+| `receiveC2dCountMissing` | integer | Count of c2d messages sent by service app but not (yet) received by device app.  Only applies to test c2d messages. |
+| `receiveC2dCountReceived` | integer | Count of c2d messges received by device app.  Only applies to test c2d messges |
 | `reportedPropertiesCountAdded` | integer | Count of reported properties added,  Only applies to `testContent` properties. |
 | `reportedPropertiesCountAddedAndVerifiedByServiceApp` | integer | Count of reported properties added and verified by service app.  Only applies to `testContent` properties. |
 | `reportedPropertiesCountRemoved` | integer | Count of reported properties removed.  Only applies to `testContent` properties. |

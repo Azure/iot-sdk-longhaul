@@ -59,8 +59,8 @@ When the service app receives telemetry with `cmd` == `serviceAckRequest`, it ac
         "processWorkingSetPrivate": 25743360
       },
       "testMetrics": {
-        "receiveMessageCountMissing": 0,
-        "receiveMessageCountReceived": 0,
+        "receiveC2dCountMissing": 0,
+        "receiveC2dCountReceived": 0,
         "reportedPropertiesCountAdded": 0,
         "reportedPropertiesCountAddedAndVerifiedByServiceApp": 0,
         "reportedPropertiesCountRemoved": 0,
