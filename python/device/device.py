@@ -24,6 +24,7 @@ from thief_constants import (
     Const,
     Fields,
     Types,
+    Events,
 )
 
 logging.basicConfig(level=logging.WARNING)
@@ -471,10 +472,12 @@ class DeviceApp(app_base.AppBase):
                     }
                 }
                 logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
+                event_logger.info(Events.SENDING_PAIRING_REQUEST)
                 self.client.patch_twin_reported_properties(props)
 
             elif msg:
                 logger.info("Received pairing desired props: {}".format(pprint.pformat(msg)))
+                event_logger.info(Events.RECEIVED_PAIRING_RESPONSE)
 
                 pairing = msg.get(Fields.Desired.THIEF, {}).get(Fields.Desired.PAIRING, {})
                 received_run_id = pairing.get(Fields.Desired.Pairing.RUN_ID, None)
@@ -524,6 +527,7 @@ class DeviceApp(app_base.AppBase):
                         }
                     }
                     logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
+                    event_logger.info(Events.PAIRING_COMPLETE)
                     self.client.patch_twin_reported_properties(props)
 
                     self.on_pairing_complete()
@@ -1082,6 +1086,8 @@ class DeviceApp(app_base.AppBase):
         azure_monitor.add_logging_properties(hub=self.hub, device_id=self.device_id)
         self.update_initial_reported_properties()
 
+        event_logger.info(Events.STARTING_RUN)
+
         # pair with a service app instance
         self.start_pairing()
 
@@ -1122,6 +1128,7 @@ class DeviceApp(app_base.AppBase):
         self.run_threads(worker_thread_infos)
 
         logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
+        event_logger.info(Events.ENDING_RUN)
 
     def disconnect(self):
         self.client.disconnect()

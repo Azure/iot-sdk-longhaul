@@ -85,3 +85,11 @@ class Types(object):
         SERVICE_ACK_REQUEST = "serviceAckRequest"
         SERVICE_ACK_RESPONSE = "serviceAckResponse"
         TEST_C2D = "testC2d"
+
+
+class Events(object):
+    STARTING_RUN = "StartingRun"
+    ENDING_RUN = "EndingRun"
+    SENDING_PAIRING_REQUEST = "SendingPairingRequest"
+    RECEIVED_PAIRING_RESPONSE = "ReceivedPairingResponse"
+    PAIRING_COMPLETE = "PairingComplete"

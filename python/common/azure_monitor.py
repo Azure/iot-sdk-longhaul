@@ -103,13 +103,13 @@ def telemetry_processor_callback(envelope):
 
 
 def get_event_logger():
-    global _client_type, _run_id
+    global _client_type
     logger = logging.getLogger("thief_events.{}".format(_client_type))
 
     handler = AzureEventHandler(connection_string=app_insights_connection_string)
     handler.add_telemetry_processor(telemetry_processor_callback)
 
-    handler.setLevel(logging.INFO)
+    logger.setLevel(logging.INFO)
     logger.addHandler(handler)
 
     return logger
