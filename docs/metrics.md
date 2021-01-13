@@ -66,13 +66,12 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
           "receiveC2dCountMissing": 0,
           "receiveC2dCountReceived": 0,
           "reportedPropertiesCountAdded": 0,
-          "reportedPropertiesCountAddedAndVerifiedByServiceApp": 0,
+          "reportedPropertiesCountAddedButNotVerifiedByServiceApp": 0,
           "reportedPropertiesCountRemoved": 0,
-          "reportedPropertiesCountRemovedAndVerifiedByServiceApp": 0,
+          "reportedPropertiesCountRemovedButNotVerifiedByServiceApp": 0,
           "sendMessageCountFailures": 0,
           "sendMessageCountInBacklog": 0,
           "sendMessageCountNotReceivedByServiceApp": 0,
-          "sendMessageCountReceivedByServiceApp": 0,
           "sendMessageCountSent": 0,
           "sendMessageCountUnacked": 0
         }
@@ -86,15 +85,14 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
 | `receiveC2dCountMissing` | integer | Count of c2d messages sent by service app but not (yet) received by device app.  Only applies to test c2d messages. |
 | `receiveC2dCountReceived` | integer | Count of c2d messges received by device app.  Only applies to test c2d messges |
 | `reportedPropertiesCountAdded` | integer | Count of reported properties added,  Only applies to `testContent` properties. |
-| `reportedPropertiesCountAddedAndVerifiedByServiceApp` | integer | Count of reported properties added and verified by service app.  Only applies to `testContent` properties. |
-| `reportedPropertiesCountRemoved` | integer | Count of reported properties removed.  Only applies to `testContent` properties. |
-| `reportedPropertiesCountRemovedAndVerifiedByServiceApp` | integer | Count of reported properties removed, with removal verified by service app.  Only applies to `testContent` properties. |
+| `reportedPropertiesCountAddedButNotVerifiedByServiceApp` | integer | Count of reported properties added but the add was not verified by the service app |
+| `reportedPropertiesCountRemoved` | integer | Count of reported properties removed,  Only applies to `testContent` properties. |
+| `reportedPropertiesCountRemovedButNotVerifiedByServiceApp` | integer | Count of reported properties removed, but the removal was not verified by the service app. |
 | `sendMessageCountSent` | integer | Count of test telemetry messages sent |
 | `sendMessageCountUnacked` | integer |  Count of test telemetry messages where send API did not complete and did not fail.  (most likely dropped in transit.) |
 | `sendMessageCountFailures` | integer | Count of test telemetry operations which failed.  Failures could be caused by raised exceptions or by messages withoug a matching `serviceAck`. |
 | `sendMessageCountInBacklog` | integer | Count of test telemetry messages currently queued in the  acklock.  Queued messages are scheduled to be sent, but not yet in transit. Not all test implementations queue in the client, so this metric may be meaningless in cases where queueing happens inside the SDK. |
 | `sendMessageCountNotReceivedByServiceApp` | integer | Count of test telemetry messages which were sent, ack'ed by the transport (`PUBACK`), but not received by the service (no `serviceAck`) |
-| `sendMessageCountReceivedByServiceApp` | integer | Count of test telemetry messages received by the service app and acknowledged with a `serviceAck` |
 
 ## System Health Metrics
 

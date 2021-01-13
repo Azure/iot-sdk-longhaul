@@ -13,6 +13,7 @@ import traceback
 import pdb
 import threading
 from system_health_telemetry import SystemHealthTelemetry
+from thief_constants import MetricNames
 
 
 logger = logging.getLogger("thief.{}".format(__name__))
@@ -104,11 +105,11 @@ class AppBase(object):
 
     def get_system_health_telemetry(self):
         props = {
-            "processCpuPercent": self.system_health_telemetry.process_cpu_percent,
-            "processWorkingSet": self.system_health_telemetry.process_working_set,
-            "processBytesInAllHeaps": self.system_health_telemetry.process_bytes_in_all_heaps,
-            "processPrivateBytes": self.system_health_telemetry.process_private_bytes,
-            "processWorkingSetPrivate": self.system_health_telemetry.process_working_set_private,
+            MetricNames.PROCESS_CPU_PERCENT: self.system_health_telemetry.process_cpu_percent,
+            MetricNames.PROCESS_WORKING_SET: self.system_health_telemetry.process_working_set,
+            MetricNames.PROCESS_BYTES_IN_ALL_HEAPS: self.system_health_telemetry.process_bytes_in_all_heaps,
+            MetricNames.PROCESS_PRIVATE_BYTES: self.system_health_telemetry.process_private_bytes,
+            MetricNames.PROCESS_WORKING_SET_PRIVATE: self.system_health_telemetry.process_working_set_private,
         }
         return props
 

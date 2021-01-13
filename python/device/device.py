@@ -24,6 +24,7 @@ from thief_constants import (
     Fields,
     Types,
     Events,
+    MetricNames,
 )
 
 logging.basicConfig(level=logging.WARNING)
@@ -78,16 +79,6 @@ class ServiceAckWaitInfo(object):
         self.user_data = user_data
 
 
-class MetricNames(object):
-    LATENCY_QUEUE_MESSAGE_TO_SEND = "latencyQueueMessageToSendInMilliseconds"
-    LATENCY_SEND_MESSAGE_TO_SERVICE_ACK = "latencySendMessageToServiceAckInSeconds"
-    LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK = "latencyAddReportedPropertyToServiceAckInSeconds"
-    LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK = (
-        "latencyRemoveReportedPropertyToServiceAckInSeconds"
-    )
-    LATENCY_BETWEEN_C2D = "latencyBetweenC2dInSeconds"
-
-
 class CustomPropertyNames(object):
     EVENT_DATE_TIME_UTC = "eventDateTimeUtc"
     SERVICE_ACK_ID = "serviceAckid"
@@ -114,9 +105,9 @@ class DeviceRunMetrics(object):
         self.receive_c2d_count_received = ThreadSafeCounter()
 
         self.reported_properties_count_added = ThreadSafeCounter()
-        self.reported_properties_count_added_and_verified_by_service_app = ThreadSafeCounter()
+        self.reported_properties_count_added_not_verified = ThreadSafeCounter()
         self.reported_properties_count_removed = ThreadSafeCounter()
-        self.reported_properties_count_removed_and_verified_by_service_app = ThreadSafeCounter()
+        self.reported_properties_count_removed_not_verified = ThreadSafeCounter()
 
 
 class DeviceRunConfig(object):
@@ -221,82 +212,101 @@ class DeviceApp(app_base.AppBase):
         self.incoming_test_c2d_message_queue = queue.Queue()
 
     def _configure_azure_monitor_metrics(self):
+        # ---------------------
+        # System Health metrics
+        # ---------------------
         self.reporter.add_float_measurement(
-            "processCpuPercent", "Amount of CPU usage by the process", "percentage",
+            MetricNames.PROCESS_CPU_PERCENT, "Amount of CPU usage by the process", "percentage",
         )
         self.reporter.add_integer_measurement(
-            "processWorkingSet", "All physical memory used by the process", "bytes",
+            MetricNames.PROCESS_WORKING_SET, "All physical memory used by the process", "bytes",
         )
         self.reporter.add_integer_measurement(
-            "processBytesInAllHeaps", "All virtual memory used by the process", "bytes",
+            MetricNames.PROCESS_BYTES_IN_ALL_HEAPS,
+            "All virtual memory used by the process",
+            "bytes",
         )
         self.reporter.add_integer_measurement(
-            "processPrivateBytes",
+            MetricNames.PROCESS_PRIVATE_BYTES,
             "Amount of non-shared physical memory used by the process",
             "bytes",
         )
         self.reporter.add_integer_measurement(
-            "processWorkingSetPrivate",
+            MetricNames.PROCESS_WORKING_SET_PRIVATE,
             "Amount of non-shared physical memory used by the process",
             "bytes",
         )
+
+        # --------------------
+        # SendMesssage metrics
+        # --------------------
         self.reporter.add_integer_measurement(
-            "sendMessageCountSent",
+            MetricNames.SEND_MESSAGE_COUNT_SENT,
             "Count of messages sent and ack'd by the transport",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "sendMessageCountReceivedByServiceApp",
-            "Count of messages sent to iothub with receipt verified via service sdk",
+            MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG,
+            "Count of messages waiting to be sent",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "sendMessageCountInBacklog", "Count of messages waiting to be sent", "message(s)",
-        )
-        self.reporter.add_integer_measurement(
-            "sendMessageCountUnacked",
+            MetricNames.SEND_MESSAGE_COUNT_UNACKED,
             "Count of messages sent to iothub but not ack'd by the transport",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "sendMessageCountNotReceivedByServiceApp",
+            MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED,
             "Count of messages sent to iothub and acked by the transport, but receipt not (yet) verified via service sdk",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "sendMessageCountFailures", "Count of messages that failed to send", "message(s)",
+            MetricNames.SEND_MESSAGE_COUNT_FAILURES,
+            "Count of messages that failed to send",
+            "message(s)",
         )
+
+        # -------------------
+        # Receive c2d metrics
+        # -------------------
         self.reporter.add_integer_measurement(
-            "receiveC2dCountReceived",
+            MetricNames.RECEIVE_C2D_COUNT_RECEIVED,
             "Count of c2d messages received from the service",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "receiveC2dCountMissing",
+            MetricNames.RECEIVE_C2D_COUNT_MISSING,
             "Count of c2d messages sent my the service but not received",
             "message(s)",
         )
+
+        # -------------------------
+        # Reported property metrics
+        # -------------------------
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountAdded",
+            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED,
             "Count of reported properties added",
             "patches with add operation(s)",
         )
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountAddedAndVerifiedByServiceApp",
-            "Count of reported properties added and verified by the service app",
+            "reportedPropertiesCountAddedButNotVerifiedByServiceApp",
+            "Count of reported properties added, but the add was not verified by the service app",
             "patches with add operation(s)",
         )
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountRemoved",
+            MetricNames.REPORTED_PROPERTIES_REMOVED,
             "Count of reported properties removed",
             "patches with remove operation(s)",
         )
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountRemovedAndVerifiedByServiceApp",
-            "Count of reported properties removed and verified by the service app",
+            "reportedPropertiesCountRemovedButNotVerifiedbyServiceApp",
+            "Count of reported properties removed, but the remove was not verified by the service app",
             "patches with remove operations(s)",
         )
 
+        # ---------------
+        # Latency metrics
+        # ---------------
         self.reporter.add_float_measurement(
             MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND,
             "Number of milliseconds between queueing a message and actually sending it",
@@ -351,18 +361,17 @@ class DeviceApp(app_base.AppBase):
         )
 
         props = {
-            "sendMessageCountSent": sent,
-            "sendMessageCountReceivedByServiceApp": received_by_service_app,
-            "sendMessageCountFailures": self.metrics.send_message_count_failures.get_count(),
-            "sendMessageCountInBacklog": self.outgoing_test_message_queue.qsize(),
-            "sendMessageCountUnacked": self.metrics.send_message_count_unacked.get_count(),
-            "sendMessageCountNotReceivedByServiceApp": sent - received_by_service_app,
-            "receiveC2dCountReceived": self.metrics.receive_c2d_count_received.get_count(),
-            "receiveC2dCountMissing": self.out_of_order_message_tracker.get_missing_count(),
-            "reportedPropertiesCountAdded": self.metrics.reported_properties_count_added.get_count(),
-            "reportedPropertiesCountAddedAndVerifiedByServiceApp": self.metrics.reported_properties_count_added_and_verified_by_service_app.get_count(),
-            "reportedPropertiesCountRemoved": self.metrics.reported_properties_count_removed.get_count(),
-            "reportedPropertiesCountRemovedAndVerifiedByServiceApp": self.metrics.reported_properties_count_removed_and_verified_by_service_app.get_count(),
+            MetricNames.SEND_MESSAGE_COUNT_SENT: sent,
+            MetricNames.SEND_MESSAGE_COUNT_FAILURES: self.metrics.send_message_count_failures.get_count(),
+            MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG: self.outgoing_test_message_queue.qsize(),
+            MetricNames.SEND_MESSAGE_COUNT_UNACKED: self.metrics.send_message_count_unacked.get_count(),
+            MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED: sent - received_by_service_app,
+            MetricNames.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
+            MetricNames.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
+            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
+            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED_NOT_VERIFIED: self.metrics.reported_properties_count_added_not_verified.get_count(),
+            MetricNames.REPORTED_PROPERTIES_REMOVED: self.metrics.reported_properties_count_removed.get_count(),
+            MetricNames.REPORTED_PROPERTIES_REMOVED_NOT_VERIFIED: self.metrics.reported_properties_count_removed_not_verified.get_count(),
         }
         return props
 
@@ -1097,7 +1106,7 @@ class DeviceApp(app_base.AppBase):
                 }
 
                 def on_property_added(service_ack_id, user_data):
-                    self.metrics.reported_properties_count_added_and_verified_by_service_app.increment()
+                    self.metrics.reported_properties_count_added_not_verified.decrement()
                     (prop_name, add_ack_id, remove_ack_id) = user_data
                     logger.info("Add of reported property {} verified by service".format(prop_name))
 
@@ -1132,9 +1141,10 @@ class DeviceApp(app_base.AppBase):
                     logger.info("Removing test property {}".format(prop_name))
                     self.client.patch_twin_reported_properties(reported_properties)
                     self.metrics.reported_properties_count_removed.increment()
+                    self.metrics.reported_properties_count_removed_not_verified.increment()
 
                 def on_property_removed(service_ack_id, user_data):
-                    self.metrics.reported_properties_count_removed_and_verified_by_service_app.increment()
+                    self.metrics.reported_properties_count_removed_not_verified.decrement()
                     (prop_name, add_ack_id, remove_ack_id) = user_data
                     logger.info(
                         "Remove of reported property {} verified by service".format(prop_name)
@@ -1172,6 +1182,7 @@ class DeviceApp(app_base.AppBase):
                 logger.info("Adding test property {}".format(property_name))
                 self.client.patch_twin_reported_properties(reported_properties)
                 self.metrics.reported_properties_count_added.increment()
+                self.metrics.reported_properties_count_added_not_verified.increment()
 
                 property_index += 1
 

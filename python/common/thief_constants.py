@@ -93,3 +93,52 @@ class Events(object):
     SENDING_PAIRING_REQUEST = "SendingPairingRequest"
     RECEIVED_PAIRING_RESPONSE = "ReceivedPairingResponse"
     PAIRING_COMPLETE = "PairingComplete"
+
+
+class MetricNames(object):
+    # ---------------------
+    # System Health metrics
+    # ---------------------
+    PROCESS_CPU_PERCENT = "processCpuPercent"
+    PROCESS_WORKING_SET = "processWorkingSet"
+    PROCESS_BYTES_IN_ALL_HEAPS = "processBytesInAllHeaps"
+    PROCESS_PRIVATE_BYTES = "processPrivateBytes"
+    PROCESS_WORKING_SET_PRIVATE = "processWorkingSetPrivate"
+
+    # --------------------
+    # SendMesssage metrics
+    # --------------------
+    SEND_MESSAGE_COUNT_SENT = "sendMessageCountSent"
+    SEND_MESSAGE_COUNT_IN_BACKLOG = "sendMessaageCountInBacklog"
+    SEND_MESSAGE_COUNT_UNACKED = "sendMessageCountUnacked"
+    SEND_MESSAGE_COUNT_NOT_RECEIVED = "sendMessageCountNotReceivedByServiceApp"
+    SEND_MESSAGE_COUNT_FAILURES = "sendMessageCountFailures"
+
+    # -------------------
+    # Receive c2d metrics
+    # -------------------
+    RECEIVE_C2D_COUNT_RECEIVED = "receiveC2dCountReceived"
+    RECEIVE_C2D_COUNT_MISSING = "receiveC2dCountMissing"
+
+    # -------------------------
+    # Reported property metrics
+    # -------------------------
+    REPORTED_PROPERTIES_COUNT_ADDED = "reportedPropertiesCountAdded"
+    REPORTED_PROPERTIES_COUNT_ADDED_NOT_VERIFIED = (
+        "reportedPropertiesCountAddedButNotVerifiedByServiceApp"
+    )
+    REPORTED_PROPERTIES_REMOVED = "reportedPropertiesCountRemoved"
+    REPORTED_PROPERTIES_REMOVED_NOT_VERIFIED = (
+        "reportedPropertiesCountRemovedButNotVerifiedbyServiceApp"
+    )
+
+    # ---------------
+    # Latency metrics
+    # ---------------
+    LATENCY_QUEUE_MESSAGE_TO_SEND = "latencyQueueMessageToSendInMilliseconds"
+    LATENCY_SEND_MESSAGE_TO_SERVICE_ACK = "latencySendMessageToServiceAckInSeconds"
+    LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK = "latencyAddReportedPropertyToServiceAckInSeconds"
+    LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK = (
+        "latencyRemoveReportedPropertyToServiceAckInSeconds"
+    )
+    LATENCY_BETWEEN_C2D = "latencyBetweenC2dInSeconds"
