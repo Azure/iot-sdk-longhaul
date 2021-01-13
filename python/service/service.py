@@ -207,12 +207,12 @@ class ServiceApp(app_base.AppBase):
                 device_data = self.paired_devices.get(device_id, None)
 
             if get_message_source_from_event(event) == "twinChangeEvents":
-                if (
+                thief = (
                     body.get(Const.PROPERTIES, {})
                     .get(Const.REPORTED, {})
                     .get(Fields.Reported.THIEF, {})
-                    .get(Fields.Reported.PAIRING, {})
-                ):
+                )
+                if thief and thief.get(Fields.Reported.PAIRING, {}):
                     self.incoming_pairing_request_queue.put(event)
                 if device_data:
                     self.incoming_twin_changes.put(event)

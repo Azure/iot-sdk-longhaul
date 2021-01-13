@@ -26,7 +26,7 @@ def json_name_to_metric_name(metric_name):
 class MetricsReporter(object):
     def __init__(self):
         self.exporter = metrics_exporter.new_metrics_exporter(
-            connection_string=app_insights_connection_string
+            connection_string=app_insights_connection_string, enable_standard_metrics=False,
         )
         self.exporter.add_telemetry_processor(azure_monitor.telemetry_processor_callback)
         view_manager.register_exporter(self.exporter)

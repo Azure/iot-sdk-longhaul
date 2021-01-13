@@ -8,7 +8,6 @@ import uuid
 import json
 import datetime
 import threading
-import collections
 import pprint
 from concurrent.futures import ThreadPoolExecutor
 import dps
@@ -60,10 +59,38 @@ azure_monitor.log_to_azure_monitor("thief")
 azure_monitor.log_to_azure_monitor("azure")
 azure_monitor.log_to_azure_monitor("paho")
 
-ServiceAckWaitInfo = collections.namedtuple(
-    "ServiceAckWaitInfo",
-    "on_service_ack_received service_ack_id send_epochtime service_ack_type user_data",
-)
+
+class ServiceAckWaitInfo(object):
+    def __init__(
+        self,
+        on_service_ack_received,
+        service_ack_id,
+        service_ack_type,
+        queue_epochtime=None,
+        send_epochtime=None,
+        user_data=None,
+    ):
+        self.on_service_ack_received = on_service_ack_received
+        self.service_ack_id = service_ack_id
+        self.service_ack_type = service_ack_type
+        self.queue_epochtime = queue_epochtime
+        self.send_epochtime = send_epochtime
+        self.user_data = user_data
+
+
+class MetricNames(object):
+    LATENCY_QUEUE_MESSAGE_TO_SEND = "latencyQueueMessageToSendInMilliseconds"
+    LATENCY_SEND_MESSAGE_TO_SERVICE_ACK = "latencySendMessageToServiceAckInSeconds"
+    LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK = "latencyAddReportedPropertyToServiceAckInSeconds"
+    LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK = (
+        "latencyRemoveReportedPropertyToServiceAckInSeconds"
+    )
+    LATENCY_BETWEEN_C2D = "latencyBetweenC2dInSeconds"
+
+
+class CustomPropertyNames(object):
+    EVENT_DATE_TIME_UTC = "eventDateTimeUtc"
+    SERVICE_ACK_ID = "serviceAckid"
 
 
 class DeviceRunMetrics(object):
@@ -183,6 +210,7 @@ class DeviceApp(app_base.AppBase):
         # for telemetry
         self.outgoing_test_message_queue = queue.Queue()
         # for metrics
+        self.reporter_lock = threading.Lock()
         self.reporter = MetricsReporter()
         self._configure_azure_monitor_metrics()
         # for pairing
@@ -269,6 +297,32 @@ class DeviceApp(app_base.AppBase):
             "patches with remove operations(s)",
         )
 
+        self.reporter.add_float_measurement(
+            MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND,
+            "Number of milliseconds between queueing a message and actually sending it",
+            "milliseconds",
+        )
+        self.reporter.add_float_measurement(
+            MetricNames.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK,
+            "Number of seconds between sending a message and receiving the serviceAck back from the service app",
+            "seconds",
+        )
+        self.reporter.add_float_measurement(
+            MetricNames.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK,
+            "Number of seconds between setting a reported property and receiving the serviceAck back from the service app",
+            "seconds",
+        )
+        self.reporter.add_float_measurement(
+            MetricNames.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK,
+            "Number of seconds between clearing a reported property and receiving the serviceAck back from the service app",
+            "seconds",
+        )
+        self.reporter.add_float_measurement(
+            MetricNames.LATENCY_BETWEEN_C2D,
+            "number of seconds between test c2d messages from the service",
+            "seconds",
+        )
+
     def get_session_metrics(self):
         """
         Return metrics which describe the session the tests are running in
@@ -340,6 +394,11 @@ class DeviceApp(app_base.AppBase):
         """
         Update reported properties at the start of a run
         """
+
+        # First remove all old props (in case of schema change).  Also clears out old results.
+        props = {Fields.Reported.THIEF: None}
+        self.client.patch_twin_reported_properties(props)
+
         props = {
             Fields.Reported.THIEF: {
                 Fields.Reported.SYSTEM_PROPERTIES: self.get_system_properties(
@@ -348,8 +407,6 @@ class DeviceApp(app_base.AppBase):
                 Fields.Reported.SESSION_METRICS: self.get_session_metrics(),
                 Fields.Reported.TEST_METRICS: self.get_test_metrics(),
                 Fields.Reported.CONFIG: self.get_longhaul_config_properties(),
-                Fields.Reported.TEST_CONTENT: None,
-                Fields.Reported.TEST_CONTROL: None,
             }
         }
         self.client.patch_twin_reported_properties(props)
@@ -370,7 +427,7 @@ class DeviceApp(app_base.AppBase):
         msg.content_type = Const.JSON_CONTENT_TYPE
         msg.content_encoding = Const.JSON_CONTENT_ENCODING
 
-        msg.custom_properties["eventDateTimeUtc"] = datetime.datetime.now(
+        msg.custom_properties[CustomPropertyNames.EVENT_DATE_TIME_UTC] = datetime.datetime.now(
             datetime.timezone.utc
         ).isoformat()
 
@@ -396,12 +453,14 @@ class DeviceApp(app_base.AppBase):
                 on_service_ack_received=on_service_ack_received,
                 service_ack_id=service_ack_id,
                 service_ack_type=Types.ServiceAck.TELEMETRY_SERVICE_ACK,
-                send_epochtime=time.time(),
+                queue_epochtime=time.time(),
                 user_data=user_data,
             )
 
         logger.info("Requesting service_ack for serviceAckId = {}".format(service_ack_id))
-        return self.create_message_from_dict(props)
+        msg = self.create_message_from_dict(props)
+        msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = service_ack_id
+        return msg
 
     def pairing_thread(self, worker_thread_info):
         """
@@ -571,6 +630,12 @@ class DeviceApp(app_base.AppBase):
             except queue.Empty:
                 msg = None
             if msg:
+                service_ack_id = msg.custom_properties.get(CustomPropertyNames.SERVICE_ACK_ID, "")
+                if service_ack_id:
+                    with self.service_ack_list_lock:
+                        wait_info = self.service_ack_wait_list[service_ack_id]
+                    wait_info.send_epochtime = time.time()
+
                 try:
                     self.metrics.send_message_count_unacked.increment()
                     self.client.send_message(msg)
@@ -589,9 +654,10 @@ class DeviceApp(app_base.AppBase):
         """
         # we don't record session_metrics to azure monitor because they're all about time and i
         # there's no value to pushing things like "current time" as metrics
-        self.reporter.set_metrics_from_dict(props[Fields.Reported.SYSTEM_HEALTH_METRICS])
-        self.reporter.set_metrics_from_dict(props[Fields.Reported.TEST_METRICS])
-        self.reporter.record()
+        with self.reporter_lock:
+            self.reporter.set_metrics_from_dict(props[Fields.Reported.SYSTEM_HEALTH_METRICS])
+            self.reporter.set_metrics_from_dict(props[Fields.Reported.TEST_METRICS])
+            self.reporter.record()
 
     def test_send_message_thread(self, worker_thread_info):
         """
@@ -623,10 +689,26 @@ class DeviceApp(app_base.AppBase):
                     logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
                     self.metrics.send_message_count_received_by_service_app.increment()
 
+                    with self.service_ack_list_lock:
+                        wait_info = self.service_ack_wait_list[service_ack_id]
+
+                    with self.reporter_lock:
+                        self.reporter.set_metrics_from_dict(
+                            {
+                                MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND: (
+                                    wait_info.send_epochtime - wait_info.queue_epochtime
+                                )
+                                * 1000,
+                                MetricNames.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
+                                - wait_info.send_epochtime,
+                            }
+                        )
+                        self.reporter.record()
+
                 # This function only queues the message.  A send_message_thread instance will pick
                 # it up and send it.
                 msg = self.create_message_from_dict_with_service_ack(
-                    props=props, on_service_ack_received=on_service_ack_received,
+                    props=props, on_service_ack_received=on_service_ack_received
                 )
                 self.outgoing_test_message_queue.put(msg)
 
@@ -770,7 +852,6 @@ class DeviceApp(app_base.AppBase):
                             # service_ack_list_lock.  Instead, add to a list and call back when we're
                             # not holding the lock.
                             arrivals.append(self.service_ack_wait_list[service_ack_id])
-                            del self.service_ack_wait_list[service_ack_id]
                         else:
                             logger.warning(
                                 "Received unkonwn serviceAckId: {}:".format(service_ack_id)
@@ -778,6 +859,10 @@ class DeviceApp(app_base.AppBase):
 
                 for arrival in arrivals:
                     arrival.on_service_ack_received(arrival.service_ack_id, arrival.user_data)
+                    # remove this from our list _after_ we call on_service_ack_received
+                    with self.service_ack_list_lock:
+                        if arrival.service_ack_id in self.service_ack_wait_list:
+                            del self.service_ack_wait_list[arrival.service_ack_id]
 
     def check_for_failure_thread(self, worker_thread_info):
         """
@@ -808,12 +893,12 @@ class DeviceApp(app_base.AppBase):
             with self.service_ack_list_lock:
                 for wait_info in self.service_ack_wait_list.values():
                     if (wait_info.service_ack_type == Types.ServiceAck.TELEMETRY_SERVICE_ACK) and (
-                        now - wait_info.send_epochtime
+                        now - wait_info.queue_epochtime
                     ) > self.config.send_message_arrival_failure_interval_in_seconds:
                         logger.warning(
                             "Arrival time for {} of {} seconds is longer than failure interval of {}".format(
                                 wait_info.service_ack_id,
-                                (now - wait_info.send_epochtime),
+                                (now - wait_info.queue_epochtime),
                                 self.config.send_message_arrival_failure_interval_in_seconds,
                             )
                         )
@@ -852,12 +937,6 @@ class DeviceApp(app_base.AppBase):
                             )
                         )
                         reported_properties_remove_failure_count += 1
-
-            # For reported properties, we allocate the serviceAck for ADD_REPORTED_PROPERTY and
-            # REMOVE_REPORTED_PROPERTY at the same time.  This means every add failure will also
-            # be counted as a remove failure.  We subtract here to avoid double-counting the
-            # add failures.
-            reported_properties_remove_failure_count -= reported_properties_add_failure_count
 
             if arrival_failure_count > self.config.send_message_arrival_allowed_failure_count:
                 raise Exception(
@@ -960,6 +1039,8 @@ class DeviceApp(app_base.AppBase):
         Thread which handles c2d messages that were sent by the service app for the purpose of
         testing c2d
         """
+        last_message_epochtime = 0
+
         while not self.done.isSet():
             worker_thread_info.watchdog_epochtime = time.time()
             if self.is_paused():
@@ -977,6 +1058,15 @@ class DeviceApp(app_base.AppBase):
                 self.out_of_order_message_tracker.add_message(
                     thief.get(Fields.C2d.TEST_C2D_MESSAGE_INDEX)
                 )
+
+                now = time.time()
+                if last_message_epochtime:
+                    with self.reporter_lock:
+                        self.reporter.set_metrics_from_dict(
+                            {MetricNames.LATENCY_BETWEEN_C2D: now - last_message_epochtime}
+                        )
+                        self.reporter.record()
+                last_message_epochtime = now
 
     def test_reported_properties_threads(self, worker_thread_info):
         """
@@ -1008,34 +1098,58 @@ class DeviceApp(app_base.AppBase):
 
                 def on_property_added(service_ack_id, user_data):
                     self.metrics.reported_properties_count_added_and_verified_by_service_app.increment()
-                    added_property_name = user_data
-                    logger.info(
-                        "Add of reported property {} verified by service".format(
-                            added_property_name
+                    (prop_name, add_ack_id, remove_ack_id) = user_data
+                    logger.info("Add of reported property {} verified by service".format(prop_name))
+
+                    with self.service_ack_list_lock:
+                        add_wait_info = self.service_ack_wait_list[add_ack_id]
+                        self.service_ack_wait_list[remove_ack_id] = ServiceAckWaitInfo(
+                            on_service_ack_received=on_property_removed,
+                            service_ack_id=remove_ack_id,
+                            send_epochtime=time.time(),
+                            service_ack_type=Types.ServiceAck.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
+                            user_data=user_data,
                         )
-                    )
+
+                    with self.reporter_lock:
+                        self.reporter.set_metrics_from_dict(
+                            {
+                                MetricNames.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK: time.time()
+                                - add_wait_info.send_epochtime
+                            }
+                        )
+                        self.reporter.record()
 
                     reported_properties = {
                         Fields.Reported.THIEF: {
                             Fields.Reported.TEST_CONTENT: {
                                 Fields.Reported.TestContent.REPORTED_PROPERTY_TEST: {
-                                    added_property_name: None
+                                    prop_name: None
                                 }
                             }
                         }
                     }
-                    logger.info("Removing test property {}".format(added_property_name))
+                    logger.info("Removing test property {}".format(prop_name))
                     self.client.patch_twin_reported_properties(reported_properties)
                     self.metrics.reported_properties_count_removed.increment()
 
                 def on_property_removed(service_ack_id, user_data):
                     self.metrics.reported_properties_count_removed_and_verified_by_service_app.increment()
-                    removed_property_name = user_data
+                    (prop_name, add_ack_id, remove_ack_id) = user_data
                     logger.info(
-                        "Remove of reported property {} verified by service".format(
-                            removed_property_name
-                        )
+                        "Remove of reported property {} verified by service".format(prop_name)
                     )
+
+                    with self.service_ack_list_lock:
+                        remove_wait_info = self.service_ack_wait_list[remove_ack_id]
+                    with self.reporter_lock:
+                        self.reporter.set_metrics_from_dict(
+                            {
+                                MetricNames.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK: time.time()
+                                - remove_wait_info.send_epochtime
+                            }
+                        )
+                        self.reporter.record()
 
                 with self.service_ack_list_lock:
                     self.service_ack_wait_list[add_service_ack_id] = ServiceAckWaitInfo(
@@ -1043,14 +1157,7 @@ class DeviceApp(app_base.AppBase):
                         service_ack_id=add_service_ack_id,
                         send_epochtime=time.time(),
                         service_ack_type=Types.ServiceAck.ADD_REPORTED_PROPERTY_SERVICE_ACK,
-                        user_data=property_name,
-                    )
-                    self.service_ack_wait_list[remove_service_ack_id] = ServiceAckWaitInfo(
-                        on_service_ack_received=on_property_removed,
-                        service_ack_id=remove_service_ack_id,
-                        send_epochtime=time.time(),
-                        service_ack_type=Types.ServiceAck.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
-                        user_data=property_name,
+                        user_data=(property_name, add_service_ack_id, remove_service_ack_id),
                     )
 
                 reported_properties = {
