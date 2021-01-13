@@ -126,7 +126,9 @@ class AppBase(object):
                     logger.warning("Stack for thread {}".format(thread_id))
                 logger.warning(str(traceback.format_stack(frame)))
 
-    def run_threads(self, threads_to_launch):
+    def run_threads(
+        self, threads_to_launch, max_run_duration=0, watchdog_failure_interval_in_seconds=60
+    ):
         def _thread_outer_proc(worker_thread_info):
             current_thread = threading.current_thread()
             current_thread.name = worker_thread_info.name
@@ -177,7 +179,7 @@ class AppBase(object):
 
                     elif (
                         time.time() - worker.watchdog_epochtime
-                        > self.config.watchdog_failure_interval_in_seconds
+                        > watchdog_failure_interval_in_seconds
                     ):
                         reason = "Future {} has not responded for {} seconds.  Failing".format(
                             worker.name, time.time() - worker.watchdog_epochtime
@@ -192,12 +194,10 @@ class AppBase(object):
                 # If we're still running, check to see if we're done.  If not, sleep and loop again.
                 if self.metrics.run_state == RUNNING:
 
-                    if self.config.max_run_duration and (
-                        time.time() - loop_start_epochtime > self.config.max_run_duration
-                    ):
+                    if max_run_duration and (time.time() - loop_start_epochtime > max_run_duration):
                         self.metrics.run_state = COMPLETE
                         self.metrics.exit_rason = "Run passed after {}".format(
-                            datetime.timedelta(self.config.max_run_duration)
+                            datetime.timedelta(max_run_duration)
                         )
                     else:
                         time.sleep(1)

@@ -34,7 +34,6 @@ They record details on the progress of the current run.
         "sessionMetrics": {
           "exitReason": "Main thread raised <class KeyboardInterrupt>",
           "latestUpdateTimeUtc": "2020-12-14T21:14:57.447061",
-          "runEndUtc": "2020-12-14T21:14:57.441870+00:00",
           "runStartUtc": "2020-12-14T21:13:22.430280+00:00",
           "runState": "interrupted",
           "runTime": "0:01:35.016760"
@@ -48,7 +47,6 @@ They record details on the progress of the current run.
 | - | - | - |
 | `runState` | string | State of the current run.  One of `waiting`, `running`, `failed`, `complete`, or `interrupted` |
 | `runStartUtc` | string | DateTime in UTC for the start of the current run. |
-| `runEndUtc` | string | DateTime in UTC for the end of the current run.  Only valid for `failed`, `complete`, or `interrupted`. |
 | `runTime` | string | Elapsed time for current run |
 | `latestUpdateTimeUtc` | string | DateTime in UTC for most recent update to thie structure. |
 | `exitReason` | string | free-form string indicating reason for test to exit.  Most likely exception text or other error string.  Only valid for `failed`, `complete`, or `interrupted`. |
@@ -69,7 +67,7 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
           "reportedPropertiesCountAddedButNotVerifiedByServiceApp": 0,
           "reportedPropertiesCountRemoved": 0,
           "reportedPropertiesCountRemovedButNotVerifiedByServiceApp": 0,
-          "sendMessageCountFailures": 0,
+          "sendMessageCountExceptions": 0,
           "sendMessageCountInBacklog": 0,
           "sendMessageCountNotReceivedByServiceApp": 0,
           "sendMessageCountSent": 0,
@@ -90,7 +88,7 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
 | `reportedPropertiesCountRemovedButNotVerifiedByServiceApp` | integer | Count of reported properties removed, but the removal was not verified by the service app. |
 | `sendMessageCountSent` | integer | Count of test telemetry messages sent |
 | `sendMessageCountUnacked` | integer |  Count of test telemetry messages where send API did not complete and did not fail.  (most likely dropped in transit.) |
-| `sendMessageCountFailures` | integer | Count of test telemetry operations which failed.  Failures could be caused by raised exceptions or by messages withoug a matching `serviceAck`. |
+| `sendMessageCountExceptions` | integer | Count of test telemetry operations which failed.  Failures could be caused by raised exceptions or by messages withoug a matching `serviceAck`. |
 | `sendMessageCountInBacklog` | integer | Count of test telemetry messages currently queued in the  acklock.  Queued messages are scheduled to be sent, but not yet in transit. Not all test implementations queue in the client, so this metric may be meaningless in cases where queueing happens inside the SDK. |
 | `sendMessageCountNotReceivedByServiceApp` | integer | Count of test telemetry messages which were sent, ack'ed by the transport (`PUBACK`), but not received by the service (no `serviceAck`) |
 

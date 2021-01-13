@@ -37,7 +37,7 @@ You can see that the `LastUpdateTimeUtc` value is a few days old, which indicate
 
 ```
 (longhaul) bertk@bertk-hp:~/repos/longhaul/scripts$ ./get-run-list.sh
-DeviceId             Language    LanguageVersion    LatestUpdateTimeUtc         RunState    RunTime
+DeviceId             Language    LanguageVersion    LatestUpdateTimeUtc         RunState    ElapsedTime
 -------------------  ----------  -----------------  --------------------------  ----------  ------------------------
 nov12-03             python      3.7.9              2020-11-12T20:21:21.243393  failed      0:15:03.956707
 nov9-2               python      3.8.5              2020-11-10T14:24:48.834140  running     16:24:16.386984
@@ -61,43 +61,71 @@ If you want to look at more reported properties for a running test, you can use 
 If we look at the `nov12-03` test, we can see that the `exitReason` indicates a pairing failure.
 
 ```
-(longhaul) bertk@bertk-hp:~/repos/longhaul/scripts$ ./get-run-detail.sh nov12-03
+(longhaul) bertk@bertk-hp:~/repos/longhaul/scripts$ ./get-run-detail.sh bertk_test_device
 [
   {
-    "deviceId": "nov12-03",
+    "deviceId": "bertk_test_device",
     "thief": {
-      "configPairingRequestSendIntervalInSeconds": 30,
-      "configPairingRequestTimeoutIntervalInSeconds": 900,
-      "configPropertyUpdateIntervalInSeconds": 60,
-      "configReceiveC2dIntervalInSeconds": 2,
-      "configReceiveC2dMissingMessageAllowedFailureCount": 10,
-      "configSendMessageArrivalAllowedFailureCount": 10,
-      "configSendMessageArrivalFailureIntervalInSeconds": 3600,
-      "configSendMessageBacklogAllowedFailureCount": 200,
-      "configSendMessageExceptionAllowedFailureCount": 10,
-      "configSendMessageOperationsPerSecond": 1,
-      "configSendMessageThreadCount": 10,
-      "configSendMessageUnackedAllowedFailureCount": 200,
-      "configWatchdogFailureIntervalInSeconds": 300,
-      "exitReason": "No resopnse to pairing requests after trying for 900 seconds",
-      "language": "python",
-      "languageVersion": "3.7.9",
-      "latestUpdateTimeUtc": "2020-11-12T20:21:21.243393",
-      "osRelease": "#1 SMP Fri Feb 21 04:01:19 UTC 2020",
-      "osType": "Linux",
-      "receiveC2dCountMissing": 0,
-      "receiveC2dCountReceived": 0,
-      "runEndUtc": "2020-11-12T20:21:21.237630+00:00",
-      "runStartUtc": "2020-11-12T20:06:17.286650+00:00",
-      "runState": "failed",
-      "runTime": "0:15:03.956707",
-      "sdkVersion": "2.4.0",
-      "sendMessageCountFailures": 0,
-      "sendMessageCountInBacklog": 0,
-      "sendMessageCountNotReceivedByService": 30,
-      "sendMessageCountReceivedByService": 0,
-      "sendMessageCountSent": 30,
-      "sendMessageCountUnacked": 0
+      "config": {
+        "pairingRequestSendIntervalInSeconds": 30,
+        "pairingRequestTimeoutIntervalInSeconds": 900,
+        "receiveC2dAllowedMissingMessageCount": 100,
+        "receiveC2dIntervalInSeconds": 20,
+        "reportedPropertiesUpdateAllowedFailureCount": 50,
+        "reportedPropertiesUpdateIntervalInSeconds": 10,
+        "sendMessageAllowedFailureCount": 1000,
+        "sendMessageOperationsPerSecond": 1,
+        "sendMessageThreadCount": 10,
+        "thiefAllowedClientExceptionCount": 10,
+        "thiefMaxRunDurationInSeconds": 0,
+        "thiefPropertyUpdateIntervalInSeconds": 30,
+        "thiefWatchdogFailureIntervalInSeconds": 60
+      },
+      "pairing": {
+        "requestedServicePool": "bertk_desktop_pool",
+        "runId": "c0dd64e5-8c00-47fa-8bd5-485f753f5d32",
+        "serviceInstance": "39c56dbd-8d9b-4bcf-9229-291a0f61bd7b"
+      },
+      "sessionMetrics": {
+        "elapsedTime": "0:09:06.360313",
+        "latestUpdateTimeUtc": "2021-01-13T23:20:16.748237+00:00",
+        "runStartUtc": "2021-01-13T23:11:10.387924+00:00",
+        "runState": "Running"
+      },
+      "systemProperties": {
+        "language": "python",
+        "languageVersion": "3.8.2",
+        "osRelease": "(3.8.2;Linux #34~18.04.2-Ubuntu SMP Thu Oct 10 10:36:02 UTC 2019;x86_64)",
+        "osType": "Linux",
+        "sdkVersion": "2.4.0"
+      },
+      "testContent": {
+        "reportedPropertyTest": {
+          "prop_55": {
+            "addServiceAckId": "84db528b-9dab-4943-bdfc-da45063f97d3",
+            "removeServiceAckId": "12577a06-0f5d-4413-8125-797a7acef67c"
+          }
+        }
+      },
+      "testControl": {
+        "c2d": {
+          "messageIntervalInSeconds": 20,
+          "send": true
+        }
+      },
+      "testMetrics": {
+        "receiveC2dCountMissing": 0,
+        "receiveC2dCountReceived": 27,
+        "reportedPropertiesCountAdded": 53,
+        "reportedPropertiesCountAddedButNotVerifiedByServiceApp": 0,
+        "reportedPropertiesCountRemoved": 52,
+        "reportedPropertiesCountRemovedButNotVerifiedbyServiceApp": 1,
+        "sendMessageCountExceptions": 0,
+        "sendMessageCountInBacklog": 0,
+        "sendMessageCountNotReceivedByServiceApp": 4,
+        "sendMessageCountSent": 541,
+        "sendMessageCountUnacked": 0
+      }
     }
   }
 ]

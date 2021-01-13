@@ -762,7 +762,11 @@ class ServiceApp(app_base.AppBase):
             app_base.WorkerThreadInfo(self.test_c2d_thread, "test_c2d_thread"),
         ]
 
-        self.run_threads(threads_to_launch)
+        self.run_threads(
+            threads_to_launch,
+            max_run_duration=self.config.max_run_duration,
+            watchdog_failure_interval_in_seconds=self.config.watchdog_failure_interval_in_seconds,
+        )
 
     def pre_shutdown(self):
         # close the eventhub consumer before shutting down threads.  This is necessary because
