@@ -74,7 +74,7 @@ Test configuration is set one time at the beginning of the run and used to recor
             "sendMessageAllowedFailureCount": 1000,
             "sendMessageOperationsPerSecond": 1,
             "sendMessageThreadCount": 10,
-            "thiefAllowedClientExceptionCount": 10,
+            "thiefAllowedClientLibraryExceptionCount": 10,
             "thiefMaxRunDurationInSeconds": 0,
             "thiefPropertyUpdateIntervalInSeconds": 30,
             "thiefWatchdogFailureIntervalInSeconds": 300
@@ -102,7 +102,7 @@ These numbers define operational parameters for execution of the test harness.
 | `thiefMaxRunDurationInSeconds` | integer | Number of seconds to run the test for.  0 to run indefinitely. |
 | `thiefPropertyUpdateIntervalInSeconds` | integer | How often to update reported properties while running the tests.  This only applies to `sessionMetrics` and `testMetrics` properties |
 | `thiefWatchdogFailureIntervalInSeconds` | integer | How often to check thread watchdogs.  If an individual thread is inactive for this many seconds, the test fails.  Exact definition of "inactive" is arbitrary and may depend on implementation. |
-| `thiefAllowedClientExceptionCount` | integer | How many exceptions can be raised by the device client before the test fails? |
+| `thiefAllowedClientLibraryExceptionCount` | integer | How many exceptions can be raised by the device client before the test fails? |
 
 ### c2d test configuration
 

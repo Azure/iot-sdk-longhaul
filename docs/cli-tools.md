@@ -76,7 +76,7 @@ If we look at the `nov12-03` test, we can see that the `exitReason` indicates a 
         "sendMessageAllowedFailureCount": 1000,
         "sendMessageOperationsPerSecond": 1,
         "sendMessageThreadCount": 10,
-        "thiefAllowedClientExceptionCount": 10,
+        "thiefAllowedClientLibraryExceptionCount": 10,
         "thiefMaxRunDurationInSeconds": 0,
         "thiefPropertyUpdateIntervalInSeconds": 30,
         "thiefWatchdogFailureIntervalInSeconds": 60

@@ -95,10 +95,11 @@ class DeviceRunMetrics(object):
         self.run_state = app_base.WAITING
         self.exit_reason = None
 
+        self.client_library_count_exceptions = ThreadSafeCounter()
+
         self.send_message_count_unacked = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
         self.send_message_count_received_by_service_app = ThreadSafeCounter()
-        self.send_message_count_exceptions = ThreadSafeCounter()
 
         self.receive_c2d_count_received = ThreadSafeCounter()
 
@@ -116,7 +117,7 @@ device_run_config = {
     Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 0,
     Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS: 30,
     Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
-    Settings.THIEF_ALLOWED_CLIENT_EXCEPTION_COUNT: 10,
+    Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT: 10,
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
     Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS: 30,
     Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
@@ -189,6 +190,15 @@ class DeviceApp(app_base.AppBase):
             "bytes",
         )
 
+        # ----------------
+        # test app metrics
+        # ----------------
+        self.reporter.add_integer_measurement(
+            MetricNames.CLIENT_LIBRARY_COUNT_EXCEPTIONS,
+            "Number of exceptions raised by the client library or libraries",
+            "exception(s)",
+        )
+
         # --------------------
         # SendMesssage metrics
         # --------------------
@@ -210,11 +220,6 @@ class DeviceApp(app_base.AppBase):
         self.reporter.add_integer_measurement(
             MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED,
             "Count of messages sent to iothub and acked by the transport, but receipt not (yet) verified via service sdk",
-            "message(s)",
-        )
-        self.reporter.add_integer_measurement(
-            MetricNames.SEND_MESSAGE_COUNT_EXCEPTIONS,
-            "Count of messages that failed to send",
             "message(s)",
         )
 
@@ -311,8 +316,8 @@ class DeviceApp(app_base.AppBase):
         )
 
         props = {
+            MetricNames.CLIENT_LIBRARY_COUNT_EXCEPTIONS: self.metrics.client_library_count_exceptions.get_count(),
             MetricNames.SEND_MESSAGE_COUNT_SENT: sent,
-            MetricNames.SEND_MESSAGE_COUNT_EXCEPTIONS: self.metrics.send_message_count_exceptions.get_count(),
             MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG: self.outgoing_test_message_queue.qsize(),
             MetricNames.SEND_MESSAGE_COUNT_UNACKED: self.metrics.send_message_count_unacked.get_count(),
             MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED: sent - received_by_service_app,
@@ -575,9 +580,17 @@ class DeviceApp(app_base.AppBase):
                     self.metrics.send_message_count_unacked.increment()
                     self.client.send_message(msg)
                 except Exception as e:
-                    self.metrics.send_message_count_exceptions.increment()
+                    self.metrics.client_library_count_exceptions.increment()
                     logger.error("send_message raised {}".format(e), exc_info=True)
-                    # BKTODO: check exception limit and fail
+                    if (
+                        self.metrics.client_library_count_exceptions.get_count()
+                        > self.config[Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT]
+                    ):
+                        raise Exception(
+                            "Client library exception count ({}) too high.".format(
+                                self.metrics.client_library_count_exceptions.get_count()
+                            )
+                        )
                 else:
                     self.metrics.send_message_count_sent.increment()
                 finally:
@@ -886,7 +899,15 @@ class DeviceApp(app_base.AppBase):
                         self.reporter.record()
                 last_message_epochtime = now
 
-                # BKTODO: check missing message count
+                if (
+                    self.out_of_order_message_tracker.get_missing_count()
+                    > self.config[Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT]
+                ):
+                    raise Exception(
+                        "Missing message count ({}) is too high".format(
+                            self.out_of_order_message_tracker.get_missing_count()
+                        )
+                    )
 
     def test_reported_properties_threads(self, worker_thread_info):
         """

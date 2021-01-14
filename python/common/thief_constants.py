@@ -155,6 +155,13 @@ class MetricNames(object):
     # Amount of private data used by the process
     PROCESS_WORKING_SET_PRIVATE = "processWorkingSetPrivate"
 
+    # ----------------
+    # test app metrics
+    # ----------------
+
+    # Number of exceptions raised by the client library or libraries
+    CLIENT_LIBRARY_COUNT_EXCEPTIONS = "clientLibraryCountExceptions"
+
     # --------------------
     # SendMesssage metrics
     # --------------------
@@ -167,8 +174,6 @@ class MetricNames(object):
     SEND_MESSAGE_COUNT_UNACKED = "sendMessageCountUnacked"
     # Number of telemetry messages that have not (yet) arrived at the hub
     SEND_MESSAGE_COUNT_NOT_RECEIVED = "sendMessageCountNotReceivedByServiceApp"
-    # Number of exceptions raised when sending messages
-    SEND_MESSAGE_COUNT_EXCEPTIONS = "sendMessageCountExceptions"
 
     # -------------------
     # Receive c2d metrics
@@ -226,7 +231,7 @@ class DeviceSettings(object):
     # How long can a thread go without updating its watchdog before failing
     THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS = "thiefWatchdogFailureIntervalInSeconds"
     # How many client exceptions do we allow before we fail the test?
-    THIEF_ALLOWED_CLIENT_EXCEPTION_COUNT = "thiefAllowedClientExceptionCount"
+    THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT = "thiefAllowedClientLibraryExceptionCount"
 
     # How long to keep trying to pair with a service instance before giving up
     PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS = "pairingRequestTimeoutIntervalInSeconds"
