@@ -255,7 +255,7 @@ class ServiceApp(app_base.AppBase):
         """
 
         def on_error(partition_context, error):
-            logger.error("EventHub on_error: {}".format(error))
+            logger.error("EventHub on_error: {}".format(str(error) or type(error)))
 
         def on_partition_initialize(partition_context):
             logger.warning("EventHub on_partition_initialize")
@@ -333,7 +333,7 @@ class ServiceApp(app_base.AppBase):
                     except Exception as e:
                         logger.error(
                             "send_c2d_messge to {} raised {}.  Forcing un-pair with device".format(
-                                device_id, str(e)
+                                device_id, str(e) or type(e)
                             ),
                             exc_info=e,
                         )
@@ -783,8 +783,8 @@ class ServiceApp(app_base.AppBase):
 if __name__ == "__main__":
     try:
         ServiceApp().main()
-    except Exception as e:
-        logger.error("App shutdown exception: {}".format(str(e)), exc_info=True)
+    except BaseException as e:
+        logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)
         raise
     finally:
         # Flush azure monitor telemetry

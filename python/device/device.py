@@ -581,7 +581,7 @@ class DeviceApp(app_base.AppBase):
                     self.client.send_message(msg)
                 except Exception as e:
                     self.metrics.client_library_count_exceptions.increment()
-                    logger.error("send_message raised {}".format(e), exc_info=True)
+                    logger.error("send_message raised {}".format(str(e) or type(e)), exc_info=True)
                     if (
                         self.metrics.client_library_count_exceptions.get_count()
                         > self.config[Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT]
@@ -1100,8 +1100,8 @@ class DeviceApp(app_base.AppBase):
 if __name__ == "__main__":
     try:
         DeviceApp().main()
-    except Exception as e:
-        logger.error("App shutdown exception: {}".format(str(e)), exc_info=True)
+    except BaseException as e:
+        logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)
         raise
     finally:
         # Flush azure monitor telemetry
