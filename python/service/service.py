@@ -23,13 +23,6 @@ from thief_constants import (
     Types,
 )
 
-
-logging.basicConfig(format="%(asctime)s %(levelname)s:%(message)s", level=logging.WARNING)
-logging.getLogger("thief").setLevel(level=logging.INFO)
-logging.getLogger("azure.iot").setLevel(level=logging.INFO)
-
-logger = logging.getLogger("thief.{}".format(__name__))
-
 # use os.environ[] for required environment variables
 iothub_connection_string = os.environ["THIEF_SERVICE_CONNECTION_STRING"]
 iothub_name = os.environ["THIEF_IOTHUB_NAME"]
@@ -39,7 +32,13 @@ service_pool = os.environ["THIEF_SERVICE_POOL"]
 
 service_instance = str(uuid.uuid4())
 
-# configure our traces and events to go to Azure Monitor
+# set default logging which will only go to the console
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("thief").setLevel(level=logging.INFO)
+logging.getLogger("azure.iot").setLevel(level=logging.INFO)
+logger = logging.getLogger("thief.{}".format(__name__))
+
+# configure which traces and events go to Azure Monitor
 azure_monitor.add_logging_properties(
     client_type="service",
     service_instance=service_instance,
@@ -48,10 +47,8 @@ azure_monitor.add_logging_properties(
     pool_id=service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
+azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
-azure_monitor.log_to_azure_monitor("azure")
-azure_monitor.log_to_azure_monitor("uamqp")
-
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
 

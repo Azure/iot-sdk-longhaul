@@ -254,3 +254,22 @@ class DeviceSettings(object):
     REPORTED_PROPERTIES_UPDATE_INTERVAL_IN_SECONDS = "reportedPropertiesUpdateIntervalInSeconds"
     # How many reported property patches are allowed to fail before we fail the test
     REPORTED_PROPERTIES_UPDATE_ALLOWED_FAILURE_COUNT = "reportedPropertiesUpdateAllowedFailureCount"
+
+
+class CustomDimensionNames(object):
+    """
+    Names of cusomDimension fields pushed to Azure Monitor
+    """
+
+    OS_TYPE = "osType"
+    SDK_LANGUAGE = "sdkLanguage"
+    SDK_LANGUAGE_VERSION = "sdkLanguageVersion"
+    SDK_VERSION = "sdkVersion"
+
+    SERVICE_INSTANCE = "serviceIntsance"
+    RUN_ID = "runId"
+    POOL_ID = "poolId"
+
+    HUB = "hub"
+    DEVICE_ID = "deviceId"
+    TRANSPORT = "transport"
