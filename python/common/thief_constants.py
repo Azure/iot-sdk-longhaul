@@ -215,7 +215,7 @@ class MetricNames(object):
     LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK = (
         "latencyRemoveReportedPropertyToServiceAckInSeconds"
     )
-    # Number of seconds between consecuitive c2d messages
+    # Number of seconds between consecutive c2d messages
     LATENCY_BETWEEN_C2D = "latencyBetweenC2dInSeconds"
 
 
@@ -258,7 +258,7 @@ class DeviceSettings(object):
 
 class CustomDimensionNames(object):
     """
-    Names of cusomDimension fields pushed to Azure Monitor
+    Names of customDimension fields pushed to Azure Monitor
     """
 
     OS_TYPE = "osType"
@@ -266,7 +266,7 @@ class CustomDimensionNames(object):
     SDK_LANGUAGE_VERSION = "sdkLanguageVersion"
     SDK_VERSION = "sdkVersion"
 
-    SERVICE_INSTANCE = "serviceIntsance"
+    SERVICE_INSTANCE = "serviceInstance"
     RUN_ID = "runId"
     POOL_ID = "poolId"
 

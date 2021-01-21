@@ -19,7 +19,7 @@ When metrics are set in json (for reported properties and telemetry), the name i
 When metrics are pushed to Azure monitor, the name is written using PascalCase.
 
 For example, the metric `receiveC2dCountReceived` is named:
-* `receiveC2dCountReceived` with a lower case `r` when used in desired properties and telemetry, an
+* `receiveC2dCountReceived` with a lower case `r` when used in desired properties and telemetry, and
 * `ReceiveC2dCountReceived` with an upper case `R` when used as an Azure Monitor metric name
 
 ## Session Metrics
@@ -126,8 +126,8 @@ Latency metrics are only pushed to Azure Monotor.
 | `LatencyQueueMessageToSendInMilliseconds` | float | Number of milliseconds between a message is queued to send and when it is actually sent. |
 | `LatencySendMessageToServiceAckInSeconds` | float | Number of seconds between when a message is sent and when the corresponding `serviceAck` is received back from the service. |
 | `LatencyAddReportedPropertyToServiceAckInSeconds` | float | Number of seconds between when a reported property is added and when the corresponding `serviceAck` is received back from the service. |
-| `LatencyRemoveReportedPropertyToServiceAckInSeconds` | float | Number of seconds etween when a reported property is removed and when the corresponding `serviceAck` is received back from the servie. |
-| `LatencyBetweenC2dInSeconds` | float | Number of seconds between consecuitive C2d messages. |
+| `LatencyRemoveReportedPropertyToServiceAckInSeconds` | float | Number of seconds betweenwhen a reported property is removed and when the corresponding `serviceAck` is received back from the service. |
+| `LatencyBetweenC2dInSeconds` | float | Number of seconds between consecutive c2d messages. |
 
 
 
