@@ -46,7 +46,6 @@ When the service app receives telemetry with `cmd` == `serviceAckRequest`, it ac
       "sessionMetrics": {
         "exitReason": null,
         "latestUpdateTimeUtc": "2020-12-14T21:29:18.545099",
-        "runEndUtc": null,
         "runStartUtc": "2020-12-14T21:29:13.569490+00:00",
         "runState": "running",
         "runTime": "0:00:04.975579"
@@ -59,16 +58,15 @@ When the service app receives telemetry with `cmd` == `serviceAckRequest`, it ac
         "processWorkingSetPrivate": 25743360
       },
       "testMetrics": {
-        "receiveMessageCountMissing": 0,
-        "receiveMessageCountReceived": 0,
+        "receiveC2dCountMissing": 0,
+        "receiveC2dCountReceived": 0,
         "reportedPropertiesCountAdded": 0,
-        "reportedPropertiesCountAddedAndVerifiedByServiceApp": 0,
+        "reportedPropertiesCountAddedButNotVerifiedByServiceApp": 0,
         "reportedPropertiesCountRemoved": 0,
-        "reportedPropertiesCountRemovedAndVerifiedByServiceApp": 0,
-        "sendMessageCountFailures": 0,
+        "reportedPropertiesCountRemovedButNotVerifiedByServiceApp": 0,
+        "sendMessageCountExceptions": 0,
         "sendMessageCountInBacklog": 0,
         "sendMessageCountNotReceivedByServiceApp": 0,
-        "sendMessageCountReceivedByServiceApp": 0,
         "sendMessageCountSent": 0,
         "sendMessageCountUnacked": 0
       }

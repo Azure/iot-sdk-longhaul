@@ -6,10 +6,10 @@
 set -e
 script_dir=$(cd "$(dirname "$0")" && pwd)
 
-LANGUAGE=py36
-DEVICE_VERSION=2.4.0
+LANGUAGE=py38
+DEVICE_VERSION=2.5.0
 SERVICE_VERSION=2.2.3
-TAG=dec18
+TAG=jan14
 POOL=${TAG}
 
 ${script_dir}/build-image.sh --language ${LANGUAGE} --library service --version ${SERVICE_VERSION} --tag ${TAG}

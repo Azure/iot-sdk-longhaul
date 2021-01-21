@@ -65,22 +65,19 @@ Test configuration is set one time at the beginning of the run and used to recor
     "reported": {
       "thief": {
         "config": {
-          "pairingRequestSendIntervalInSeconds": 30,
-          "pairingRequestTimeoutIntervalInSeconds": 900,
-          "receiveMessageIntervalInSeconds": 20,
-          "receiveMessageMissingMessageAllowedFailureCount": 100,
-          "reportedPropertiesUpdateAllowedFailureCount": 100,
-          "reportedPropertiesUpdateIntervalInSeconds": 10,
-          "reportedPropertiesVerifyFailureIntervalInSeconds": 3600,
-          "sendMessageArrivalAllowedFailureCount": 10,
-          "sendMessageArrivalFailureIntervalInSeconds": 3600,
-          "sendMessageBacklogAllowedFailureCount": 200,
-          "sendMessageExceptionAllowedFailureCount": 10,
-          "sendMessageOperationsPerSecond": 1,
-          "sendMessageThreadCount": 10,
-          "sendMessageUnackedAllowedFailureCount": 200,
-          "thiefPropertyUpdateIntervalInSeconds": 60,
-          "watchdogFailureIntervalInSeconds": 300
+            "pairingRequestSendIntervalInSeconds": 30,
+            "pairingRequestTimeoutIntervalInSeconds": 900,
+            "receiveC2dAllowedMissingMessageCount": 100,
+            "receiveC2dIntervalInSeconds": 20,
+            "reportedPropertiesUpdateAllowedFailureCount": 50,
+            "reportedPropertiesUpdateIntervalInSeconds": 10,
+            "sendMessageAllowedFailureCount": 1000,
+            "sendMessageOperationsPerSecond": 1,
+            "sendMessageThreadCount": 10,
+            "thiefAllowedClientLibraryExceptionCount": 10,
+            "thiefMaxRunDurationInSeconds": 0,
+            "thiefPropertyUpdateIntervalInSeconds": 30,
+            "thiefWatchdogFailureIntervalInSeconds": 300
         }
       }
     }
@@ -102,18 +99,19 @@ These numbers define operational parameters for execution of the test harness.
 
 | field | format | meaning |
 | - | - | - |
+| `thiefMaxRunDurationInSeconds` | integer | Number of seconds to run the test for.  0 to run indefinitely. |
 | `thiefPropertyUpdateIntervalInSeconds` | integer | How often to update reported properties while running the tests.  This only applies to `sessionMetrics` and `testMetrics` properties |
-| `watchdogFailureIntervalInSeconds` | integer | How often to check thread watchdogs.  If an individual thread is inactive for this many seconds, the test fails.  Exact definition of "inactive" is arbitrary and may depend on implementation. |
+| `thiefWatchdogFailureIntervalInSeconds` | integer | How often to check thread watchdogs.  If an individual thread is inactive for this many seconds, the test fails.  Exact definition of "inactive" is arbitrary and may depend on implementation. |
+| `thiefAllowedClientLibraryExceptionCount` | integer | How many exceptions can be raised by the device client before the test fails? |
 
 ### c2d test configuration
 
 These numbers define operational parameters for testing c2d.
-The name `receiveMessage` is used for these properties even though the specific SDK may use a funtion with a different name, such as `receive_meeesage` or  `getNextIncomingMessageAsync`
 
 | field | format | meaning |
 | - | - | - |
-| `receiveMessageIntervalInSeconds` | integer | When testing c2d, how many seconds to wait between c2d message.  This only applies to test c2d messages and does not apply to serverAck messages. |
-| `receiveMessageMissingMessageAllowedFailureCount` | integer | When testing c2d, how many mesages are allowed to be "missing" before the test fails. |
+| `receiveC2dIntervalInSeconds` | integer | When testing c2d, how many seconds to wait between c2d message.  This only applies to test c2d messages and does not apply to serverAck messages. |
+| `receiveC2dMissingMessageAllowedFailureCount` | integer | When testing c2d, how many mesages are allowed to be "missing" before the test fails. |
 
 ### reported property test configuration
 
@@ -121,9 +119,8 @@ These numbers define operational parameters for testing reported properties.
 
 | field | format | meaning |
 | - | - | - |
-| `reportedPropertiesUpdateAllowedFailureCount` | integer | Count of reported property updates that are allowed to fail without causing a test-run failure |
+| `reportedPropertiesUpateAllowedFailureCount` | integer | Count of reported property updates that are allowed to fail without causing a test-run failure |
 | `reportedPropertiesUpdateIntervalInSeconds` | integer |  How often to update reported properties.  This only applies to properties under `testContent` and does not apply to things like `testMetrics` and `sessionMetrics and `testControl`. |
-| `reportedPropertiesVerifyFailureIntervalInSeconds` | integer | How many seconds are allowed to elapse before a reported property that doesn't arrive at the service is considered a failure. |
 
 ### telemetry test configuratoin
 
@@ -132,10 +129,5 @@ These numbers define operational parameters for testing telemetry.  The name `se
 | field | format | meaning |
 | - | - | - |
 | `sendMessageOperationsPerSecond` | integer | How many `sendMessage` operations should be run per second |
-| `sendMessageThreadCount` | integer | How many thrads can be running parallel `sendMessage` operations.  Some test implementations may not need multiple threads. |
-| `sendMessageUnackedAllowedFailureCount` | integer | How may `sendMessage` calls are alloed to not complete before the test fails.  "unacked" and "not complete" both mean that the transport did not complete the send operation and did not fail.  The most likely cause is a message lost in transit (no PUBACK) |
-| `sendMessageArrivalFailureIntervalInSeconds` | integer | Number of seconds allowed to elapse between sending a telemetry message and receiving the `serverAck` before the operation is considered failed. |
-|`sendMessageArrivalAllowedFailureCount` | integer | How many messages are alloed to get lost in transit before the test fails. |
-| `sendMessageBacklogAllowedFailureCount` | integer | How many messages are allowed to be queued inside the test app before the test fails.  "queued" means "scheduled to be sent but not yet in transit.  Some test implementations may not queue messages in the test app, so this value may not always be validated |
-| `sendMessageExceptionAllowedFailureCount` | integer | How many `sendMessage` operations  are allowed to raise exceptions (or return failures) before the test fails. |
-
+| `sendMessageThreadCount` | integer | How many threads can be running parallel `sendMessage` operations.  Some test implementations may not need multiple threads. |
+| `sendMessageAllowedFailureCount` | integer | How many incomplete `sendMessage` calls are allowed.  This includes calls that are queued, sent but not acked, and sent but not verified by the service. |

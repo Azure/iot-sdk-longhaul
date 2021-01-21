@@ -23,13 +23,6 @@ from thief_constants import (
     Types,
 )
 
-
-logging.basicConfig(format="%(asctime)s %(levelname)s:%(message)s", level=logging.WARNING)
-logging.getLogger("thief").setLevel(level=logging.INFO)
-logging.getLogger("azure.iot").setLevel(level=logging.INFO)
-
-logger = logging.getLogger("thief.{}".format(__name__))
-
 # use os.environ[] for required environment variables
 iothub_connection_string = os.environ["THIEF_SERVICE_CONNECTION_STRING"]
 iothub_name = os.environ["THIEF_IOTHUB_NAME"]
@@ -39,7 +32,13 @@ service_pool = os.environ["THIEF_SERVICE_POOL"]
 
 service_instance = str(uuid.uuid4())
 
-# configure our traces and events to go to Azure Monitor
+# set default logging which will only go to the console
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("thief").setLevel(level=logging.INFO)
+logging.getLogger("azure.iot").setLevel(level=logging.INFO)
+logger = logging.getLogger("thief.{}".format(__name__))
+
+# configure which traces and events go to Azure Monitor
 azure_monitor.add_logging_properties(
     client_type="service",
     service_instance=service_instance,
@@ -48,10 +47,8 @@ azure_monitor.add_logging_properties(
     pool_id=service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
+azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
-azure_monitor.log_to_azure_monitor("azure")
-azure_monitor.log_to_azure_monitor("uamqp")
-
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
 
@@ -207,12 +204,12 @@ class ServiceApp(app_base.AppBase):
                 device_data = self.paired_devices.get(device_id, None)
 
             if get_message_source_from_event(event) == "twinChangeEvents":
-                if (
+                thief = (
                     body.get(Const.PROPERTIES, {})
                     .get(Const.REPORTED, {})
                     .get(Fields.Reported.THIEF, {})
-                    .get(Fields.Reported.PAIRING, {})
-                ):
+                )
+                if thief and thief.get(Fields.Reported.PAIRING, {}):
                     self.incoming_pairing_request_queue.put(event)
                 if device_data:
                     self.incoming_twin_changes.put(event)
@@ -255,7 +252,7 @@ class ServiceApp(app_base.AppBase):
         """
 
         def on_error(partition_context, error):
-            logger.error("EventHub on_error: {}".format(error))
+            logger.error("EventHub on_error: {}".format(str(error) or type(error)))
 
         def on_partition_initialize(partition_context):
             logger.warning("EventHub on_partition_initialize")
@@ -333,7 +330,7 @@ class ServiceApp(app_base.AppBase):
                     except Exception as e:
                         logger.error(
                             "send_c2d_messge to {} raised {}.  Forcing un-pair with device".format(
-                                device_id, str(e)
+                                device_id, str(e) or type(e)
                             ),
                             exc_info=e,
                         )
@@ -762,7 +759,11 @@ class ServiceApp(app_base.AppBase):
             app_base.WorkerThreadInfo(self.test_c2d_thread, "test_c2d_thread"),
         ]
 
-        self.run_threads(threads_to_launch)
+        self.run_threads(
+            threads_to_launch,
+            max_run_duration=self.config.max_run_duration,
+            watchdog_failure_interval_in_seconds=self.config.watchdog_failure_interval_in_seconds,
+        )
 
     def pre_shutdown(self):
         # close the eventhub consumer before shutting down threads.  This is necessary because
@@ -779,8 +780,8 @@ class ServiceApp(app_base.AppBase):
 if __name__ == "__main__":
     try:
         ServiceApp().main()
-    except Exception as e:
-        logger.error("App shutdown exception: {}".format(str(e)), exc_info=True)
+    except BaseException as e:
+        logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)
         raise
     finally:
         # Flush azure monitor telemetry

@@ -28,8 +28,10 @@ You do **not** need to configure your workstation if you want to:
 * [Names and IDs](./names-and-ids.md)
 * [Pairing process and schemas](./pairing.md)
 * [Reported property schemas](./reported-properties.md)
-* [Azure Monitor schemas](./azure-monitor-logging.md)
 * [Test control properties](./test-control.md)
 * [Test content properties](./test-content.md)
 
+## Azure Monitor Details
+* [Azure Monitor Custom Dimensions](./azure-monitor-custom-dimensions.md)
+* [Azure Monitor Events](./azure-monitor-events.md)
 
