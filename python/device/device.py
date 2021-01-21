@@ -28,13 +28,6 @@ from thief_constants import (
     DeviceSettings as Settings,
 )
 
-logging.basicConfig(level=logging.WARNING)
-logging.getLogger("paho").setLevel(level=logging.DEBUG)
-logging.getLogger("thief").setLevel(level=logging.INFO)
-logging.getLogger("azure.iot").setLevel(level=logging.INFO)
-
-logger = logging.getLogger("thief.{}".format(__name__))
-
 # TODO: exit service when device stops responding
 # TODO: add code to receive rest of pingacks at end.  wait for delta since last to be > 20 seconds.
 # TODO: add mid to debug logs as custom property, maybe service_ack id
@@ -48,6 +41,14 @@ requested_service_pool = os.environ["THIEF_REQUESTED_SERVICE_POOL"]
 
 run_id = str(uuid.uuid4())
 
+# set default logging which will only go to the console
+
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("paho").setLevel(level=logging.DEBUG)
+logging.getLogger("thief").setLevel(level=logging.INFO)
+logging.getLogger("azure.iot").setLevel(level=logging.INFO)
+logger = logging.getLogger("thief.{}".format(__name__))
+
 # configure our traces and events to go to Azure Monitor
 azure_monitor.add_logging_properties(
     client_type="device",
@@ -57,9 +58,8 @@ azure_monitor.add_logging_properties(
     pool_id=requested_service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
+azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
-azure_monitor.log_to_azure_monitor("azure")
-azure_monitor.log_to_azure_monitor("paho")
 
 
 class ServiceAckWaitInfo(object):
@@ -286,7 +286,7 @@ class DeviceApp(app_base.AppBase):
         )
         self.reporter.add_float_measurement(
             MetricNames.LATENCY_BETWEEN_C2D,
-            "number of seconds between test c2d messages from the service",
+            "Number of seconds between test c2d messages from the service",
             "seconds",
         )
 
@@ -409,13 +409,13 @@ class DeviceApp(app_base.AppBase):
         like this:
 
         1. Device sets reported properties in `properties/reported/thief/pairing` which indicates
-            that it doesn't have a service app (by settign `serviceRunId` = None).
-        2. An available service sets `properties/desired/thief/pairing/serviceRunId` to the service
+            that it doesn't have a service app (by settign `serviceInstance` = None).
+        2. An available service sets `properties/desired/thief/pairing/serviceInstance` to the service
             app's `runId` value
-        3. The device sets `properties/reported/thief/pairing/serviceRunId` to the serivce app's
+        3. The device sets `properties/reported/thief/pairing/serviceInstance` to the serivce app's
             `runId` value.
 
-        Once the device starts sending telemetry with `thief/serviceRunId` set to the service app's
+        Once the device starts sending telemetry with `thief/serviceInstance` set to the service app's
             `runId` value, the pairing is complete.
         """
 
@@ -493,7 +493,7 @@ class DeviceApp(app_base.AppBase):
                     # Or maybe something is wrong with the desired properties.  Probably a
                     # service app that goes by different rules. Ignoring it is better than
                     # crashing.
-                    logger.info("deviceRunId and/or serviceRunId missing.  Ignoring.")
+                    logger.info("runId and/or serviceInstance missing.  Ignoring.")
 
                 elif received_run_id != run_id:
                     # Another strange case.  A service app is trying to pair with our device_id,
@@ -505,6 +505,7 @@ class DeviceApp(app_base.AppBase):
                     )
 
                 else:
+                    azure_monitor.add_logging_properties(service_instance=received_service_instance)
                     # It looks like a service app has decided to pair with us.  Set reported
                     # properties to "select" this service instance as our partner.
                     logger.info(
@@ -601,8 +602,9 @@ class DeviceApp(app_base.AppBase):
         Send metrics to azure monitor, based on the reported properties that we probably just
         sent to the hub
         """
-        # we don't record session_metrics to azure monitor because they're all about time and
-        # there's no value to pushing things like "current time" as metrics
+        # We don't record session_metrics to Azure Monitor because the session metrics are
+        # recording things like "start time" and "elapsed time" which are already available
+        # in Azure Monitor in other forms.
         with self.reporter_lock:
             self.reporter.set_metrics_from_dict(props[Fields.Reported.SYSTEM_HEALTH_METRICS])
             self.reporter.set_metrics_from_dict(props[Fields.Reported.TEST_METRICS])
@@ -773,7 +775,7 @@ class DeviceApp(app_base.AppBase):
                     and thief[Fields.C2d.RUN_ID] == run_id
                     and thief[Fields.C2d.SERVICE_INSTANCE] == self.service_instance
                 ):
-                    # We only inspect messages that have `thief/deviceRunId` and `thief/serviceRunId` set to the expected values
+                    # We only inspect messages that have `thief/runId` and `thief/serviceInstance` set to the expected values
                     cmd = thief[Fields.C2d.CMD]
                     if cmd == Types.Message.SERVICE_ACK_RESPONSE:
                         # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
