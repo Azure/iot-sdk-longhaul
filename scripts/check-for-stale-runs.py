@@ -18,7 +18,7 @@ while True:
         last_report_time = datetime.datetime.now()
 
     process = subprocess.run(
-        "az iot hub query -l '{}' -q 'select deviceId, properties.reported.thief.runTime from devices'".format(
+        "az iot hub query -l '{}' -q 'select deviceId, properties.reported.thief.elapsedTime from devices'".format(
             os.environ["THIEF_SERVICE_CONNECTION_STRING"]
         ),
         capture_output=True,
@@ -34,14 +34,14 @@ while True:
     else:
         query_results = json.loads(process.stdout)
         for rec in query_results:
-            if "deviceId" and "runTime" in rec:
-                values[rec["deviceId"]] = rec["runTime"]
+            if "deviceId" and "elapsedTime" in rec:
+                values[rec["deviceId"]] = rec["elapsedTime"]
 
         if lastValues:
             for device_id in devices_to_check:
                 if values[device_id] == lastValues[device_id]:
                     print(
-                        "{}: device {} has same runTime as last time: {}".format(
+                        "{}: device {} has same elapsedTime as last time: {}".format(
                             datetime.datetime.now(), device_id, values[device_id]
                         )
                     )

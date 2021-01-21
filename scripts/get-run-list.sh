@@ -10,7 +10,7 @@ az iot hub query \
             deviceId \
             , properties.reported.thief.sessionMetrics.runState \
             , properties.reported.thief.systemProperties.language \
-            , properties.reported.thief.sessionMetrics.runTime \
+            , properties.reported.thief.sessionMetrics.elapsedTime \
             , properties.reported.thief.sessionMetrics.latestUpdateTimeUtc \
             , properties.reported.thief.systemProperties.languageVersion \
         from devices \
