@@ -13,6 +13,7 @@ import traceback
 import pdb
 import threading
 from system_health_telemetry import SystemHealthTelemetry
+from thief_constants import MetricNames
 
 
 logger = logging.getLogger("thief.{}".format(__name__))
@@ -104,11 +105,11 @@ class AppBase(object):
 
     def get_system_health_telemetry(self):
         props = {
-            "processCpuPercent": self.system_health_telemetry.process_cpu_percent,
-            "processWorkingSet": self.system_health_telemetry.process_working_set,
-            "processBytesInAllHeaps": self.system_health_telemetry.process_bytes_in_all_heaps,
-            "processPrivateBytes": self.system_health_telemetry.process_private_bytes,
-            "processWorkingSetPrivate": self.system_health_telemetry.process_working_set_private,
+            MetricNames.PROCESS_CPU_PERCENT: self.system_health_telemetry.process_cpu_percent,
+            MetricNames.PROCESS_WORKING_SET: self.system_health_telemetry.process_working_set,
+            MetricNames.PROCESS_BYTES_IN_ALL_HEAPS: self.system_health_telemetry.process_bytes_in_all_heaps,
+            MetricNames.PROCESS_PRIVATE_BYTES: self.system_health_telemetry.process_private_bytes,
+            MetricNames.PROCESS_WORKING_SET_PRIVATE: self.system_health_telemetry.process_working_set_private,
         }
         return props
 
@@ -125,7 +126,9 @@ class AppBase(object):
                     logger.warning("Stack for thread {}".format(thread_id))
                 logger.warning(str(traceback.format_stack(frame)))
 
-    def run_threads(self, threads_to_launch):
+    def run_threads(
+        self, threads_to_launch, max_run_duration=0, watchdog_failure_interval_in_seconds=60
+    ):
         def _thread_outer_proc(worker_thread_info):
             current_thread = threading.current_thread()
             current_thread.name = worker_thread_info.name
@@ -150,14 +153,14 @@ class AppBase(object):
                     if worker.future.done():
                         try:
                             error = worker.future.exception(timeout=0)
-                        except Exception as e:
+                        except BaseException as e:
                             error = e
                         if not error:
                             error = Exception("{} thread exited prematurely".format(worker.name))
 
-                        logger.error(
+                        logger.critical(
                             "Future {} is complete because of exception {}".format(
-                                worker.name, error
+                                worker.name, str(error) or type(error)
                             ),
                             exc_info=error,
                         )
@@ -169,20 +172,20 @@ class AppBase(object):
                         error = Exception(
                             "Unexpected: Future {} is not running and not done".format(worker.name)
                         )
-                        logger.error(str(error), exc_info=error)
+                        logger.critical(str(error), exc_info=error)
                         worker.future = None
                         self.metrics.run_state = FAILED
                         self.metrics.exit_reason = str(error)
 
                     elif (
                         time.time() - worker.watchdog_epochtime
-                        > self.config.watchdog_failure_interval_in_seconds
+                        > watchdog_failure_interval_in_seconds
                     ):
                         reason = "Future {} has not responded for {} seconds.  Failing".format(
                             worker.name, time.time() - worker.watchdog_epochtime
                         )
                         error = Exception(reason)
-                        logger.error(reason)
+                        logger.critical(reason)
                         self._dump_all_threads(worker.thread_id)
                         worker.future = None
                         self.metrics.run_state = FAILED
@@ -191,18 +194,18 @@ class AppBase(object):
                 # If we're still running, check to see if we're done.  If not, sleep and loop again.
                 if self.metrics.run_state == RUNNING:
 
-                    if self.config.max_run_duration and (
-                        time.time() - loop_start_epochtime > self.config.max_run_duration
-                    ):
+                    if max_run_duration and (time.time() - loop_start_epochtime > max_run_duration):
                         self.metrics.run_state = COMPLETE
                         self.metrics.exit_rason = "Run passed after {}".format(
-                            datetime.timedelta(self.config.max_run_duration)
+                            datetime.timedelta(max_run_duration)
                         )
                     else:
                         time.sleep(1)
 
-            except (KeyboardInterrupt, Exception) as e:
-                logger.error("Exception {} caught in main loop".format(e), exc_info=True)
+            except BaseException as e:
+                logger.critical(
+                    "Exception {} caught in main loop".format(str(e) or type(e)), exc_info=True
+                )
                 self.metrics.run_state = INTERRUPTED if isinstance(e, KeyboardInterrupt) else FAILED
                 self.metrics.exit_reason = "Main thread raised {}".format(type(e))
 
@@ -243,5 +246,5 @@ class AppBase(object):
             logger.info("Done disconnecting.  Exiting")
 
         if self.metrics.run_state == FAILED:
-            logger.error("Forcing exit")
+            logger.critical("Forcing exit: {}".format(self.metrics.exit_reason))
             raise Exception("Run failed: {}".format(self.metrics.exit_reason))

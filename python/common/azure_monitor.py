@@ -4,7 +4,7 @@
 import os
 import logging
 import platform
-
+from thief_constants import CustomDimensionNames
 from opencensus.ext.azure.log_exporter import AzureEventHandler
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 
@@ -18,21 +18,6 @@ _sdk_version = None
 _device_id = None
 _pool_id = None
 _transport = None
-
-
-class CustomDimensionNames(object):
-    OS_TYPE = "osType"
-    SDK_LANGUAGE = "sdkLanguage"
-    SDK_LANGUAGE_VERSION = "sdkLanguageVersion"
-    SDK_VERSION = "sdkVersion"
-
-    SERVICE_INSTANCE = "serviceIntsance"
-    RUN_ID = "runId"
-    POOL_ID = "poolId"
-
-    HUB = "hub"
-    DEVICE_ID = "deviceId"
-    TRANSPORT = "transport"
 
 
 def _default_value():
@@ -52,6 +37,9 @@ def add_logging_properties(
     pool_id=_default_value,
     transport=_default_value,
 ):
+    """
+    Add customDimension values which will be applied to all Azure Monitor records
+    """
     global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport, _service_instance
     if client_type != _default_value:
         _client_type = client_type
@@ -72,6 +60,10 @@ def add_logging_properties(
 
 
 def telemetry_processor_callback(envelope):
+    """
+    Get a callback which applies our customDimension values to records which will eventually be
+    sent to Azure Monitor.
+    """
     global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport
     envelope.tags["ai.cloud.role"] = _client_type
     if _service_instance:
@@ -103,6 +95,10 @@ def telemetry_processor_callback(envelope):
 
 
 def get_event_logger():
+    """
+    Get the event logger for this module.  This event logger can be used to send customEvents to
+    Azure Monitor.
+    """
     global _client_type
     logger = logging.getLogger("thief_events.{}".format(_client_type))
 
@@ -115,10 +111,24 @@ def get_event_logger():
     return logger
 
 
+def log_all_warnings_and_exceptions_to_azure_monitor():
+    """
+    Log all WARNING, ERROR, and CRITICAL messages to Azure Monitor, regardless of the module that
+    produced them and any logging levels set in other loggers.
+    """
+    always_log_handler = AzureLogHandler(connection_string=app_insights_connection_string)
+    always_log_handler.add_telemetry_processor(telemetry_processor_callback)
+    always_log_handler.setLevel(level=logging.WARNING)
+    logging.getLogger(None).addHandler(always_log_handler)
+
+
 log_handler = None
 
 
 def log_to_azure_monitor(logger_name):
+    """
+    Log all messages sent to a specific logger to Azure Monitor
+    """
     global log_handler
 
     if not log_handler:

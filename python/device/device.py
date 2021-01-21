@@ -24,14 +24,9 @@ from thief_constants import (
     Fields,
     Types,
     Events,
+    MetricNames,
+    DeviceSettings as Settings,
 )
-
-logging.basicConfig(level=logging.WARNING)
-logging.getLogger("paho").setLevel(level=logging.DEBUG)
-logging.getLogger("thief").setLevel(level=logging.INFO)
-logging.getLogger("azure.iot").setLevel(level=logging.INFO)
-
-logger = logging.getLogger("thief.{}".format(__name__))
 
 # TODO: exit service when device stops responding
 # TODO: add code to receive rest of pingacks at end.  wait for delta since last to be > 20 seconds.
@@ -46,6 +41,14 @@ requested_service_pool = os.environ["THIEF_REQUESTED_SERVICE_POOL"]
 
 run_id = str(uuid.uuid4())
 
+# set default logging which will only go to the console
+
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("paho").setLevel(level=logging.DEBUG)
+logging.getLogger("thief").setLevel(level=logging.INFO)
+logging.getLogger("azure.iot").setLevel(level=logging.INFO)
+logger = logging.getLogger("thief.{}".format(__name__))
+
 # configure our traces and events to go to Azure Monitor
 azure_monitor.add_logging_properties(
     client_type="device",
@@ -55,9 +58,8 @@ azure_monitor.add_logging_properties(
     pool_id=requested_service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
+azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
-azure_monitor.log_to_azure_monitor("azure")
-azure_monitor.log_to_azure_monitor("paho")
 
 
 class ServiceAckWaitInfo(object):
@@ -78,16 +80,6 @@ class ServiceAckWaitInfo(object):
         self.user_data = user_data
 
 
-class MetricNames(object):
-    LATENCY_QUEUE_MESSAGE_TO_SEND = "latencyQueueMessageToSendInMilliseconds"
-    LATENCY_SEND_MESSAGE_TO_SERVICE_ACK = "latencySendMessageToServiceAckInSeconds"
-    LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK = "latencyAddReportedPropertyToServiceAckInSeconds"
-    LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK = (
-        "latencyRemoveReportedPropertyToServiceAckInSeconds"
-    )
-    LATENCY_BETWEEN_C2D = "latencyBetweenC2dInSeconds"
-
-
 class CustomPropertyNames(object):
     EVENT_DATE_TIME_UTC = "eventDateTimeUtc"
     SERVICE_ACK_ID = "serviceAckid"
@@ -100,91 +92,42 @@ class DeviceRunMetrics(object):
 
     def __init__(self):
         self.run_start_utc = None
-        self.run_end_utc = None
-        self.run_time = 0
         self.run_state = app_base.WAITING
         self.exit_reason = None
-        self.last_io_epochtime = time.time()
+
+        self.client_library_count_exceptions = ThreadSafeCounter()
 
         self.send_message_count_unacked = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
         self.send_message_count_received_by_service_app = ThreadSafeCounter()
-        self.send_message_count_failures = ThreadSafeCounter()
 
         self.receive_c2d_count_received = ThreadSafeCounter()
 
         self.reported_properties_count_added = ThreadSafeCounter()
-        self.reported_properties_count_added_and_verified_by_service_app = ThreadSafeCounter()
+        self.reported_properties_count_added_not_verified = ThreadSafeCounter()
         self.reported_properties_count_removed = ThreadSafeCounter()
-        self.reported_properties_count_removed_and_verified_by_service_app = ThreadSafeCounter()
+        self.reported_properties_count_removed_not_verified = ThreadSafeCounter()
 
 
-class DeviceRunConfig(object):
-    """
-    Object we use internally to keep track of how the entire test is configured.
-    Currently hardcoded. Later, this will come from desired properties.
-    """
-
-    # All durations are in seconds
-    def __init__(self):
-        # how long should the test run before finishing.  0 = forever
-        self.max_run_duration = 0
-
-        # How often do we update reported properties
-        self.thief_property_update_interval_in_seconds = 60
-
-        # How long can a thread go without updating its watchdog before failing.
-        self.watchdog_failure_interval_in_seconds = 300
-
-        # How long to keep trying to pair with a service instance before giving up.
-        self.pairing_request_timeout_interval_in_seconds = 900
-
-        # How many seconds to wait before sending a new pairingRequest message
-        self.pairing_request_send_interval_in_seconds = 30
-
-        # How many times to call send_message per second
-        self.send_message_operations_per_second = 1
-
-        # How many threads do we spin up for overlapped send_message calls.  These threads
-        # pull messages off of a single outgoing queue.  If all of the send_message threads
-        # are busy, outgoing messages will just pile up in the queue.
-        self.send_message_thread_count = 10
-
-        # How long do we wait for notification that the service app received a
-        # message before we consider it a failure?
-        self.send_message_arrival_failure_interval_in_seconds = 3600
-
-        # How many messages fail to arrive at the service before we fail the test
-        # This counts messages that have been sent and acked, but the service app hasn't reported receipt.
-        self.send_message_arrival_allowed_failure_count = 10
-
-        # How many messages to we allow in the send_message backlog before we fail the test.
-        # This counts messages that gets backed up because send_message hasn't even been called yet.
-        self.send_message_backlog_allowed_failure_count = 200
-
-        # How many unack'ed messages do we allow before we fail the test?
-        # This counts messages that either haven't been sent, or they've been sent but not ack'ed by the receiver
-        self.send_message_unacked_allowed_failure_count = 200
-
-        # How many send_message exceptions do we allow before we fail the test?
-        self.send_message_exception_allowed_failure_count = 10
-
-        # How often do we want the service to send test C2D messages?
-        # Be careful with this.  Too often will result in throttling on the service, which has 1.83  messages/sec/unit as a shared limit for all devices
-        self.receive_c2d_interval_in_seconds = 20
-
-        # How many missing C2D messages will cause the test to fail?
-        self.receive_c2d_missing_message_allowed_failure_count = 100
-
-        # How many seconds between reported property patches
-        self.reported_properties_update_interval_in_seconds = 10
-
-        # How many reported property patches are allowed to fail before we fail the test
-        self.reported_properties_update_allowed_failure_count = 100
-
-        # How many seconds do we wait for the service to acknowledge a reported property update
-        # before we consider it failed
-        self.reported_properties_verify_failure_interval_in_seconds = 3600
+"""
+Object we use internally to keep track of how the entire test is configured.
+Currently hardcoded. Later, this will come from desired properties.
+"""
+device_run_config = {
+    Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 0,
+    Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS: 30,
+    Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
+    Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT: 10,
+    Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
+    Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS: 30,
+    Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
+    Settings.SEND_MESSAGE_THREAD_COUNT: 10,
+    Settings.SEND_MESSAGE_ALLOWED_FAILURE_COUNT: 1000,
+    Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS: 20,
+    Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT: 100,
+    Settings.REPORTED_PROPERTIES_UPDATE_INTERVAL_IN_SECONDS: 10,
+    Settings.REPORTED_PROPERTIES_UPDATE_ALLOWED_FAILURE_COUNT: 50,
+}
 
 
 class DeviceApp(app_base.AppBase):
@@ -193,6 +136,7 @@ class DeviceApp(app_base.AppBase):
     """
 
     def __init__(self):
+        global device_run_config
         super(DeviceApp, self).__init__()
 
         self.executor = ThreadPoolExecutor(max_workers=128)
@@ -201,7 +145,7 @@ class DeviceApp(app_base.AppBase):
         self.hub = None
         self.device_id = None
         self.metrics = DeviceRunMetrics()
-        self.config = DeviceRunConfig()
+        self.config = device_run_config
         self.service_instance = None
         # for service_acks
         self.service_ack_list_lock = threading.Lock()
@@ -221,82 +165,105 @@ class DeviceApp(app_base.AppBase):
         self.incoming_test_c2d_message_queue = queue.Queue()
 
     def _configure_azure_monitor_metrics(self):
+        # ---------------------
+        # System Health metrics
+        # ---------------------
         self.reporter.add_float_measurement(
-            "processCpuPercent", "Amount of CPU usage by the process", "percentage",
+            MetricNames.PROCESS_CPU_PERCENT, "Amount of CPU usage by the process", "percentage",
         )
         self.reporter.add_integer_measurement(
-            "processWorkingSet", "All physical memory used by the process", "bytes",
+            MetricNames.PROCESS_WORKING_SET, "All physical memory used by the process", "bytes",
         )
         self.reporter.add_integer_measurement(
-            "processBytesInAllHeaps", "All virtual memory used by the process", "bytes",
+            MetricNames.PROCESS_BYTES_IN_ALL_HEAPS,
+            "All virtual memory used by the process",
+            "bytes",
         )
         self.reporter.add_integer_measurement(
-            "processPrivateBytes",
+            MetricNames.PROCESS_PRIVATE_BYTES,
             "Amount of non-shared physical memory used by the process",
             "bytes",
         )
         self.reporter.add_integer_measurement(
-            "processWorkingSetPrivate",
+            MetricNames.PROCESS_WORKING_SET_PRIVATE,
             "Amount of non-shared physical memory used by the process",
             "bytes",
         )
+
+        # ----------------
+        # test app metrics
+        # ----------------
         self.reporter.add_integer_measurement(
-            "sendMessageCountSent",
+            MetricNames.CLIENT_LIBRARY_COUNT_EXCEPTIONS,
+            "Number of exceptions raised by the client library or libraries",
+            "exception(s)",
+        )
+
+        # --------------------
+        # SendMesssage metrics
+        # --------------------
+        self.reporter.add_integer_measurement(
+            MetricNames.SEND_MESSAGE_COUNT_SENT,
             "Count of messages sent and ack'd by the transport",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "sendMessageCountReceivedByServiceApp",
-            "Count of messages sent to iothub with receipt verified via service sdk",
+            MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG,
+            "Count of messages waiting to be sent",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "sendMessageCountInBacklog", "Count of messages waiting to be sent", "message(s)",
-        )
-        self.reporter.add_integer_measurement(
-            "sendMessageCountUnacked",
+            MetricNames.SEND_MESSAGE_COUNT_UNACKED,
             "Count of messages sent to iothub but not ack'd by the transport",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "sendMessageCountNotReceivedByServiceApp",
+            MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED,
             "Count of messages sent to iothub and acked by the transport, but receipt not (yet) verified via service sdk",
             "message(s)",
         )
+
+        # -------------------
+        # Receive c2d metrics
+        # -------------------
         self.reporter.add_integer_measurement(
-            "sendMessageCountFailures", "Count of messages that failed to send", "message(s)",
-        )
-        self.reporter.add_integer_measurement(
-            "receiveC2dCountReceived",
+            MetricNames.RECEIVE_C2D_COUNT_RECEIVED,
             "Count of c2d messages received from the service",
             "message(s)",
         )
         self.reporter.add_integer_measurement(
-            "receiveC2dCountMissing",
+            MetricNames.RECEIVE_C2D_COUNT_MISSING,
             "Count of c2d messages sent my the service but not received",
             "message(s)",
         )
+
+        # -------------------------
+        # Reported property metrics
+        # -------------------------
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountAdded",
+            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED,
             "Count of reported properties added",
             "patches with add operation(s)",
         )
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountAddedAndVerifiedByServiceApp",
-            "Count of reported properties added and verified by the service app",
+            "reportedPropertiesCountAddedButNotVerifiedByServiceApp",
+            "Count of reported properties added, but the add was not verified by the service app",
             "patches with add operation(s)",
         )
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountRemoved",
+            MetricNames.REPORTED_PROPERTIES_REMOVED,
             "Count of reported properties removed",
             "patches with remove operation(s)",
         )
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountRemovedAndVerifiedByServiceApp",
-            "Count of reported properties removed and verified by the service app",
+            "reportedPropertiesCountRemovedButNotVerifiedbyServiceApp",
+            "Count of reported properties removed, but the remove was not verified by the service app",
             "patches with remove operations(s)",
         )
 
+        # ---------------
+        # Latency metrics
+        # ---------------
         self.reporter.add_float_measurement(
             MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND,
             "Number of milliseconds between queueing a message and actually sending it",
@@ -319,7 +286,7 @@ class DeviceApp(app_base.AppBase):
         )
         self.reporter.add_float_measurement(
             MetricNames.LATENCY_BETWEEN_C2D,
-            "number of seconds between test c2d messages from the service",
+            "Number of seconds between test c2d messages from the service",
             "seconds",
         )
 
@@ -327,15 +294,13 @@ class DeviceApp(app_base.AppBase):
         """
         Return metrics which describe the session the tests are running in
         """
-        self.metrics.run_time = (
-            datetime.datetime.now(datetime.timezone.utc) - self.metrics.run_start_utc
-        )
+        now = datetime.datetime.now(datetime.timezone.utc)
+        elapsed_time = now - self.metrics.run_start_utc
 
         props = {
             "runStartUtc": self.metrics.run_start_utc.isoformat(),
-            "latestUpdateTimeUtc": datetime.datetime.utcnow().isoformat(),
-            "runEndUtc": self.metrics.run_end_utc.isoformat() if self.metrics.run_end_utc else None,
-            "runTime": str(self.metrics.run_time),
+            "latestUpdateTimeUtc": now.isoformat(),
+            "elapsedTime": str(elapsed_time),
             "runState": str(self.metrics.run_state),
             "exitReason": self.metrics.exit_reason,
         }
@@ -351,44 +316,19 @@ class DeviceApp(app_base.AppBase):
         )
 
         props = {
-            "sendMessageCountSent": sent,
-            "sendMessageCountReceivedByServiceApp": received_by_service_app,
-            "sendMessageCountFailures": self.metrics.send_message_count_failures.get_count(),
-            "sendMessageCountInBacklog": self.outgoing_test_message_queue.qsize(),
-            "sendMessageCountUnacked": self.metrics.send_message_count_unacked.get_count(),
-            "sendMessageCountNotReceivedByServiceApp": sent - received_by_service_app,
-            "receiveC2dCountReceived": self.metrics.receive_c2d_count_received.get_count(),
-            "receiveC2dCountMissing": self.out_of_order_message_tracker.get_missing_count(),
-            "reportedPropertiesCountAdded": self.metrics.reported_properties_count_added.get_count(),
-            "reportedPropertiesCountAddedAndVerifiedByServiceApp": self.metrics.reported_properties_count_added_and_verified_by_service_app.get_count(),
-            "reportedPropertiesCountRemoved": self.metrics.reported_properties_count_removed.get_count(),
-            "reportedPropertiesCountRemovedAndVerifiedByServiceApp": self.metrics.reported_properties_count_removed_and_verified_by_service_app.get_count(),
+            MetricNames.CLIENT_LIBRARY_COUNT_EXCEPTIONS: self.metrics.client_library_count_exceptions.get_count(),
+            MetricNames.SEND_MESSAGE_COUNT_SENT: sent,
+            MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG: self.outgoing_test_message_queue.qsize(),
+            MetricNames.SEND_MESSAGE_COUNT_UNACKED: self.metrics.send_message_count_unacked.get_count(),
+            MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED: sent - received_by_service_app,
+            MetricNames.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
+            MetricNames.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
+            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
+            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED_NOT_VERIFIED: self.metrics.reported_properties_count_added_not_verified.get_count(),
+            MetricNames.REPORTED_PROPERTIES_REMOVED: self.metrics.reported_properties_count_removed.get_count(),
+            MetricNames.REPORTED_PROPERTIES_REMOVED_NOT_VERIFIED: self.metrics.reported_properties_count_removed_not_verified.get_count(),
         }
         return props
-
-    def get_longhaul_config_properties(self):
-        """
-        return test configuration values as dictionary entries that can be put into reported
-        properties
-        """
-        return {
-            "thiefPropertyUpdateIntervalInSeconds": self.config.thief_property_update_interval_in_seconds,
-            "watchdogFailureIntervalInSeconds": self.config.watchdog_failure_interval_in_seconds,
-            "pairingRequestTimeoutIntervalInSeconds": self.config.pairing_request_timeout_interval_in_seconds,
-            "pairingRequestSendIntervalInSeconds": self.config.pairing_request_send_interval_in_seconds,
-            "sendMessageOperationsPerSecond": self.config.send_message_operations_per_second,
-            "sendMessageThreadCount": self.config.send_message_thread_count,
-            "sendMessageArrivalFailureIntervalInSeconds": self.config.send_message_arrival_failure_interval_in_seconds,
-            "sendMessageArrivalAllowedFailureCount": self.config.send_message_arrival_allowed_failure_count,
-            "sendMessageBacklogAllowedFailureCount": self.config.send_message_backlog_allowed_failure_count,
-            "sendMessageUnackedAllowedFailureCount": self.config.send_message_unacked_allowed_failure_count,
-            "sendMessageExceptionAllowedFailureCount": self.config.send_message_exception_allowed_failure_count,
-            "receiveC2dIntervalInSeconds": self.config.receive_c2d_interval_in_seconds,
-            "receiveC2dMissingMessageAllowedFailureCount": self.config.receive_c2d_missing_message_allowed_failure_count,
-            "reportedPropertiesUpdateIntervalInSeconds": self.config.reported_properties_update_interval_in_seconds,
-            "reportedPropertiesVerifyFailureIntervalInSeconds": self.config.reported_properties_verify_failure_interval_in_seconds,
-            "reportedPropertiesUpdateAllowedFailureCount": self.config.reported_properties_update_allowed_failure_count,
-        }
 
     def update_initial_reported_properties(self):
         """
@@ -406,7 +346,7 @@ class DeviceApp(app_base.AppBase):
                 ),
                 Fields.Reported.SESSION_METRICS: self.get_session_metrics(),
                 Fields.Reported.TEST_METRICS: self.get_test_metrics(),
-                Fields.Reported.CONFIG: self.get_longhaul_config_properties(),
+                Fields.Reported.CONFIG: self.config,
             }
         }
         self.client.patch_twin_reported_properties(props)
@@ -469,13 +409,13 @@ class DeviceApp(app_base.AppBase):
         like this:
 
         1. Device sets reported properties in `properties/reported/thief/pairing` which indicates
-            that it doesn't have a service app (by settign `serviceRunId` = None).
-        2. An available service sets `properties/desired/thief/pairing/serviceRunId` to the service
+            that it doesn't have a service app (by settign `serviceInstance` = None).
+        2. An available service sets `properties/desired/thief/pairing/serviceInstance` to the service
             app's `runId` value
-        3. The device sets `properties/reported/thief/pairing/serviceRunId` to the serivce app's
+        3. The device sets `properties/reported/thief/pairing/serviceInstance` to the serivce app's
             `runId` value.
 
-        Once the device starts sending telemetry with `thief/serviceRunId` set to the service app's
+        Once the device starts sending telemetry with `thief/serviceInstance` set to the service app's
             `runId` value, the pairing is complete.
         """
 
@@ -499,20 +439,20 @@ class DeviceApp(app_base.AppBase):
                     self.pairing_complete = False
                     pairing_start_epochtime = time.time()
                     send_pairing_request = True
-                elif (
-                    time.time() - pairing_start_epochtime
-                ) > self.config.pairing_request_timeout_interval_in_seconds:
+                elif (time.time() - pairing_start_epochtime) > self.config[
+                    Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS
+                ]:
                     # if we're trying to pair and we haven't seen a response yet, we may need to
                     # re-send our request (by setting the desired property again), or it may be
                     # time to fail the pairing operation
                     raise Exception(
                         "No resopnse to pairing requests after trying for {} seconds".format(
-                            self.config.pairing_request_timeout_interval_in_seconds
+                            self.config[Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS]
                         )
                     )
-                elif (
-                    time.time() - pairing_last_request_epochtime
-                ) > self.config.pairing_request_send_interval_in_seconds:
+                elif (time.time() - pairing_last_request_epochtime) > self.config[
+                    Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS
+                ]:
                     logger.info("Pairing response timeout.  Requesting again")
                     send_pairing_request = True
 
@@ -553,7 +493,7 @@ class DeviceApp(app_base.AppBase):
                     # Or maybe something is wrong with the desired properties.  Probably a
                     # service app that goes by different rules. Ignoring it is better than
                     # crashing.
-                    logger.info("deviceRunId and/or serviceRunId missing.  Ignoring.")
+                    logger.info("runId and/or serviceInstance missing.  Ignoring.")
 
                 elif received_run_id != run_id:
                     # Another strange case.  A service app is trying to pair with our device_id,
@@ -565,6 +505,7 @@ class DeviceApp(app_base.AppBase):
                     )
 
                 else:
+                    azure_monitor.add_logging_properties(service_instance=received_service_instance)
                     # It looks like a service app has decided to pair with us.  Set reported
                     # properties to "select" this service instance as our partner.
                     logger.info(
@@ -640,8 +581,17 @@ class DeviceApp(app_base.AppBase):
                     self.metrics.send_message_count_unacked.increment()
                     self.client.send_message(msg)
                 except Exception as e:
-                    self.metrics.send_message_count_failures.increment()
-                    logger.error("send_message raised {}".format(e), exc_info=True)
+                    self.metrics.client_library_count_exceptions.increment()
+                    logger.error("send_message raised {}".format(str(e) or type(e)), exc_info=True)
+                    if (
+                        self.metrics.client_library_count_exceptions.get_count()
+                        > self.config[Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT]
+                    ):
+                        raise Exception(
+                            "Client library exception count ({}) too high.".format(
+                                self.metrics.client_library_count_exceptions.get_count()
+                            )
+                        )
                 else:
                     self.metrics.send_message_count_sent.increment()
                 finally:
@@ -652,8 +602,9 @@ class DeviceApp(app_base.AppBase):
         Send metrics to azure monitor, based on the reported properties that we probably just
         sent to the hub
         """
-        # we don't record session_metrics to azure monitor because they're all about time and i
-        # there's no value to pushing things like "current time" as metrics
+        # We don't record session_metrics to Azure Monitor because the session metrics are
+        # recording things like "start time" and "elapsed time" which are already available
+        # in Azure Monitor in other forms.
         with self.reporter_lock:
             self.reporter.set_metrics_from_dict(props[Fields.Reported.SYSTEM_HEALTH_METRICS])
             self.reporter.set_metrics_from_dict(props[Fields.Reported.TEST_METRICS])
@@ -712,8 +663,38 @@ class DeviceApp(app_base.AppBase):
                 )
                 self.outgoing_test_message_queue.put(msg)
 
+                # check backlog size for failure
+                if (
+                    self.outgoing_test_message_queue.qsize()
+                    > self.config[Settings.SEND_MESSAGE_ALLOWED_FAILURE_COUNT]
+                ):
+                    raise Exception(
+                        "Send message queue size {} is too big".format(
+                            self.outgoing_test_message_qsize()
+                        )
+                    )
+                # check for count of messages that failed to send (no PUBACK)
+                if (
+                    self.metrics.send_message_count_unacked.get_count()
+                    > self.config[Settings.SEND_MESSAGE_ALLOWED_FAILURE_COUNT]
+                ):
+                    raise Exception(
+                        "Un-acked message count of {} is too big".format(
+                            self.metrics.send_message_count_unacked.get_count()
+                        )
+                    )
+                # check the count of messages that were sent but not received
+                not_received = (
+                    self.metrics.send_message_count_sent.get_count()
+                    - self.metrics.send_message_count_received_by_service_app.get_count()
+                )
+                if not_received > self.config[Settings.SEND_MESSAGE_ALLOWED_FAILURE_COUNT]:
+                    raise Exception(
+                        "Un-received message count of {} is too big".format(not_received)
+                    )
+
                 # sleep until we need to send again
-                self.done.wait(1 / self.config.send_message_operations_per_second)
+                self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
 
             else:
                 # pairing is not complete
@@ -748,7 +729,7 @@ class DeviceApp(app_base.AppBase):
             logger.info("Updating thief props: {}".format(pprint.pformat(props)))
             self.client.patch_twin_reported_properties(props)
 
-            self.done.wait(self.config.thief_property_update_interval_in_seconds)
+            self.done.wait(self.config[Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS])
 
     def wait_for_desired_properties_thread(self, worker_thread_info):
         """
@@ -794,7 +775,7 @@ class DeviceApp(app_base.AppBase):
                     and thief[Fields.C2d.RUN_ID] == run_id
                     and thief[Fields.C2d.SERVICE_INSTANCE] == self.service_instance
                 ):
-                    # We only inspect messages that have `thief/deviceRunId` and `thief/serviceRunId` set to the expected values
+                    # We only inspect messages that have `thief/runId` and `thief/serviceInstance` set to the expected values
                     cmd = thief[Fields.C2d.CMD]
                     if cmd == Types.Message.SERVICE_ACK_RESPONSE:
                         # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
@@ -864,156 +845,6 @@ class DeviceApp(app_base.AppBase):
                         if arrival.service_ack_id in self.service_ack_wait_list:
                             del self.service_ack_wait_list[arrival.service_ack_id]
 
-    def check_for_failure_thread(self, worker_thread_info):
-        """
-        Thread which is responsible for watching for test failures based on limits that are
-        exceeded.
-
-        These checks were put into their own thread for 2 reasons:
-
-        1. to centralize this code.
-
-        2. because we have multiple threads doing things like calling send_message.  If we check
-           these limits inside those threads, we have the chance for multiple overlapping checks.
-           This isn't necessarily destructive, but it could be confusing when analyzing logs.
-
-       """
-
-        while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
-            if self.is_paused():
-                time.sleep(1)
-                continue
-
-            arrival_failure_count = 0
-            reported_properties_add_failure_count = 0
-            reported_properties_remove_failure_count = 0
-            now = time.time()
-
-            with self.service_ack_list_lock:
-                for wait_info in self.service_ack_wait_list.values():
-                    if (wait_info.service_ack_type == Types.ServiceAck.TELEMETRY_SERVICE_ACK) and (
-                        now - wait_info.queue_epochtime
-                    ) > self.config.send_message_arrival_failure_interval_in_seconds:
-                        logger.warning(
-                            "Arrival time for {} of {} seconds is longer than failure interval of {}".format(
-                                wait_info.service_ack_id,
-                                (now - wait_info.queue_epochtime),
-                                self.config.send_message_arrival_failure_interval_in_seconds,
-                            )
-                        )
-                        arrival_failure_count += 1
-
-                    elif (
-                        (
-                            wait_info.service_ack_type
-                            == Types.ServiceAck.ADD_REPORTED_PROPERTY_SERVICE_ACK
-                        )
-                        and (now - wait_info.send_epochtime)
-                        > self.config.reported_properties_verify_failure_interval_in_seconds
-                    ):
-                        logger.warning(
-                            "Reported property set time for {} of {} seconds is longer than failure interval of {}".format(
-                                wait_info.service_ack_id,
-                                (now - wait_info.send_epochtime),
-                                self.config.reported_properties_verify_failure_interval_in_seconds,
-                            )
-                        )
-                        reported_properties_add_failure_count += 1
-
-                    elif (
-                        (
-                            wait_info.service_ack_type
-                            == Types.ServiceAck.REMOVE_REPORTED_PROPERTY_SERVICE_ACK
-                        )
-                        and (now - wait_info.send_epochtime)
-                        > self.config.reported_properties_verify_failure_interval_in_seconds
-                    ):
-                        logger.warning(
-                            "Reported property clear time for {} of {} seconds is longer than failure interval of {}".format(
-                                wait_info.service_ack_id,
-                                (now - wait_info.send_epochtime),
-                                self.config.reported_properties_verify_failure_interval_in_seconds,
-                            )
-                        )
-                        reported_properties_remove_failure_count += 1
-
-            if arrival_failure_count > self.config.send_message_arrival_allowed_failure_count:
-                raise Exception(
-                    "count of failed arrivals of {} is greater than maximum count of {}".format(
-                        arrival_failure_count,
-                        self.config.send_message_arrival_allowed_failure_count,
-                    )
-                )
-
-            if (
-                reported_properties_add_failure_count
-                > self.config.reported_properties_update_allowed_failure_count
-            ):
-                raise Exception(
-                    "count of failed reported property adds of {} is greater than maximum count of {}".format(
-                        reported_properties_add_failure_count,
-                        self.config.reported_properties_update_allowed_failure_count,
-                    )
-                )
-
-            if (
-                reported_properties_remove_failure_count
-                > self.config.reported_properties_update_allowed_failure_count
-            ):
-                raise Exception(
-                    "count of failed reported property removes of {} is greater than maximum count of {}".format(
-                        reported_properties_remove_failure_count,
-                        self.config.reported_properties_update_allowed_failure_count,
-                    )
-                )
-
-            if (
-                self.outgoing_test_message_queue.qsize()
-                > self.config.send_message_backlog_allowed_failure_count
-            ):
-                raise Exception(
-                    "send_message backlog with {} items exceeded maxiumum count of {} items".format(
-                        self.outgoing_test_message_queue.qsize(),
-                        self.config.send_message_backlog_allowed_failure_count,
-                    )
-                )
-
-            if (
-                self.metrics.send_message_count_unacked.get_count()
-                > self.config.send_message_unacked_allowed_failure_count
-            ):
-                raise Exception(
-                    "unacked message count  of with {} items exceeded maxiumum count of {} items".format(
-                        self.metrics.send_message_count_unacked.get_count,
-                        self.config.send_message_unacked_allowed_failure_count,
-                    )
-                )
-
-            if (
-                self.metrics.send_message_count_failures.get_count()
-                > self.config.send_message_exception_allowed_failure_count
-            ):
-                raise Exception(
-                    "send_message failure count of {} exceeds maximum count of {} failures".format(
-                        self.metrics.send_message_count_failures.get_count(),
-                        self.config.send_message_exception_allowed_failure_count,
-                    )
-                )
-
-            if (
-                self.out_of_order_message_tracker.get_missing_count()
-                > self.config.receive_c2d_missing_message_allowed_failure_count
-            ):
-                raise Exception(
-                    "missing c2d message count of {} exceeds maximum count of {} missing".format(
-                        self.out_of_order_message_tracker.get_missing_count(),
-                        self.config.receive_c2d_missing_message_allowed_failure_count,
-                    )
-                )
-
-            time.sleep(10)
-
     def start_c2d_message_sending(self):
         """
         set a reported property to start c2d messages flowing
@@ -1025,7 +856,9 @@ class DeviceApp(app_base.AppBase):
                 Fields.Reported.TEST_CONTROL: {
                     Fields.Reported.TestControl.C2D: {
                         Fields.Reported.TestControl.C2d.SEND: True,
-                        Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS: self.config.receive_c2d_interval_in_seconds,
+                        Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS: self.config[
+                            Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS
+                        ],
                     }
                 }
             }
@@ -1068,6 +901,16 @@ class DeviceApp(app_base.AppBase):
                         self.reporter.record()
                 last_message_epochtime = now
 
+                if (
+                    self.out_of_order_message_tracker.get_missing_count()
+                    > self.config[Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT]
+                ):
+                    raise Exception(
+                        "Missing message count ({}) is too high".format(
+                            self.out_of_order_message_tracker.get_missing_count()
+                        )
+                    )
+
     def test_reported_properties_threads(self, worker_thread_info):
         """
         Thread to test reported properties.  It does this by setting properties inside
@@ -1097,7 +940,7 @@ class DeviceApp(app_base.AppBase):
                 }
 
                 def on_property_added(service_ack_id, user_data):
-                    self.metrics.reported_properties_count_added_and_verified_by_service_app.increment()
+                    self.metrics.reported_properties_count_added_not_verified.decrement()
                     (prop_name, add_ack_id, remove_ack_id) = user_data
                     logger.info("Add of reported property {} verified by service".format(prop_name))
 
@@ -1132,9 +975,10 @@ class DeviceApp(app_base.AppBase):
                     logger.info("Removing test property {}".format(prop_name))
                     self.client.patch_twin_reported_properties(reported_properties)
                     self.metrics.reported_properties_count_removed.increment()
+                    self.metrics.reported_properties_count_removed_not_verified.increment()
 
                 def on_property_removed(service_ack_id, user_data):
-                    self.metrics.reported_properties_count_removed_and_verified_by_service_app.increment()
+                    self.metrics.reported_properties_count_removed_not_verified.decrement()
                     (prop_name, add_ack_id, remove_ack_id) = user_data
                     logger.info(
                         "Remove of reported property {} verified by service".format(prop_name)
@@ -1172,10 +1016,25 @@ class DeviceApp(app_base.AppBase):
                 logger.info("Adding test property {}".format(property_name))
                 self.client.patch_twin_reported_properties(reported_properties)
                 self.metrics.reported_properties_count_added.increment()
+                self.metrics.reported_properties_count_added_not_verified.increment()
 
                 property_index += 1
 
-            time.sleep(self.config.reported_properties_update_interval_in_seconds)
+                failure_count = (
+                    self.metrics.reported_properties_count_added_not_verified.get_count()
+                    + self.metrics.reported_properties_count_removed_not_verified.get_count()
+                )
+                if (
+                    failure_count
+                    > self.config[Settings.REPORTED_PROPERTIES_UPDATE_ALLOWED_FAILURE_COUNT]
+                ):
+                    raise Exception(
+                        "Twin reported property add+remove failure count {} is too big".format(
+                            failure_count
+                        )
+                    )
+
+            time.sleep(self.config[Settings.REPORTED_PROPERTIES_UPDATE_INTERVAL_IN_SECONDS])
 
     def main(self):
 
@@ -1213,7 +1072,6 @@ class DeviceApp(app_base.AppBase):
                 self.handle_service_ack_response_thread, "handle_service_ack_response_thread"
             ),
             app_base.WorkerThreadInfo(self.test_send_message_thread, "test_send_message_thread"),
-            app_base.WorkerThreadInfo(self.check_for_failure_thread, "check_for_failure_thread"),
             app_base.WorkerThreadInfo(
                 self.handle_incoming_test_c2d_messages_thread,
                 "handle_incoming_test_c2d_messages_thread",
@@ -1223,7 +1081,7 @@ class DeviceApp(app_base.AppBase):
                 self.test_reported_properties_threads, "test_reported_properties_threads"
             ),
         ]
-        for i in range(0, self.config.send_message_thread_count):
+        for i in range(0, self.config[Settings.SEND_MESSAGE_THREAD_COUNT]):
             worker_thread_infos.append(
                 app_base.WorkerThreadInfo(
                     self.send_message_thread, "send_message_thread #{}".format(i),
@@ -1244,8 +1102,8 @@ class DeviceApp(app_base.AppBase):
 if __name__ == "__main__":
     try:
         DeviceApp().main()
-    except Exception as e:
-        logger.error("App shutdown exception: {}".format(str(e)), exc_info=True)
+    except BaseException as e:
+        logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)
         raise
     finally:
         # Flush azure monitor telemetry
