@@ -23,13 +23,6 @@ from thief_constants import (
     Types,
 )
 
-
-logging.basicConfig(format="%(asctime)s %(levelname)s:%(message)s", level=logging.WARNING)
-logging.getLogger("thief").setLevel(level=logging.INFO)
-logging.getLogger("azure.iot").setLevel(level=logging.INFO)
-
-logger = logging.getLogger("thief.{}".format(__name__))
-
 # use os.environ[] for required environment variables
 iothub_connection_string = os.environ["THIEF_SERVICE_CONNECTION_STRING"]
 iothub_name = os.environ["THIEF_IOTHUB_NAME"]
@@ -37,43 +30,45 @@ eventhub_connection_string = os.environ["THIEF_EVENTHUB_CONNECTION_STRING"]
 eventhub_consumer_group = os.environ["THIEF_EVENTHUB_CONSUMER_GROUP"]
 service_pool = os.environ["THIEF_SERVICE_POOL"]
 
-run_id = str(uuid.uuid4())
+service_instance = str(uuid.uuid4())
 
-# configure our traces and events to go to Azure Monitor
+# set default logging which will only go to the console
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("thief").setLevel(level=logging.INFO)
+logging.getLogger("azure.iot").setLevel(level=logging.INFO)
+logger = logging.getLogger("thief.{}".format(__name__))
+
+# configure which traces and events go to Azure Monitor
 azure_monitor.add_logging_properties(
     client_type="service",
-    run_id=run_id,
+    service_instance=service_instance,
     hub=iothub_name,
     sdk_version=azure.iot.hub.constant.VERSION,
     pool_id=service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
+azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
-azure_monitor.log_to_azure_monitor("azure")
-azure_monitor.log_to_azure_monitor("uamqp")
-
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
 
 # TODO: remove items from pairing list of no traffic for X minutes
 
 
-def custom_props(device_id, pairing_id=None):
+def custom_props(device_id, run_id=None):
     """
     helper function for adding customDimensions to logger calls at execution time
     """
     props = {"deviceId": device_id}
-    if pairing_id:
-        props[Fields.Deprecated.PAIRING_ID] = pairing_id
+    if run_id:
+        props["runId"] = run_id
     return {"custom_dimensions": props}
 
 
 class PerDeviceData(object):
-    def __init__(self, pairing_id, device_id):
+    def __init__(self, device_id, run_id):
         self.device_id = device_id
-
-        # For Pairing
-        self.pairing_id = pairing_id
+        self.run_id = run_id
 
         # For testing C2D
         self.test_c2d_enabled = False
@@ -173,10 +168,9 @@ class ServiceApp(app_base.AppBase):
         """
         with self.pairing_list_lock:
             if device_id in self.paired_devices:
-                pairing_id = self.paired_devices[device_id].pairing_id
                 logger.info(
                     "Unpairing {}. Removing it from paired device list".format(device_id),
-                    extra=custom_props(device_id, pairing_id),
+                    extra=custom_props(device_id, self.paired_devices[device_id].run_id),
                 )
                 del self.paired_devices[device_id]
 
@@ -203,24 +197,24 @@ class ServiceApp(app_base.AppBase):
 
             body = event.body_as_json()
             thief = body.get(Fields.Telemetry.THIEF, {})
-            passed_run_id = thief.get(Fields.Telemetry.SERVICE_RUN_ID, None)
-            pairing_id = thief.get(Fields.Deprecated.PAIRING_ID, None)
+            received_service_instance = thief.get(Fields.Telemetry.SERVICE_INSTANCE, None)
+            received_run_id = thief.get(Fields.Telemetry.RUN_ID, None)
 
             with self.pairing_list_lock:
                 device_data = self.paired_devices.get(device_id, None)
 
             if get_message_source_from_event(event) == "twinChangeEvents":
-                if (
+                thief = (
                     body.get(Const.PROPERTIES, {})
                     .get(Const.REPORTED, {})
                     .get(Fields.Reported.THIEF, {})
-                    .get(Fields.Reported.PAIRING, {})
-                ):
+                )
+                if thief and thief.get(Fields.Reported.PAIRING, {}):
                     self.incoming_pairing_request_queue.put(event)
                 if device_data:
                     self.incoming_twin_changes.put(event)
 
-            elif pairing_id and passed_run_id:
+            elif received_run_id and received_service_instance:
                 cmd = thief.get(Fields.Telemetry.CMD, None)
 
                 with self.pairing_list_lock:
@@ -228,33 +222,22 @@ class ServiceApp(app_base.AppBase):
 
                 if device_data:
                     if cmd == Types.Message.SERVICE_ACK_REQUEST:
-                        service_ack_type = thief.get(
-                            Fields.Deprecated.SERVICE_ACK_TYPE,
-                            Types.ServiceAck.TELEMETRY_SERVICE_ACK,
+                        logger.info(
+                            "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
+                                device_id, thief[Fields.Telemetry.SERVICE_ACK_ID]
+                            ),
+                            extra=custom_props(device_id, device_data.run_id),
                         )
-
-                        if service_ack_type == Types.ServiceAck.TELEMETRY_SERVICE_ACK:
-                            logger.info(
-                                "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
-                                    device_id, thief[Fields.Telemetry.SERVICE_ACK_ID]
-                                ),
-                                extra=custom_props(device_id, pairing_id),
+                        self.outgoing_service_ack_response_queue.put(
+                            ServiceAck(
+                                device_id=device_id,
+                                service_ack_id=thief[Fields.Telemetry.SERVICE_ACK_ID],
                             )
-                            self.outgoing_service_ack_response_queue.put(
-                                ServiceAck(
-                                    device_id=device_id,
-                                    service_ack_id=thief[Fields.Telemetry.SERVICE_ACK_ID],
-                                )
-                            )
-                        else:
-                            logger.warning(
-                                "Unknown ServiceAckType: {}. Ignoring.".format(service_ack_type),
-                                extra=custom_props(device_id, pairing_id),
-                            )
+                        )
                     else:
                         logger.info(
                             "Unknown command received from {}: {}".format(device_id, body),
-                            extra=custom_props(device_id, pairing_id),
+                            extra=custom_props(device_id, device_data.run_id),
                         )
 
     def receive_incoming_messages_thread(self, worker_thread_info):
@@ -269,7 +252,7 @@ class ServiceApp(app_base.AppBase):
         """
 
         def on_error(partition_context, error):
-            logger.error("EventHub on_error: {}".format(error))
+            logger.error("EventHub on_error: {}".format(str(error) or type(error)))
 
         def on_partition_initialize(partition_context):
             logger.warning("EventHub on_partition_initialize")
@@ -280,19 +263,9 @@ class ServiceApp(app_base.AppBase):
         def on_event(partition_context, event):
             worker_thread_info.watchdog_epochtime = time.time()
             if event:
-                service_ack_id = (
-                    event.body_as_json()
-                    .get(Fields.Telemetry.THIEF, {})
-                    .get(Fields.Telemetry.SERVICE_ACK_ID, "")
-                )
-                if service_ack_id:
-                    device_id = get_device_id_from_event(event)
-                    with self.pairing_list_lock:
-                        if device_id in self.paired_devices:
-                            logger.info(
-                                "onEvent for serviceAckId {}".format(service_ack_id),
-                                extra=custom_props(device_id, ""),
-                            )
+                # We put all received events into our queue.  The thread that handles
+                # incoming_eventhub_event_queue items will decide if the event needs to be handled
+                # or not.
                 self.incoming_eventhub_event_queue.put(event)
 
         logger.info("Starting EventHub receive")
@@ -357,7 +330,7 @@ class ServiceApp(app_base.AppBase):
                     except Exception as e:
                         logger.error(
                             "send_c2d_messge to {} raised {}.  Forcing un-pair with device".format(
-                                device_id, str(e)
+                                device_id, str(e) or type(e)
                             ),
                             exc_info=e,
                         )
@@ -404,21 +377,19 @@ class ServiceApp(app_base.AppBase):
                         device_data = None
 
                 if device_data:
-                    pairing_id = device_data.pairing_id
-
                     logger.info(
                         "Send serviceAckResponse for device_id = {}: {}".format(
                             device_id, service_acks[device_id]
                         ),
-                        extra=custom_props(device_id, pairing_id),
+                        extra=custom_props(device_id, device_data.run_id),
                     )
 
                     message = json.dumps(
                         {
                             Fields.C2d.THIEF: {
                                 Fields.C2d.CMD: Types.Message.SERVICE_ACK_RESPONSE,
-                                Fields.C2d.SERVICE_RUN_ID: run_id,
-                                Fields.Deprecated.PAIRING_ID: pairing_id,
+                                Fields.C2d.SERVICE_INSTANCE: service_instance,
+                                Fields.C2d.RUN_ID: device_data.run_id,
                                 Fields.C2d.SERVICE_ACKS: service_acks[device_id],
                             }
                         }
@@ -486,8 +457,8 @@ class ServiceApp(app_base.AppBase):
                         {
                             Fields.C2d.THIEF: {
                                 Fields.C2d.CMD: Types.Message.TEST_C2D,
-                                Fields.C2d.SERVICE_RUN_ID: run_id,
-                                Fields.Deprecated.PAIRING_ID: device_data.pairing_id,
+                                Fields.C2d.SERVICE_INSTANCE: service_instance,
+                                Fields.C2d.RUN_ID: device_data.run_id,
                                 Fields.C2d.TEST_C2D_MESSAGE_INDEX: device_data.next_c2d_message_index,
                             }
                         }
@@ -497,7 +468,7 @@ class ServiceApp(app_base.AppBase):
                         "Sending test c2d to {} with index {}".format(
                             device_id, device_data.next_c2d_message_index
                         ),
-                        extra=custom_props(device_id, device_data.pairing_id),
+                        extra=custom_props(device_id, device_data.run_id),
                     )
 
                     device_data.next_c2d_message_index += 1
@@ -552,15 +523,15 @@ class ServiceApp(app_base.AppBase):
                 .get(Fields.Reported.PAIRING, {})
             )
 
-            pairing_id = pairing.get(Fields.Deprecated.PAIRING_ID, None)
+            received_run_id = pairing.get(Fields.Reported.Pairing.RUN_ID, None)
             requested_service_pool = pairing.get(
                 Fields.Reported.Pairing.REQUESTED_SERVICE_POOL, None
             )
-            selected_run_id = pairing.get(Fields.Reported.Pairing.SERVICE_RUN_ID, None)
+            received_service_instance = pairing.get(Fields.Reported.Pairing.SERVICE_INSTANCE, None)
 
             logger.info(
                 "Received pairing request for device {}: {}".format(device_id, pairing),
-                extra=custom_props(device_id, pairing_id),
+                extra=custom_props(device_id, received_run_id),
             )
 
             with self.pairing_list_lock:
@@ -572,74 +543,52 @@ class ServiceApp(app_base.AppBase):
                     "Device {} requesting an app in a diffeent pool: {}".format(
                         device_id, requested_service_pool
                     ),
-                    extra=custom_props(device_id, pairing_id),
+                    extra=custom_props(device_id, received_run_id),
                 )
                 continue
 
-            # Ignore events if they don't even have a pairingId property.
-            elif pairing_id:
+            # Ignore events if they don't even have a runId property.
+            elif received_run_id:
 
-                if device_data and selected_run_id != run_id:
+                if device_data and received_service_instance != service_instance:
                     # if device_data, that means we think we're paired.  If the properties
                     # tell us otherwise, we assume the pairing is no longer valid.
                     logger.info(
-                        "Device {} deviced to pair with {}.  Unpairing".format(
-                            device_id, selected_run_id
+                        "Device {} deviced to pair with service instance {}.  Unpairing".format(
+                            device_id, received_service_instance
                         ),
-                        extra=custom_props(device_id, pairing_id),
+                        extra=custom_props(device_id, received_run_id),
                     )
                     self.remove_device_from_pairing_list(device_id)
 
-                elif selected_run_id == run_id:
+                elif received_service_instance == service_instance:
                     # If the device has selected us, the pairing is complete.
                     logger.info(
                         "Device {} pairing complete".format(device_id),
-                        extra=custom_props(device_id, pairing_id),
+                        extra=custom_props(device_id, received_run_id),
                     )
 
                     if not device_data:
                         # only create a new device_data structure if we don't already
                         # have one.
-                        device_data = PerDeviceData(pairing_id, device_id)
+                        device_data = PerDeviceData(device_id, received_run_id)
 
                         with self.pairing_list_lock:
                             self.paired_devices[device_id] = device_data
 
-                    # Tell the device that we've accepted the pairing.
-                    desired = {
-                        Fields.Desired.THIEF: {
-                            Fields.Desired.PAIRING: {
-                                Fields.Deprecated.ACCEPTED_PAIRING: "{},{}".format(
-                                    pairing_id, run_id
-                                )
-                            }
-                        }
-                    }
-
-                    logger.info(
-                        "Marking acceptedPairing for device {}: {}".format(device_id, desired),
-                        extra=custom_props(device_id, pairing_id),
-                    )
-
-                    with self.registry_manager_lock:
-                        self.registry_manager.update_twin(
-                            device_id, Twin(properties=TwinProperties(desired=desired)), "*"
-                        )
-
-                elif selected_run_id is None:
-                    # If the device hasn't selected a serviceRunId value yet, we will try to
+                elif received_service_instance is None:
+                    # If the device hasn't selected a serviceInstance value yet, we will try to
                     # pair with it.
                     logger.info(
                         "Device {} attempting to pair".format(device_id),
-                        extra=custom_props(device_id, pairing_id),
+                        extra=custom_props(device_id, received_run_id),
                     )
 
                     desired = {
                         Fields.Desired.THIEF: {
                             Fields.Desired.PAIRING: {
-                                Fields.Desired.Pairing.SERVICE_RUN_ID: run_id,
-                                Fields.Deprecated.PAIRING_ID: pairing_id,
-                                Fields.Deprecated.ACCEPTED_PAIRING: None,
+                                Fields.Desired.Pairing.SERVICE_INSTANCE: service_instance,
+                                Fields.Desired.Pairing.RUN_ID: received_run_id,
                             }
                         }
                     }
@@ -650,7 +599,7 @@ class ServiceApp(app_base.AppBase):
                         )
 
                 else:
-                    # The device chose someone else since selected_run_id != run_id.
+                    # The device chose someone else since received_service_instance != service_instance.
                     # Ignore this change.
                     pass
 
@@ -742,18 +691,26 @@ class ServiceApp(app_base.AppBase):
                 continue
 
             device_id = get_device_id_from_event(event)
-            with self.pairing_list_lock:
-                device_data = self.paired_devices[device_id]
-
-            logger.info(
-                "Twin change for {}: {}".format(device_id, event.body_as_json()),
-                extra=custom_props(device_id, device_data.pairing_id),
-            )
             thief = (
                 event.body_as_json()
                 .get(Const.PROPERTIES, {})
                 .get(Const.REPORTED, {})
                 .get(Fields.Reported.THIEF, {})
+            )
+
+            with self.pairing_list_lock:
+                if device_id in self.paired_devices:
+                    run_id = self.paired_devices[device_id].run_id
+                else:
+                    run_id = None
+            if not run_id:
+                run_id = thief.get(Fields.Reported.PAIRING, {}).get(
+                    Fields.Reported.Pairing.RunId, None
+                )
+
+            logger.info(
+                "Twin change for {}: {}".format(device_id, event.body_as_json()),
+                extra=custom_props(device_id, run_id),
             )
 
             if thief.get(Fields.Reported.TEST_CONTENT):
@@ -763,7 +720,10 @@ class ServiceApp(app_base.AppBase):
 
             run_state = thief.get(Fields.Reported.SESSION_METRICS, {}).get("runState")
             if run_state and run_state != app_base.RUNNING:
-                logger.info("Device {} no longer running.".format(device_id))
+                logger.info(
+                    "Device {} no longer running.".format(device_id),
+                    extra=custom_props(device_id, run_id),
+                )
                 self.remove_device_from_pairing_list(device_id)
 
     def main(self):
@@ -799,7 +759,11 @@ class ServiceApp(app_base.AppBase):
             app_base.WorkerThreadInfo(self.test_c2d_thread, "test_c2d_thread"),
         ]
 
-        self.run_threads(threads_to_launch)
+        self.run_threads(
+            threads_to_launch,
+            max_run_duration=self.config.max_run_duration,
+            watchdog_failure_interval_in_seconds=self.config.watchdog_failure_interval_in_seconds,
+        )
 
     def pre_shutdown(self):
         # close the eventhub consumer before shutting down threads.  This is necessary because
@@ -816,8 +780,8 @@ class ServiceApp(app_base.AppBase):
 if __name__ == "__main__":
     try:
         ServiceApp().main()
-    except Exception as e:
-        logger.error("App shutdown exception: {}".format(str(e)), exc_info=True)
+    except BaseException as e:
+        logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)
         raise
     finally:
         # Flush azure monitor telemetry

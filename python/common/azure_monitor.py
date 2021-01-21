@@ -4,18 +4,18 @@
 import os
 import logging
 import platform
-
+from thief_constants import CustomDimensionNames
 from opencensus.ext.azure.log_exporter import AzureEventHandler
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 
 app_insights_connection_string = os.environ["THIEF_APP_INSIGHTS_CONNECTION_STRING"]
 
 _client_type = None
+_service_instance = None
 _run_id = None
 _hub = None
 _sdk_version = None
 _device_id = None
-_pairing_id = None
 _pool_id = None
 _transport = None
 
@@ -33,11 +33,14 @@ def add_logging_properties(
     hub=_default_value,
     sdk_version=_default_value,
     device_id=_default_value,
-    pairing_id=_default_value,
+    service_instance=_default_value,
     pool_id=_default_value,
     transport=_default_value,
 ):
-    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pairing_id, _pool_id, _transport
+    """
+    Add customDimension values which will be applied to all Azure Monitor records
+    """
+    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport, _service_instance
     if client_type != _default_value:
         _client_type = client_type
     if run_id != _default_value:
@@ -48,8 +51,8 @@ def add_logging_properties(
         _sdk_version = sdk_version
     if device_id != _default_value:
         _device_id = device_id
-    if pairing_id != _default_value:
-        _pairing_id = pairing_id
+    if service_instance != _default_value:
+        _service_instance = service_instance
     if pool_id != _default_value:
         _pool_id = pool_id
     if transport != _default_value:
@@ -57,45 +60,75 @@ def add_logging_properties(
 
 
 def telemetry_processor_callback(envelope):
-    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pairing_id, _pool_id, _transport
+    """
+    Get a callback which applies our customDimension values to records which will eventually be
+    sent to Azure Monitor.
+    """
+    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport
     envelope.tags["ai.cloud.role"] = _client_type
-    envelope.tags["ai.cloud.roleInstance"] = _run_id
-    envelope.data.baseData.properties["osType"] = platform.system()
+    if _service_instance:
+        envelope.tags["ai.cloud.roleInstance"] = _service_instance
+    else:
+        envelope.tags["ai.cloud.roleInstance"] = _run_id
+    envelope.data.baseData.properties[CustomDimensionNames.OS_TYPE] = platform.system()
     if _device_id:
-        envelope.data.baseData.properties["deviceId"] = _device_id
+        envelope.data.baseData.properties[CustomDimensionNames.DEVICE_ID] = _device_id
     if _hub:
-        envelope.data.baseData.properties["hub"] = _hub
-    envelope.data.baseData.properties["runId"] = _run_id
-    envelope.data.baseData.properties["sdkLanguage"] = "python"
-    envelope.data.baseData.properties["sdkLanguageVersion"] = platform.python_version()
-    envelope.data.baseData.properties["sdkVersion"] = _sdk_version
+        envelope.data.baseData.properties[CustomDimensionNames.HUB] = _hub
+    if _run_id:
+        envelope.data.baseData.properties[CustomDimensionNames.RUN_ID] = _run_id
+    if _service_instance:
+        envelope.data.baseData.properties[CustomDimensionNames.SERVICE_INSTANCE] = _service_instance
+    envelope.data.baseData.properties[CustomDimensionNames.SDK_LANGUAGE] = "python"
+
+    envelope.data.baseData.properties[
+        CustomDimensionNames.SDK_LANGUAGE_VERSION
+    ] = platform.python_version()
+    envelope.data.baseData.properties[CustomDimensionNames.SDK_VERSION] = _sdk_version
     if _transport:
-        envelope.data.baseData.properties["transport"] = _transport
-    if _pairing_id:
-        envelope.data.baseData.properties["pairingId"] = _pairing_id
+        envelope.data.baseData.properties[CustomDimensionNames.TRANSPORT] = _transport
+
     if _pool_id:
-        envelope.data.baseData.properties["poolId"] = _pool_id
+        envelope.data.baseData.properties[CustomDimensionNames.POOL_ID] = _pool_id
 
     return True
 
 
 def get_event_logger():
-    global _client_type, _run_id
+    """
+    Get the event logger for this module.  This event logger can be used to send customEvents to
+    Azure Monitor.
+    """
+    global _client_type
     logger = logging.getLogger("thief_events.{}".format(_client_type))
 
     handler = AzureEventHandler(connection_string=app_insights_connection_string)
     handler.add_telemetry_processor(telemetry_processor_callback)
 
-    handler.setLevel(logging.INFO)
+    logger.setLevel(logging.INFO)
     logger.addHandler(handler)
 
     return logger
+
+
+def log_all_warnings_and_exceptions_to_azure_monitor():
+    """
+    Log all WARNING, ERROR, and CRITICAL messages to Azure Monitor, regardless of the module that
+    produced them and any logging levels set in other loggers.
+    """
+    always_log_handler = AzureLogHandler(connection_string=app_insights_connection_string)
+    always_log_handler.add_telemetry_processor(telemetry_processor_callback)
+    always_log_handler.setLevel(level=logging.WARNING)
+    logging.getLogger(None).addHandler(always_log_handler)
 
 
 log_handler = None
 
 
 def log_to_azure_monitor(logger_name):
+    """
+    Log all messages sent to a specific logger to Azure Monitor
+    """
     global log_handler
 
     if not log_handler:

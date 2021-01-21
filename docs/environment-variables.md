@@ -67,5 +67,3 @@ e.g. The environment variable `THIEF_SUBSCRIPTION_ID` is stored as a keyvault se
 | `THIEF_DEVICE_ID` | - | X | X | manual | string | registration ID and device id for test device |
 | `THIEF_SERVICE_POOL` | X | - | X | manual | string | name of service pool to use for service application |
 | `THIEF_REQUESTED_SERVICE_POOL` | - | X | X | manual | string | name of service pool to request for device application |
-| `THIEF_DEVICE_RUN_ID` | - | X | X | manual | string | option runId to use for _device_ executable.  If not specified, a guid will be generated |
-| `THIEF_SERVICE_RUN_ID` | X | - | X | manual | string | option runId to use for _service_ executable.  If not specified, a guid will be generated |
