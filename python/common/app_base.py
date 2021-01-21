@@ -153,14 +153,14 @@ class AppBase(object):
                     if worker.future.done():
                         try:
                             error = worker.future.exception(timeout=0)
-                        except Exception as e:
+                        except BaseException as e:
                             error = e
                         if not error:
                             error = Exception("{} thread exited prematurely".format(worker.name))
 
-                        logger.error(
+                        logger.critical(
                             "Future {} is complete because of exception {}".format(
-                                worker.name, error
+                                worker.name, str(error) or type(error)
                             ),
                             exc_info=error,
                         )
@@ -172,7 +172,7 @@ class AppBase(object):
                         error = Exception(
                             "Unexpected: Future {} is not running and not done".format(worker.name)
                         )
-                        logger.error(str(error), exc_info=error)
+                        logger.critical(str(error), exc_info=error)
                         worker.future = None
                         self.metrics.run_state = FAILED
                         self.metrics.exit_reason = str(error)
@@ -185,7 +185,7 @@ class AppBase(object):
                             worker.name, time.time() - worker.watchdog_epochtime
                         )
                         error = Exception(reason)
-                        logger.error(reason)
+                        logger.critical(reason)
                         self._dump_all_threads(worker.thread_id)
                         worker.future = None
                         self.metrics.run_state = FAILED
@@ -202,8 +202,10 @@ class AppBase(object):
                     else:
                         time.sleep(1)
 
-            except (KeyboardInterrupt, Exception) as e:
-                logger.error("Exception {} caught in main loop".format(e), exc_info=True)
+            except BaseException as e:
+                logger.critical(
+                    "Exception {} caught in main loop".format(str(e) or type(e)), exc_info=True
+                )
                 self.metrics.run_state = INTERRUPTED if isinstance(e, KeyboardInterrupt) else FAILED
                 self.metrics.exit_reason = "Main thread raised {}".format(type(e))
 
@@ -244,5 +246,5 @@ class AppBase(object):
             logger.info("Done disconnecting.  Exiting")
 
         if self.metrics.run_state == FAILED:
-            logger.error("Forcing exit")
+            logger.critical("Forcing exit: {}".format(self.metrics.exit_reason))
             raise Exception("Run failed: {}".format(self.metrics.exit_reason))
