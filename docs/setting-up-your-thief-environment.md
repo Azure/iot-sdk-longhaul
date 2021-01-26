@@ -52,7 +52,6 @@ Fetching THIEF_RUNS_RESOURCE_GROUP
 Fetching THIEF_USER_RESOURCE_ID
 Fetching THIEF_RESOURCE_GROUP
 Fetching THIEF_SUBSCRIPTION_ID
-Fetching THIEF_ACTIVE_DIRECTORY_TENANT
 Done fetching secrets
 (longhaul) bertk@bertk-hp:~/repos/longhaul$
 ```

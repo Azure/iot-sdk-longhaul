@@ -20,19 +20,25 @@ Since keyvault doesn't support underscores in secret names, keyvault secrets are
 e.g. The environment variable `THIEF_SUBSCRIPTION_ID` is stored as a keyvault seret named `THIEF-SUBSCRIPTION-ID`
 
 ## Azure resources
+
+These variables are used for management of Azure resources used by THIEF.
+See the [Azure resource usage](./azure-resources.md) document for details.
+
 | variable name | service | device | developer | source | format | meaning |
 | - | - | - | - | - | - | - |
 | `THIEF_SUBSCRIPTION_ID` | - | - | X | keyvault | GUID | Azure subscription ID holding all THIEF resources |
-| `THIEF_ACTIVE_DIRECTORY_TENANT` | - | - | X | keyvault | hostname | Azure active directory tenant.  Uesd to consturct portal URLs. |
 | `THIEF_RESOURCE_GROUP` | - | - | X | keyvault | string | Name of resource group containing all THIEF resources |
 | `THIEF_RUNS_RESOURCE_GROUP` | - | - | X | keyvault | string |  Name of resource group containing all THIEF container instances |
-| `THIEF_USER_RESOURCE_ID` | - | - | X | keyvault | string | Azure resource ID for the managed identity that container instances run uner.  Used to get access to keyvault secrets from inside container instances |
+| `THIEF_USER_RESOURCE_ID` | - | - | X | keyvault | string | Azure resource ID for the managed identity that container instances run under.  Used to get access to keyvault secrets from inside container instances |
+| `THIEF_KEYVAULT_NAME` | - | - | X | manual | string | Keyvault name for THIEF secrets.  This variable, combined with `THIEF_SUBSCRIPTION_ID` is used to bootstrap all other variables. |
+| `THIEF_SHARED_SUBSCRIPTION_ID` | - | - | X | keyvault | string | Subscription ID for Azure resources that are shared with all THIEF instances. |
+| `THIEF_SHARED_KEYVAULT_NAME` | - | - | X | keyvault | string | Key vault name for resources shared with all THIEF instances. |
+| `THIEF_SHARED_RESOURCE_GROUP` | - | - | X | keyvault | string | Name of resource group containing all shared THIEF resources. |
 
 ## App Insights
 | variable name | service | device | developer | source | format | meaning |
 | - | - | - | - | - | - | - |
 | `THIEF_APP_INSIGHTS_CONNECTION_STRING` | X | X | X | keyvault | connection string | Connection string used to push secrets into App Insights.  Starts wiuth `InstrumentationKey=`. |
-| `THIEF_APP_INSIGHTS_NAME` | - | - | X | keyvault | string | name of App Insights resouce |
 
 ## IoTHub Service
 | variable name | service | device | developer | source | format | meaning |

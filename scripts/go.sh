@@ -9,7 +9,7 @@ script_dir=$(cd "$(dirname "$0")" && pwd)
 LANGUAGE=py38
 DEVICE_VERSION=2.5.0
 SERVICE_VERSION=2.2.3
-TAG=jan14
+TAG=jan26
 POOL=${TAG}
 
 ${script_dir}/build-image.sh --language ${LANGUAGE} --library service --version ${SERVICE_VERSION} --tag ${TAG}
