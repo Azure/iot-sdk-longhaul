@@ -359,7 +359,9 @@ class DeviceApp(app_base.AppBase):
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
         if self.service_instance_id:
-            props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_INSTANCE_ID] = self.service_instance_id
+            props[Fields.Telemetry.THIEF][
+                Fields.Telemetry.SERVICE_INSTANCE_ID
+            ] = self.service_instance_id
         props[Fields.Telemetry.THIEF][Fields.Telemetry.RUN_ID] = run_id
 
         # This function only creates the message.  The caller needs to queue it up for sending.
@@ -505,7 +507,9 @@ class DeviceApp(app_base.AppBase):
                     )
 
                 else:
-                    azure_monitor.add_logging_properties(service_instance_id=received_service_instance_id)
+                    azure_monitor.add_logging_properties(
+                        service_instance_id=received_service_instance_id
+                    )
                     # It looks like a service app has decided to pair with us.  Set reported
                     # properties to "select" this service instance as our partner.
                     logger.info(

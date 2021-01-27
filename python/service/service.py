@@ -527,7 +527,9 @@ class ServiceApp(app_base.AppBase):
             requested_service_pool = pairing.get(
                 Fields.Reported.Pairing.REQUESTED_SERVICE_POOL, None
             )
-            received_service_instance_id = pairing.get(Fields.Reported.Pairing.SERVICE_INSTANCE_ID, None)
+            received_service_instance_id = pairing.get(
+                Fields.Reported.Pairing.SERVICE_INSTANCE_ID, None
+            )
 
             logger.info(
                 "Received pairing request for device {}: {}".format(device_id, pairing),

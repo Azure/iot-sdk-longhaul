@@ -78,7 +78,9 @@ def telemetry_processor_callback(envelope):
     if _run_id:
         envelope.data.baseData.properties[CustomDimensionNames.RUN_ID] = _run_id
     if _service_instance_id:
-        envelope.data.baseData.properties[CustomDimensionNames.SERVICE_INSTANCE_ID] = _service_instance_id
+        envelope.data.baseData.properties[
+            CustomDimensionNames.SERVICE_INSTANCE_ID
+        ] = _service_instance_id
     envelope.data.baseData.properties[CustomDimensionNames.SDK_LANGUAGE] = "python"
 
     envelope.data.baseData.properties[
