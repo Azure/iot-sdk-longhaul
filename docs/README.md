@@ -13,6 +13,7 @@ You do **not** need to configure your workstation if you want to:
 
 ## Organization and Configuration
 * [Overview of the runtime environment](./runtime.md)
+* [Azure resource usage](./azure-resources.md)
 * [Workstation configuration](./setting-up-your-thief-environment.md)
 
 ## Running Tests

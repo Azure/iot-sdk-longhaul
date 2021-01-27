@@ -1,0 +1,473 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string"
+    },
+    "prefix": {
+      "type": "string"
+    },
+    "thief_runs_resource_group": {
+      "type": "string"
+    },
+    "thief_app_insights_connection_string": {
+      "type": "string"
+    },
+    "thief_container_registry_host": {
+      "type": "string"
+    },
+    "thief_container_registry_password": {
+      "type": "string"
+    },
+    "thief_container_registry_shortname": {
+      "type": "string"
+    },
+    "thief_container_registry_user": {
+      "type": "string"
+    },
+    "user_principal_id": {
+      "type": "string"
+    },
+    "thief_shared_subscription_id": {
+      "type": "string"
+    },
+    "thief_shared_keyvault_name": {
+      "type": "string"
+    },
+    "thief_shared_resource_group": {
+      "type": "string"
+    }
+  },
+  "functions": [],
+  "resources": [
+    {
+      "type": "Microsoft.Devices/IotHubs",
+      "apiVersion": "2020-08-01",
+      "name": "[format('{0}-thief-hub', parameters('prefix'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "S2",
+        "capacity": 1
+      },
+      "properties": {
+        "eventHubEndpoints": {
+          "events": {
+            "retentionTimeInDays": 1,
+            "partitionCount": 4
+          }
+        },
+        "routing": {
+          "routes": [
+            {
+              "name": "twin-update-event",
+              "source": "TwinChangeEvents",
+              "condition": "true",
+              "endpointNames": [
+                "events"
+              ],
+              "isEnabled": true
+            }
+          ],
+          "fallbackRoute": {
+            "name": "$fallback",
+            "source": "DeviceMessages",
+            "condition": "true",
+            "endpointNames": [
+              "events"
+            ],
+            "isEnabled": true
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Devices/provisioningServices",
+      "apiVersion": "2020-03-01",
+      "name": "[format('{0}-thief-dps', parameters('prefix'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "S1",
+        "capacity": 1
+      },
+      "properties": {
+        "state": "Active",
+        "provisioningState": "Succeeded",
+        "iotHubs": [
+          {
+            "connectionString": "[format('HostName={0}.azure-devices.net;SharedAccessKeyName={1};SharedAccessKey={2}', format('{0}-thief-hub', parameters('prefix')), listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].keyName, listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].primaryKey)]",
+            "location": "[parameters('location')]"
+          }
+        ],
+        "allocationPolicy": "Hashed"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}-thief-kv', parameters('prefix'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "tenantId": "[subscription().tenantId]",
+        "accessPolicies": [
+          {
+            "tenantId": "[subscription().tenantId]",
+            "objectId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'thief-container-identity')).principalId]",
+            "permissions": {
+              "secrets": [
+                "get"
+              ]
+            }
+          },
+          {
+            "tenantId": "[subscription().tenantId]",
+            "objectId": "[parameters('user_principal_id')]",
+            "permissions": {
+              "keys": [
+                "get",
+                "list",
+                "update",
+                "create",
+                "import",
+                "delete",
+                "recover",
+                "backup",
+                "restore"
+              ],
+              "secrets": [
+                "get",
+                "list",
+                "set",
+                "delete",
+                "recover",
+                "backup",
+                "restore"
+              ],
+              "certificates": [
+                "get",
+                "list",
+                "update",
+                "create",
+                "import",
+                "delete",
+                "recover",
+                "managecontacts",
+                "manageissuers",
+                "getissuers",
+                "listissuers",
+                "setissuers",
+                "deleteissuers"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'thief-container-identity')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2018-11-30",
+      "name": "thief-container-identity",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-APP-INSIGHTS-CONNECTION-STRING', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_app_insights_connection_string')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-CONTAINER-REGISTRY-HOST', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_container_registry_host')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-CONTAINER-REGISTRY-PASSWORD', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_container_registry_password')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-CONTAINER-REGISTRY-SHORTNAME', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_container_registry_shortname')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-CONTAINER-REGISTRY-USER', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_container_registry_user')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-DEVICE-GROUP-SYMMETRIC-KEY', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "Will be populated by deploy.sh",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-DEVICE-ID-SCOPE', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[reference(resourceId('Microsoft.Devices/provisioningServices', format('{0}-thief-dps', parameters('prefix')))).idScope]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Devices/provisioningServices', format('{0}-thief-dps', parameters('prefix')))]",
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-DEVICE-PROVISIONING-HOST', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[reference(resourceId('Microsoft.Devices/provisioningServices', format('{0}-thief-dps', parameters('prefix')))).deviceProvisioningHostName]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Devices/provisioningServices', format('{0}-thief-dps', parameters('prefix')))]",
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-EVENTHUB-CONNECTION-STRING', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[format('Endpoint={0};SharedAccessKeyName={1};SharedAccessKey={2};EntityPath={3}', reference(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix')))).eventHubEndpoints.events.endpoint, listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].keyName, listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].primaryKey, reference(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix')))).eventHubEndpoints.events.path)]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix')))]",
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-EVENTHUB-CONSUMER-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "$default",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-IOTHUB-NAME', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[format('{0}-thief-hub', parameters('prefix'))]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix')))]",
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[resourceGroup().name]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-RUNS-RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_runs_resource_group')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-SERVICE-CONNECTION-STRING', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[format('HostName={0}.azure-devices.net;SharedAccessKeyName={1};SharedAccessKey={2}', format('{0}-thief-hub', parameters('prefix')), listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].keyName, listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].primaryKey)]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix')))]",
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-SUBSCRIPTION-ID', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[subscription().subscriptionId]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-USER-RESOURCE-ID', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'thief-container-identity')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'thief-container-identity')]",
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-SHARED-SUBSCRIPTION-ID', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_shared_subscription_id')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-SHARED-KEYVAULT-NAME', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_shared_keyvault_name')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-SHARED-RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_shared_resource_group')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "thief_subscription_id": {
+      "type": "string",
+      "value": "[subscription().subscriptionId]"
+    },
+    "thief_iothub_name": {
+      "type": "string",
+      "value": "[format('{0}-thief-hub', parameters('prefix'))]"
+    },
+    "thief_dps_instance_name": {
+      "type": "string",
+      "value": "[format('{0}-thief-dps', parameters('prefix'))]"
+    },
+    "thief_keyvault_name": {
+      "type": "string",
+      "value": "[format('{0}-thief-kv', parameters('prefix'))]"
+    }
+  }
+}
