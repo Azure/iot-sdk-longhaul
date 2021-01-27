@@ -31,7 +31,7 @@ class Fields(object):
         THIEF = "thief"
         CMD = "cmd"
         SERVICE_ACK_ID = "serviceAckId"
-        SERVICE_INSTANCE = "serviceInstance"
+        SERVICE_INSTANCE_ID = "serviceInstanceId"
         RUN_ID = "runId"
 
     class Reported(object):
@@ -50,7 +50,7 @@ class Fields(object):
 
         class Pairing(object):
             REQUESTED_SERVICE_POOL = "requestedServicePool"
-            SERVICE_INSTANCE = "serviceInstance"
+            SERVICE_INSTANCE_ID = "serviceInstanceId"
             RUN_ID = "runId"
 
         TEST_CONTENT = "testContent"
@@ -81,7 +81,7 @@ class Fields(object):
         PAIRING = "pairing"
 
         class Pairing(object):
-            SERVICE_INSTANCE = "serviceInstance"
+            SERVICE_INSTANCE_ID = "serviceInstanceId"
             RUN_ID = "runId"
 
     class C2d(object):
@@ -90,7 +90,7 @@ class Fields(object):
         """
 
         THIEF = "thief"
-        SERVICE_INSTANCE = "serviceInstance"
+        SERVICE_INSTANCE_ID = "serviceInstanceId"
         RUN_ID = "runId"
 
         SERVICE_ACKS = "serviceAcks"
@@ -266,7 +266,7 @@ class CustomDimensionNames(object):
     SDK_LANGUAGE_VERSION = "sdkLanguageVersion"
     SDK_VERSION = "sdkVersion"
 
-    SERVICE_INSTANCE = "serviceInstance"
+    SERVICE_INSTANCE_ID = "serviceInstanceId"
     RUN_ID = "runId"
     POOL_ID = "poolId"
 

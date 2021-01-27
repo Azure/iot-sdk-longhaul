@@ -84,7 +84,7 @@ If we look at the `nov12-03` test, we can see that the `exitReason` indicates a 
       "pairing": {
         "requestedServicePool": "bertk_desktop_pool",
         "runId": "c0dd64e5-8c00-47fa-8bd5-485f753f5d32",
-        "serviceInstance": "39c56dbd-8d9b-4bcf-9229-291a0f61bd7b"
+        "serviceInstanceId": "39c56dbd-8d9b-4bcf-9229-291a0f61bd7b"
       },
       "sessionMetrics": {
         "elapsedTime": "0:09:06.360313",

@@ -38,7 +38,7 @@ A few built-in Azure Monitor fields are overloaded:
 | `transport` | string | device | transport being used, if available One of `mqtt`, `mqttws`, `amqp`, or `amqpws` |
 | `deviceId` | string | both. |  device ID being used. Some service logs don't contain this. |
 | `runId` | string | both |  guid representing the run of the device app for this message. Some service logs don't contain this. |
-| `serviceInstance` | string | service |  guid representing the run of the service app for this message. (service apps only). |
+| `serviceInstanceId` | string | service |  guid representing the run of the service app for this message. (service apps only). |
 
 ### Notes on deviceId and RunId
 Some service app logs are device specific and contain `deviceId` and `runId` values.
