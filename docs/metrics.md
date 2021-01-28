@@ -68,6 +68,7 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
           "reportedPropertiesCountRemoved": 0,
           "reportedPropertiesCountRemovedButNotVerifiedByServiceApp": 0,
           "sendMessageCountExceptions": 0,
+          "sendMessageCountExtraServiceAcksReceived": 0,
           "sendMessageCountInBacklog": 0,
           "sendMessageCountNotReceivedByServiceApp": 0,
           "sendMessageCountSent": 0,
@@ -91,6 +92,7 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
 | `sendMessageCountExceptions` | integer | Count of test telemetry operations which failed.  Failures could be caused by raised exceptions or by messages withoug a matching `serviceAck`. |
 | `sendMessageCountInBacklog` | integer | Count of test telemetry messages currently queued in the  acklock.  Queued messages are scheduled to be sent, but not yet in transit. Not all test implementations queue in the client, so this metric may be meaningless in cases where queueing happens inside the SDK. |
 | `sendMessageCountNotReceivedByServiceApp` | integer | Count of test telemetry messages which were sent, ack'ed by the transport (`PUBACK`), but not received by the service (no `serviceAck`) |
+| `sendMessageCountExtraServiceAcksReceived` | integer | Count of service acks received that aren't being waited for.  Probably caused by duplicate c2d messages because of QOS 1 |
 
 ## System Health Metrics
 
