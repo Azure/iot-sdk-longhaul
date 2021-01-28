@@ -22,7 +22,7 @@ All of these resources are under the subscription `THIEF_SHARED_SUBSCRIPTION_ID`
 `THIEF_SHARED_KEYVAULT_NAME` has a keyvault with secrets for all shared resources.
 This kevault is used to seed the instance keyvault and many of the secrets in this keyvault are duplicated in the instance keyvault
 
-`THIEF_APP_INSIGHTS_CONNECTION_STRING` is the entrypoint for the shared App Insights intance.
+`THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY` is the entrypoint for the shared App Insights intance.
 
 `THIEF_CONTAINER_REGISTRY_HOST` is the shared container registry.
 

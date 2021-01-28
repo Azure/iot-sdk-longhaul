@@ -5,7 +5,7 @@
 param location string
 param prefix string
 param thief_runs_resource_group string
-param thief_app_insights_connection_string string
+param thief_app_insights_instrumentation_key string
 param thief_container_registry_host string
 param thief_container_registry_password string
 param thief_container_registry_shortname string
@@ -147,10 +147,10 @@ resource thief_container_identity 'Microsoft.ManagedIdentity/userAssignedIdentit
   location: location
 }
 
-resource secret_THIEF_APP_INSIGHTS_CONNECTION_STRING 'Microsoft.KeyVault/vaults/secrets@2016-10-01' = {
-  name: '${thief_key_vault.name}/THIEF-APP-INSIGHTS-CONNECTION-STRING'
+resource secret_THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY 'Microsoft.KeyVault/vaults/secrets@2016-10-01' = {
+  name: '${thief_key_vault.name}/THIEF-APP-INSIGHTS-INSTRUMENTATION-KEY'
   properties: {
-    value: thief_app_insights_connection_string
+    value: thief_app_insights_instrumentation_key
     attributes: {
       enabled: true
     }

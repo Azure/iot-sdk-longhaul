@@ -11,7 +11,7 @@
     "thief_runs_resource_group": {
       "type": "string"
     },
-    "thief_app_insights_connection_string": {
+    "thief_app_insights_instrumentation_key": {
       "type": "string"
     },
     "thief_container_registry_host": {
@@ -182,9 +182,9 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-APP-INSIGHTS-CONNECTION-STRING', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/THIEF-APP-INSIGHTS-INSTRUMENTATION-KEY', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
-        "value": "[parameters('thief_app_insights_connection_string')]",
+        "value": "[parameters('thief_app_insights_instrumentation_key')]",
         "attributes": {
           "enabled": true
         }
