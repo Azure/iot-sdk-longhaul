@@ -14,7 +14,8 @@ stats = stats_module.stats
 view_manager = stats.view_manager
 stats_recorder = stats.stats_recorder
 
-app_insights_connection_string = os.environ["THIEF_APP_INSIGHTS_CONNECTION_STRING"]
+app_insights_instrumentation_key = os.environ["THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY"]
+app_insights_connection_string = "InstrumentationKey={}".format(app_insights_instrumentation_key)
 
 
 def json_name_to_metric_name(metric_name):

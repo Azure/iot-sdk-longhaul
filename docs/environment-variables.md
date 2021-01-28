@@ -38,7 +38,7 @@ See the [Azure resource usage](./azure-resources.md) document for details.
 ## App Insights
 | variable name | service | device | developer | source | format | meaning |
 | - | - | - | - | - | - | - |
-| `THIEF_APP_INSIGHTS_CONNECTION_STRING` | X | X | X | keyvault | connection string | Connection string used to push secrets into App Insights.  Starts wiuth `InstrumentationKey=`. |
+| `THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY` | X | X | X | keyvault | guid | Instrumentation key used to push secrets into App Insights. |
 
 ## IoTHub Service
 | variable name | service | device | developer | source | format | meaning |
