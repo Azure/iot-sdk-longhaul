@@ -30,7 +30,7 @@ eventhub_connection_string = os.environ["THIEF_EVENTHUB_CONNECTION_STRING"]
 eventhub_consumer_group = os.environ["THIEF_EVENTHUB_CONSUMER_GROUP"]
 service_pool = os.environ["THIEF_SERVICE_POOL"]
 
-service_instance = str(uuid.uuid4())
+service_instance_id = str(uuid.uuid4())
 
 # set default logging which will only go to the console
 logging.basicConfig(level=logging.WARNING)
@@ -41,7 +41,7 @@ logger = logging.getLogger("thief.{}".format(__name__))
 # configure which traces and events go to Azure Monitor
 azure_monitor.add_logging_properties(
     client_type="service",
-    service_instance=service_instance,
+    service_instance_id=service_instance_id,
     hub=iothub_name,
     sdk_version=azure.iot.hub.constant.VERSION,
     pool_id=service_pool,
@@ -197,7 +197,7 @@ class ServiceApp(app_base.AppBase):
 
             body = event.body_as_json()
             thief = body.get(Fields.Telemetry.THIEF, {})
-            received_service_instance = thief.get(Fields.Telemetry.SERVICE_INSTANCE, None)
+            received_service_instance_id = thief.get(Fields.Telemetry.SERVICE_INSTANCE_ID, None)
             received_run_id = thief.get(Fields.Telemetry.RUN_ID, None)
 
             with self.pairing_list_lock:
@@ -214,7 +214,7 @@ class ServiceApp(app_base.AppBase):
                 if device_data:
                     self.incoming_twin_changes.put(event)
 
-            elif received_run_id and received_service_instance:
+            elif received_run_id and received_service_instance_id:
                 cmd = thief.get(Fields.Telemetry.CMD, None)
 
                 with self.pairing_list_lock:
@@ -388,7 +388,7 @@ class ServiceApp(app_base.AppBase):
                         {
                             Fields.C2d.THIEF: {
                                 Fields.C2d.CMD: Types.Message.SERVICE_ACK_RESPONSE,
-                                Fields.C2d.SERVICE_INSTANCE: service_instance,
+                                Fields.C2d.SERVICE_INSTANCE_ID: service_instance_id,
                                 Fields.C2d.RUN_ID: device_data.run_id,
                                 Fields.C2d.SERVICE_ACKS: service_acks[device_id],
                             }
@@ -457,7 +457,7 @@ class ServiceApp(app_base.AppBase):
                         {
                             Fields.C2d.THIEF: {
                                 Fields.C2d.CMD: Types.Message.TEST_C2D,
-                                Fields.C2d.SERVICE_INSTANCE: service_instance,
+                                Fields.C2d.SERVICE_INSTANCE_ID: service_instance_id,
                                 Fields.C2d.RUN_ID: device_data.run_id,
                                 Fields.C2d.TEST_C2D_MESSAGE_INDEX: device_data.next_c2d_message_index,
                             }
@@ -527,7 +527,9 @@ class ServiceApp(app_base.AppBase):
             requested_service_pool = pairing.get(
                 Fields.Reported.Pairing.REQUESTED_SERVICE_POOL, None
             )
-            received_service_instance = pairing.get(Fields.Reported.Pairing.SERVICE_INSTANCE, None)
+            received_service_instance_id = pairing.get(
+                Fields.Reported.Pairing.SERVICE_INSTANCE_ID, None
+            )
 
             logger.info(
                 "Received pairing request for device {}: {}".format(device_id, pairing),
@@ -550,18 +552,18 @@ class ServiceApp(app_base.AppBase):
             # Ignore events if they don't even have a runId property.
             elif received_run_id:
 
-                if device_data and received_service_instance != service_instance:
+                if device_data and received_service_instance_id != service_instance_id:
                     # if device_data, that means we think we're paired.  If the properties
                     # tell us otherwise, we assume the pairing is no longer valid.
                     logger.info(
                         "Device {} deviced to pair with service instance {}.  Unpairing".format(
-                            device_id, received_service_instance
+                            device_id, received_service_instance_id
                         ),
                         extra=custom_props(device_id, received_run_id),
                     )
                     self.remove_device_from_pairing_list(device_id)
 
-                elif received_service_instance == service_instance:
+                elif received_service_instance_id == service_instance_id:
                     # If the device has selected us, the pairing is complete.
                     logger.info(
                         "Device {} pairing complete".format(device_id),
@@ -576,8 +578,8 @@ class ServiceApp(app_base.AppBase):
                         with self.pairing_list_lock:
                             self.paired_devices[device_id] = device_data
 
-                elif received_service_instance is None:
-                    # If the device hasn't selected a serviceInstance value yet, we will try to
+                elif received_service_instance_id is None:
+                    # If the device hasn't selected a serviceInstanceId value yet, we will try to
                     # pair with it.
                     logger.info(
                         "Device {} attempting to pair".format(device_id),
@@ -587,7 +589,7 @@ class ServiceApp(app_base.AppBase):
                     desired = {
                         Fields.Desired.THIEF: {
                             Fields.Desired.PAIRING: {
-                                Fields.Desired.Pairing.SERVICE_INSTANCE: service_instance,
+                                Fields.Desired.Pairing.SERVICE_INSTANCE_ID: service_instance_id,
                                 Fields.Desired.Pairing.RUN_ID: received_run_id,
                             }
                         }
@@ -599,7 +601,7 @@ class ServiceApp(app_base.AppBase):
                         )
 
                 else:
-                    # The device chose someone else since received_service_instance != service_instance.
+                    # The device chose someone else since received_service_instance_id != service_instance_id.
                     # Ignore this change.
                     pass
 

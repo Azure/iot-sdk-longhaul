@@ -11,7 +11,7 @@ from opencensus.ext.azure.log_exporter import AzureLogHandler
 app_insights_connection_string = os.environ["THIEF_APP_INSIGHTS_CONNECTION_STRING"]
 
 _client_type = None
-_service_instance = None
+_service_instance_id = None
 _run_id = None
 _hub = None
 _sdk_version = None
@@ -33,14 +33,14 @@ def add_logging_properties(
     hub=_default_value,
     sdk_version=_default_value,
     device_id=_default_value,
-    service_instance=_default_value,
+    service_instance_id=_default_value,
     pool_id=_default_value,
     transport=_default_value,
 ):
     """
     Add customDimension values which will be applied to all Azure Monitor records
     """
-    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport, _service_instance
+    global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport, _service_instance_id
     if client_type != _default_value:
         _client_type = client_type
     if run_id != _default_value:
@@ -51,8 +51,8 @@ def add_logging_properties(
         _sdk_version = sdk_version
     if device_id != _default_value:
         _device_id = device_id
-    if service_instance != _default_value:
-        _service_instance = service_instance
+    if service_instance_id != _default_value:
+        _service_instance_id = service_instance_id
     if pool_id != _default_value:
         _pool_id = pool_id
     if transport != _default_value:
@@ -66,8 +66,8 @@ def telemetry_processor_callback(envelope):
     """
     global _client_type, _run_id, _hub, _sdk_version, _device_id, _pool_id, _transport
     envelope.tags["ai.cloud.role"] = _client_type
-    if _service_instance:
-        envelope.tags["ai.cloud.roleInstance"] = _service_instance
+    if _service_instance_id:
+        envelope.tags["ai.cloud.roleInstance"] = _service_instance_id
     else:
         envelope.tags["ai.cloud.roleInstance"] = _run_id
     envelope.data.baseData.properties[CustomDimensionNames.OS_TYPE] = platform.system()
@@ -77,8 +77,10 @@ def telemetry_processor_callback(envelope):
         envelope.data.baseData.properties[CustomDimensionNames.HUB] = _hub
     if _run_id:
         envelope.data.baseData.properties[CustomDimensionNames.RUN_ID] = _run_id
-    if _service_instance:
-        envelope.data.baseData.properties[CustomDimensionNames.SERVICE_INSTANCE] = _service_instance
+    if _service_instance_id:
+        envelope.data.baseData.properties[
+            CustomDimensionNames.SERVICE_INSTANCE_ID
+        ] = _service_instance_id
     envelope.data.baseData.properties[CustomDimensionNames.SDK_LANGUAGE] = "python"
 
     envelope.data.baseData.properties[

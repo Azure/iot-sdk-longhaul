@@ -146,7 +146,7 @@ class DeviceApp(app_base.AppBase):
         self.device_id = None
         self.metrics = DeviceRunMetrics()
         self.config = device_run_config
-        self.service_instance = None
+        self.service_instance_id = None
         # for service_acks
         self.service_ack_list_lock = threading.Lock()
         self.service_ack_wait_list = {}
@@ -358,8 +358,10 @@ class DeviceApp(app_base.AppBase):
 
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
-        if self.service_instance:
-            props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_INSTANCE] = self.service_instance
+        if self.service_instance_id:
+            props[Fields.Telemetry.THIEF][
+                Fields.Telemetry.SERVICE_INSTANCE_ID
+            ] = self.service_instance_id
         props[Fields.Telemetry.THIEF][Fields.Telemetry.RUN_ID] = run_id
 
         # This function only creates the message.  The caller needs to queue it up for sending.
@@ -409,13 +411,13 @@ class DeviceApp(app_base.AppBase):
         like this:
 
         1. Device sets reported properties in `properties/reported/thief/pairing` which indicates
-            that it doesn't have a service app (by settign `serviceInstance` = None).
-        2. An available service sets `properties/desired/thief/pairing/serviceInstance` to the service
+            that it doesn't have a service app (by settign `serviceInstanceId` = None).
+        2. An available service sets `properties/desired/thief/pairing/serviceInstanceId` to the service
             app's `runId` value
-        3. The device sets `properties/reported/thief/pairing/serviceInstance` to the serivce app's
+        3. The device sets `properties/reported/thief/pairing/serviceInstanceId` to the serivce app's
             `runId` value.
 
-        Once the device starts sending telemetry with `thief/serviceInstance` set to the service app's
+        Once the device starts sending telemetry with `thief/serviceInstanceId` set to the service app's
             `runId` value, the pairing is complete.
         """
 
@@ -434,7 +436,7 @@ class DeviceApp(app_base.AppBase):
                 msg = None
 
             send_pairing_request = False
-            if not msg and not self.service_instance:
+            if not msg and not self.service_instance_id:
                 if not pairing_start_epochtime:
                     self.pairing_complete = False
                     pairing_start_epochtime = time.time()
@@ -465,7 +467,7 @@ class DeviceApp(app_base.AppBase):
                     Fields.Reported.THIEF: {
                         Fields.Reported.PAIRING: {
                             Fields.Reported.Pairing.REQUESTED_SERVICE_POOL: requested_service_pool,
-                            Fields.Reported.Pairing.SERVICE_INSTANCE: None,
+                            Fields.Reported.Pairing.SERVICE_INSTANCE_ID: None,
                             Fields.Reported.Pairing.RUN_ID: run_id,
                         }
                     }
@@ -480,20 +482,20 @@ class DeviceApp(app_base.AppBase):
 
                 pairing = msg.get(Fields.Desired.THIEF, {}).get(Fields.Desired.PAIRING, {})
                 received_run_id = pairing.get(Fields.Desired.Pairing.RUN_ID, None)
-                received_service_instance = pairing.get(
-                    Fields.Desired.Pairing.SERVICE_INSTANCE, None
+                received_service_instance_id = pairing.get(
+                    Fields.Desired.Pairing.SERVICE_INSTANCE_ID, None
                 )
 
-                if self.service_instance:
+                if self.service_instance_id:
                     # It's possible that a second service app tried to pair with us after we
                     # already chose someone else.  Ignore this
                     logger.info("Already paired.  Ignoring.")
 
-                elif not received_run_id or not received_service_instance:
+                elif not received_run_id or not received_service_instance_id:
                     # Or maybe something is wrong with the desired properties.  Probably a
                     # service app that goes by different rules. Ignoring it is better than
                     # crashing.
-                    logger.info("runId and/or serviceInstance missing.  Ignoring.")
+                    logger.info("runId and/or serviceInstanceId missing.  Ignoring.")
 
                 elif received_run_id != run_id:
                     # Another strange case.  A service app is trying to pair with our device_id,
@@ -505,15 +507,17 @@ class DeviceApp(app_base.AppBase):
                     )
 
                 else:
-                    azure_monitor.add_logging_properties(service_instance=received_service_instance)
+                    azure_monitor.add_logging_properties(
+                        service_instance_id=received_service_instance_id
+                    )
                     # It looks like a service app has decided to pair with us.  Set reported
                     # properties to "select" this service instance as our partner.
                     logger.info(
                         "Service app {} claimed this device instance".format(
-                            received_service_instance
+                            received_service_instance_id
                         )
                     )
-                    self.service_instance = received_service_instance
+                    self.service_instance_id = received_service_instance_id
                     self.pairing_complete = True
                     pairing_start_epochtime = None
                     pairing_last_request_epochtime = None
@@ -521,7 +525,7 @@ class DeviceApp(app_base.AppBase):
                     props = {
                         Fields.Reported.THIEF: {
                             Fields.Reported.PAIRING: {
-                                Fields.Reported.Pairing.SERVICE_INSTANCE: self.service_instance,
+                                Fields.Reported.Pairing.SERVICE_INSTANCE_ID: self.service_instance_id,
                                 Fields.Reported.Pairing.RUN_ID: run_id,
                             }
                         }
@@ -536,13 +540,13 @@ class DeviceApp(app_base.AppBase):
         """
         trigger the pairing process
         """
-        self.service_instance = None
+        self.service_instance_id = None
 
     def is_pairing_complete(self):
         """
         return True if the pairing process is complete
         """
-        return self.service_instance and self.pairing_complete
+        return self.service_instance_id and self.pairing_complete
 
     def on_pairing_complete(self):
         """
@@ -773,9 +777,9 @@ class DeviceApp(app_base.AppBase):
                 if (
                     thief
                     and thief[Fields.C2d.RUN_ID] == run_id
-                    and thief[Fields.C2d.SERVICE_INSTANCE] == self.service_instance
+                    and thief[Fields.C2d.SERVICE_INSTANCE_ID] == self.service_instance_id
                 ):
-                    # We only inspect messages that have `thief/runId` and `thief/serviceInstance` set to the expected values
+                    # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
                     cmd = thief[Fields.C2d.CMD]
                     if cmd == Types.Message.SERVICE_ACK_RESPONSE:
                         # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`

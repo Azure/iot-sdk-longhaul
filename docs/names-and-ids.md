@@ -9,7 +9,7 @@ There are a number of names and IDs used in THIEF.  This table describes some of
 | `servicePool` | string | Name of pool that a service app belongs to. |
 | `requestedServicePool` | string | Name of pool that a device app would like to pair with. |
 | `runId` | guid | Guid representing a single run of a device app.  Regenerated every time the device app launches. |
-| `serviceInstance` | guid | Guid representing a single run of a service app.  Regenerated every time the service app launches. |
+| `serviceInstanceId` | guid | Guid representing a single run of a service app.  Regenerated every time the service app launches. |
 | `serviceAckId` | guid | Guid used to represent the ACK of a thief operation. |
 
 ## servicePool notes
