@@ -100,6 +100,7 @@ class DeviceRunMetrics(object):
         self.send_message_count_unacked = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
         self.send_message_count_received_by_service_app = ThreadSafeCounter()
+        self.send_message_count_extra_service_acks_received = ThreadSafeCounter()
 
         self.receive_c2d_count_received = ThreadSafeCounter()
 
@@ -222,6 +223,11 @@ class DeviceApp(app_base.AppBase):
             "Count of messages sent to iothub and acked by the transport, but receipt not (yet) verified via service sdk",
             "message(s)",
         )
+        self.reporter.add_integer_measurement(
+            MetricNames.SEND_MESSAGE_COUNT_EXTRA_SERVICE_ACKS_RECEIVED,
+            "Number of 'extra' service acks received -- probably duplicte messages",
+            "message(s)",
+        )
 
         # -------------------
         # Receive c2d metrics
@@ -321,6 +327,7 @@ class DeviceApp(app_base.AppBase):
             MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG: self.outgoing_test_message_queue.qsize(),
             MetricNames.SEND_MESSAGE_COUNT_UNACKED: self.metrics.send_message_count_unacked.get_count(),
             MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED: sent - received_by_service_app,
+            MetricNames.SEND_MESSAGE_COUNT_EXTRA_SERVICE_ACKS_RECEIVED: self.metrics.send_message_count_extra_service_acks_received.get_count(),
             MetricNames.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
             MetricNames.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
             MetricNames.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
@@ -645,20 +652,31 @@ class DeviceApp(app_base.AppBase):
                     self.metrics.send_message_count_received_by_service_app.increment()
 
                     with self.service_ack_list_lock:
-                        wait_info = self.service_ack_wait_list[service_ack_id]
+                        wait_info = self.service_ack_wait_list.get(service_ack_id, None)
 
-                    with self.reporter_lock:
-                        self.reporter.set_metrics_from_dict(
-                            {
-                                MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND: (
-                                    wait_info.send_epochtime - wait_info.queue_epochtime
-                                )
-                                * 1000,
-                                MetricNames.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
-                                - wait_info.send_epochtime,
-                            }
+                    if wait_info:
+                        with self.reporter_lock:
+                            self.reporter.set_metrics_from_dict(
+                                {
+                                    MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND: (
+                                        wait_info.send_epochtime - wait_info.queue_epochtime
+                                    )
+                                    * 1000,
+                                    MetricNames.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
+                                    - wait_info.send_epochtime,
+                                }
+                            )
+                            self.reporter.record()
+                    else:
+                        # If we don't have a wait_info struct for this service_ack_id, we assume that
+                        # The MQTT "at least once" part of QOS-1 means that we received the ack
+                        # once before and now we're receiving it again.
+                        self.metrics.send_message_count_extra_service_acks_received.increment()
+                        logger.info(
+                            "Received extra serviceAck with serviceAckId = {}".format(
+                                service_ack_id
+                            )
                         )
-                        self.reporter.record()
 
                 # This function only queues the message.  A send_message_thread instance will pick
                 # it up and send it.
