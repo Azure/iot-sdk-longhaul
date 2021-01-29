@@ -2,18 +2,81 @@
 // Licensed under the MIT license. See LICENSE file in the project root for
 // full license information.
 
-param location string
-param prefix string
-param thief_runs_resource_group string
-param thief_app_insights_instrumentation_key string
-param thief_container_registry_host string
-param thief_container_registry_password string
-param thief_container_registry_shortname string
-param thief_container_registry_user string
-param user_principal_id string
-param thief_shared_subscription_id string
-param thief_shared_keyvault_name string
-param thief_shared_resource_group string
+param location string {
+  metadata: {
+    description: 'Azure region to deploy resources into (e.g. westus2, eastus, etc)'
+  }
+}
+param prefix string {
+  // maxLength=15 because "<prefix>-thief-kv" cannot be more than 24 characters
+  minLength: 1
+  maxLength: 15
+  metadata: {
+    description: 'Prefix string to add to all resource names.  For example, if prefix is "bob", then this will deploy resources with names that start with "bob"'
+  }
+}
+param thief_runs_resource_group string {
+  minLength: 3
+  maxLength: 90
+  metadata: {
+    description: 'Name of the (already created) resource group that we plan to deploy container instances into.'
+  }
+}
+param thief_app_insights_instrumentation_key string {
+  minLength: 36
+  maxLength: 36
+  metadata: {
+    description: 'App Insights instrumentation key that we plan to use for monitoring.  Inherited from shared resources.'
+  }
+}
+param thief_container_registry_host string {
+  metadata: {
+    description: 'Host name for the container registry that we plan to use.  Inherited from shared resources.'
+  }
+}
+param thief_container_registry_password string {
+  metadata: {
+    description: 'Password for the container registry that we plan to use.  Inherited from shared resources.'
+  }
+}
+param thief_container_registry_shortname string {
+  metadata: {
+    description: 'short name for the container registry that we plan to use (probably the hostname without the azurecr.io suffix).  Inherited from shared resources.'
+  }
+}
+param thief_container_registry_user string {
+  metadata: {
+    description: 'User name for the container registry that we plan to use.  Inherited from shared resources.'
+  }
+}
+param user_principal_id string {
+  minLength: 36
+  maxLength: 36
+  metadata: {
+    description: 'Principal ID for the person making the deployment.  Used to give that permission access to the keyvault that we create'
+  }
+}
+param thief_shared_subscription_id string {
+  minLength: 36
+  maxLength: 36
+  metadata: {
+    description: 'Subscription ID containing all of our shared resources.  Inherited from shared resources.'
+  }
+}
+param thief_shared_keyvault_name string {
+  minLength: 3
+  maxLength: 24
+  metadata: {
+    description: 'Name of keyvault that contains all of our shared resources.  Inherited from shared resources.'
+  }
+}
+param thief_shared_resource_group string {
+  minLength: 3
+  maxLength: 90
+  metadata: {
+    description: 'Name of resource group that holds all of our shared resources.  Inherited from shared resources.'
+  }
+}
 
 resource thief_iot_hub 'Microsoft.Devices/IotHubs@2020-08-01' = {
   name: '${prefix}-thief-hub'
@@ -102,39 +165,13 @@ resource thief_key_vault 'Microsoft.KeyVault/vaults@2016-10-01' = {
         objectId: user_principal_id
         permissions: {
           keys: [
-            'get'
-            'list'
-            'update'
-            'create'
-            'import'
-            'delete'
-            'recover'
-            'backup'
-            'restore'
+            'all'
           ]
           secrets: [
-            'get'
-            'list'
-            'set'
-            'delete'
-            'recover'
-            'backup'
-            'restore'
+            'all'
           ]
           certificates: [
-            'get'
-            'list'
-            'update'
-            'create'
-            'import'
-            'delete'
-            'recover'
-            'managecontacts'
-            'manageissuers'
-            'getissuers'
-            'listissuers'
-            'setissuers'
-            'deleteissuers'
+            'all'
           ]
         }
       }
