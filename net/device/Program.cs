@@ -24,7 +24,7 @@ namespace ThiefDevice
         {
             _commonProperties.Add(RunId, Guid.NewGuid().ToString());
             _commonProperties.Add(SdkLanguage, ".NET");
-            _commonProperties.Add(SdkVersion, "1.27.0");
+            _commonProperties.Add(SdkVersion, "1.34.0");
 
             _settings = InitializeSettings();
             _logger = InitializeLogging(_settings.DeviceConnectionString, _settings.AiKey, _settings.Transport);
