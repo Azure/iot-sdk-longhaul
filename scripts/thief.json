@@ -10,18 +10,24 @@
     },
     "prefix": {
       "type": "string",
+      "minLength": 1,
+      "maxLength": 15,
       "metadata": {
         "description": "Prefix string to add to all resource names.  For example, if prefix is \"bob\", then this will deploy resources with names that start with \"bob\""
       }
     },
     "thief_runs_resource_group": {
       "type": "string",
+      "minLength": 3,
+      "maxLength": 90,
       "metadata": {
         "description": "Name of the (already created) resource group that we plan to deploy container instances into."
       }
     },
     "thief_app_insights_instrumentation_key": {
       "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
       "metadata": {
         "description": "App Insights instrumentation key that we plan to use for monitoring.  Inherited from shared resources."
       }
@@ -52,24 +58,32 @@
     },
     "user_principal_id": {
       "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
       "metadata": {
         "description": "Principal ID for the person making the deployment.  Used to give that permission access to the keyvault that we create"
       }
     },
     "thief_shared_subscription_id": {
       "type": "string",
+      "minLength": 36,
+      "maxLength": 36,
       "metadata": {
         "description": "Subscription ID containing all of our shared resources.  Inherited from shared resources."
       }
     },
     "thief_shared_keyvault_name": {
       "type": "string",
+      "minLength": 3,
+      "maxLength": 24,
       "metadata": {
         "description": "Name of keyvault that contains all of our shared resources.  Inherited from shared resources."
       }
     },
     "thief_shared_resource_group": {
       "type": "string",
+      "minLength": 3,
+      "maxLength": 90,
       "metadata": {
         "description": "Name of resource group that holds all of our shared resources.  Inherited from shared resources."
       }

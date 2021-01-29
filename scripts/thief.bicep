@@ -8,16 +8,23 @@ param location string {
   }
 }
 param prefix string {
+  // maxLength=15 because "<prefix>-thief-kv" cannot be more than 24 characters
+  minLength: 1
+  maxLength: 15
   metadata: {
     description: 'Prefix string to add to all resource names.  For example, if prefix is "bob", then this will deploy resources with names that start with "bob"'
   }
 }
 param thief_runs_resource_group string {
+  minLength: 3
+  maxLength: 90
   metadata: {
     description: 'Name of the (already created) resource group that we plan to deploy container instances into.'
   }
 }
 param thief_app_insights_instrumentation_key string {
+  minLength: 36
+  maxLength: 36
   metadata: {
     description: 'App Insights instrumentation key that we plan to use for monitoring.  Inherited from shared resources.'
   }
@@ -43,21 +50,29 @@ param thief_container_registry_user string {
   }
 }
 param user_principal_id string {
+  minLength: 36
+  maxLength: 36
   metadata: {
     description: 'Principal ID for the person making the deployment.  Used to give that permission access to the keyvault that we create'
   }
 }
 param thief_shared_subscription_id string {
+  minLength: 36
+  maxLength: 36
   metadata: {
     description: 'Subscription ID containing all of our shared resources.  Inherited from shared resources.'
   }
 }
 param thief_shared_keyvault_name string {
+  minLength: 3
+  maxLength: 24
   metadata: {
     description: 'Name of keyvault that contains all of our shared resources.  Inherited from shared resources.'
   }
 }
 param thief_shared_resource_group string {
+  minLength: 3
+  maxLength: 90
   metadata: {
     description: 'Name of resource group that holds all of our shared resources.  Inherited from shared resources.'
   }
