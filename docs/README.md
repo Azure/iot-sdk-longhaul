@@ -32,6 +32,11 @@ You do **not** need to configure your workstation if you want to:
 * [Test control properties](./test-control.md)
 * [Test content properties](./test-content.md)
 
+## Feature testing
+* [Testing telemetry](./testing-telemetry.md)
+* [Testing reported properties](./testing-reported-properties.md)
+* [Testing C2D](./testing-c2d.md)
+
 ## Azure Monitor Details
 * [Azure Monitor Custom Dimensions](./azure-monitor-custom-dimensions.md)
 * [Azure Monitor Events](./azure-monitor-events.md)

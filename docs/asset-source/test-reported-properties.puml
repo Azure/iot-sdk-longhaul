@@ -1,0 +1,19 @@
+@startuml
+participant "Device App" as D
+participant "Service App" as S
+
+title **Reported property testing**
+
+D -> S: SetReportedProperties({\n\ttestContent: {\n\t\tprop<x>:{\n\t\t\taddServiceAckId: <guid1>\n\t\t\tremoveServiceAckId: <guid2>\n}})
+note left:  Device sets reported property named prop<x>,\nrequesting acks on add and delete
+
+S -> D: SendC2d(\n\tcmd="serviceAckResponse", \n\tserviceAcks=[<guid1>,...]\n)
+note right: Service sends serviceAckResponse,\nindicating that it saw prop<x> added
+
+D -> S: SetReportedProperties({\n\ttestContent: {\n\t\tprop<x>:None\n}})
+note left: Device removes reported property named prop<x>
+
+S -> D: SendC2d(\n\tcmd="serviceAckResponse", \n\tserviceAcks=[<guid2>,...]\n)
+note right: Service sends serviceAckResponse,\nindicating that it saw prop<x> removed
+
+@enduml
