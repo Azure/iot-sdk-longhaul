@@ -1,0 +1,20 @@
+@startuml
+
+participant "Device App" as D
+participant "Service App" as S
+
+title **Pairing**
+
+D -> S: Update reported properties({\n\tserviceInstanceId:None, \n\trequestedServicePool:<poolName>, \n\trunId:<runId>\n})
+note left: Device sets reported properties to request pairing\nwith service in service pool called <poolName>
+
+S -> D: Update desired properties({\n\tserviceInstanceId: <instanceId>, \n\trunId: <runId>\n})
+note right: Service sets desired properties to notify deivce that it is available for pairing
+
+D -> S: Update reported properties({\n\tserviceInstanceId: <instanceId>\n})
+note left: Device sets reported properties to notify service that it accepts the pairing
+
+D -> S: SendTelemetry({\n\tserviceInstanceId: <instanceId>\n})
+note left: Device begins normal operation
+
+@enduml

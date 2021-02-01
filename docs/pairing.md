@@ -7,6 +7,8 @@ The pairing process is a handshake with 4 steps, all done with reported and desi
 
 Once the device app sets its `serviceInstanceId` value, the pairing is complete.
 
+![pairing UML](./assets/pairing.png)
+
 
 ## Step 1: device sets reported properties to start pairing.
 
