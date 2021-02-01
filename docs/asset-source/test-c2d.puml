@@ -14,5 +14,5 @@ S -> D: SendC2d({\n\tcmd: "testC2d"\n\ttestC2dMessageIndex: 2\n})
 note left: No device response is necessary
 
 S -> D: SendC2d({\n\tcmd: "testC2d"\n\ttestC2dMessageIndex: 3\n})
-
+note left: Device app uses testC2dMessageIndex to \nverify that all messages are recevied.\n\nMissing messages are logged and the \ntest fails if the number of missing \nmessages exceeds the allowed limit.
 @enduml
