@@ -49,7 +49,6 @@ azure_monitor.add_logging_properties(
     pool_id=service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
-azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")

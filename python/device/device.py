@@ -63,7 +63,6 @@ azure_monitor.add_logging_properties(
     pool_id=requested_service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
-azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
 
 
@@ -1178,7 +1177,7 @@ class DeviceApp(app_base.AppBase):
 if __name__ == "__main__":
     try:
         if len(sys.argv) > 1:
-            run_reason =  " ".join(sys.argv[1:])
+            run_reason = " ".join(sys.argv[1:])
         DeviceApp().main()
     except BaseException as e:
         logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)
