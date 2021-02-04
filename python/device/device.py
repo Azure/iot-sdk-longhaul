@@ -9,6 +9,7 @@ import json
 import datetime
 import threading
 import pprint
+import sys
 from concurrent.futures import ThreadPoolExecutor
 import dps
 import queue
@@ -26,6 +27,7 @@ from thief_constants import (
     Events,
     MetricNames,
     DeviceSettings as Settings,
+    CustomDimensionNames,
 )
 
 # TODO: exit service when device stops responding
@@ -38,6 +40,9 @@ id_scope = os.environ["THIEF_DEVICE_ID_SCOPE"]
 group_symmetric_key = os.environ["THIEF_DEVICE_GROUP_SYMMETRIC_KEY"]
 registration_id = os.environ["THIEF_DEVICE_ID"]
 requested_service_pool = os.environ["THIEF_REQUESTED_SERVICE_POOL"]
+
+# Why are we running this code.  Can be passed on the command line.
+run_reason = ""
 
 run_id = str(uuid.uuid4())
 
@@ -60,6 +65,13 @@ azure_monitor.add_logging_properties(
 event_logger = azure_monitor.get_event_logger()
 azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
+
+
+def custom_props(extra_props):
+    """
+    helper function for adding customDimensions to logger calls at execution time
+    """
+    return {"custom_dimensions": extra_props}
 
 
 class ServiceAckWaitInfo(object):
@@ -588,6 +600,11 @@ class DeviceApp(app_base.AppBase):
                         wait_info = self.service_ack_wait_list[service_ack_id]
                     wait_info.send_epochtime = time.time()
 
+                event_logger.info(
+                    Events.SEND_TELEMETRY,
+                    extra=custom_props({CustomDimensionNames.SERVICE_ACK_ID: service_ack_id}),
+                )
+
                 try:
                     self.metrics.send_message_count_unacked.increment()
                     self.client.send_message(msg)
@@ -650,6 +667,11 @@ class DeviceApp(app_base.AppBase):
                 def on_service_ack_received(service_ack_id, user_data):
                     logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
                     self.metrics.send_message_count_received_by_service_app.increment()
+
+                    event_logger.info(
+                        Events.RECEIVE_SERVICE_ACK,
+                        extra={CustomDimensionNames.SERVICE_ACK_ID: service_ack_id},
+                    )
 
                     with self.service_ack_list_lock:
                         wait_info = self.service_ack_wait_list.get(service_ack_id, None)
@@ -910,8 +932,11 @@ class DeviceApp(app_base.AppBase):
             if msg:
                 thief = json.loads(msg.data.decode())[Fields.C2d.THIEF]
                 self.metrics.receive_c2d_count_received.increment()
-                self.out_of_order_message_tracker.add_message(
-                    thief.get(Fields.C2d.TEST_C2D_MESSAGE_INDEX)
+                index = thief.get(Fields.C2d.TEST_C2D_MESSAGE_INDEX)
+                self.out_of_order_message_tracker.add_message(index)
+
+                event_logger.info(
+                    Events.RECEIVE_C2D, extra=custom_props({CustomDimensionNames.C2D_INDEX: index}),
                 )
 
                 now = time.time()
@@ -994,7 +1019,15 @@ class DeviceApp(app_base.AppBase):
                             }
                         }
                     }
+
                     logger.info("Removing test property {}".format(prop_name))
+                    event_logger.info(
+                        Events.REMOVE_REPORTED_PROPERTY,
+                        extra=custom_props(
+                            {CustomDimensionNames.REPORTED_PROPERTY_NAME: prop_name}
+                        ),
+                    )
+
                     self.client.patch_twin_reported_properties(reported_properties)
                     self.metrics.reported_properties_count_removed.increment()
                     self.metrics.reported_properties_count_removed_not_verified.increment()
@@ -1035,7 +1068,15 @@ class DeviceApp(app_base.AppBase):
                         }
                     }
                 }
+
                 logger.info("Adding test property {}".format(property_name))
+                event_logger.info(
+                    Events.ADD_REPORTED_PROPERTY,
+                    extra=custom_props(
+                        {CustomDimensionNames.REPORTED_PROPERTY_NAME: property_name}
+                    ),
+                )
+
                 self.client.patch_twin_reported_properties(reported_properties)
                 self.metrics.reported_properties_count_added.increment()
                 self.metrics.reported_properties_count_added_not_verified.increment()
@@ -1071,10 +1112,13 @@ class DeviceApp(app_base.AppBase):
             id_scope=id_scope,
             group_symmetric_key=group_symmetric_key,
         )
-        azure_monitor.add_logging_properties(hub=self.hub, device_id=self.device_id)
+        hub_host_name = self.hub[: self.hub.find(".")]  # keep everything before the first dot
+        azure_monitor.add_logging_properties(hub=hub_host_name, device_id=self.device_id)
         self.update_initial_reported_properties()
 
-        event_logger.info(Events.STARTING_RUN)
+        event_logger.info(
+            Events.STARTING_RUN, extra=custom_props({CustomDimensionNames.RUN_REASON: run_reason})
+        )
 
         # pair with a service app instance
         self.start_pairing()
@@ -1112,10 +1156,20 @@ class DeviceApp(app_base.AppBase):
 
         # TODO: add virtual function that can be used to wait for all messages to arrive after test is done
 
-        self.run_threads(worker_thread_infos)
-
-        logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
-        event_logger.info(Events.ENDING_RUN)
+        exit_reason = "UNKNOWN EXIT REASON"
+        try:
+            self.run_threads(worker_thread_infos)
+        except BaseException as e:
+            exit_reason = str(e) or type(e)
+            raise
+        finally:
+            logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
+            if self.metrics.exit_reason:
+                exit_reason = self.metrics.exit_reason
+            event_logger.info(
+                Events.ENDING_RUN,
+                extra=custom_props({CustomDimensionNames.EXIT_REASON: exit_reason}),
+            )
 
     def disconnect(self):
         self.client.disconnect()
@@ -1123,6 +1177,8 @@ class DeviceApp(app_base.AppBase):
 
 if __name__ == "__main__":
     try:
+        if len(sys.argv) > 1:
+            run_reason =  " ".join(sys.argv[1:])
         DeviceApp().main()
     except BaseException as e:
         logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)

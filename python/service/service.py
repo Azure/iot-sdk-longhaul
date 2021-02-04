@@ -21,6 +21,8 @@ from thief_constants import (
     Const,
     Fields,
     Types,
+    Events,
+    CustomDimensionNames,
 )
 
 # use os.environ[] for required environment variables
@@ -55,13 +57,15 @@ ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
 # TODO: remove items from pairing list of no traffic for X minutes
 
 
-def custom_props(device_id, run_id=None):
+def custom_props(device_id, run_id=None, extra_props={}):
     """
     helper function for adding customDimensions to logger calls at execution time
     """
     props = {"deviceId": device_id}
     if run_id:
         props["runId"] = run_id
+    if extra_props:
+        props.update(extra_props)
     return {"custom_dimensions": props}
 
 
@@ -222,17 +226,26 @@ class ServiceApp(app_base.AppBase):
 
                 if device_data:
                     if cmd == Types.Message.SERVICE_ACK_REQUEST:
+                        service_ack_id = thief[Fields.Telemetry.SERVICE_ACK_ID]
+
                         logger.info(
                             "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
-                                device_id, thief[Fields.Telemetry.SERVICE_ACK_ID]
+                                device_id, service_ack_id
                             ),
                             extra=custom_props(device_id, device_data.run_id),
                         )
+
+                        event_logger.info(
+                            Events.RECEIVE_TELEMETRY,
+                            extra=custom_props(
+                                device_id,
+                                device_data.run_id,
+                                extra_props={CustomDimensionNames.SERVICE_ACK_ID: service_ack_id},
+                            ),
+                        )
+
                         self.outgoing_service_ack_response_queue.put(
-                            ServiceAck(
-                                device_id=device_id,
-                                service_ack_id=thief[Fields.Telemetry.SERVICE_ACK_ID],
-                            )
+                            ServiceAck(device_id=device_id, service_ack_id=service_ack_id)
                         )
                     else:
                         logger.info(
@@ -297,9 +310,7 @@ class ServiceApp(app_base.AppBase):
                 time.time() - last_amqp_refresh_epochtime
                 > self.config.amqp_refresh_interval_in_seconds
             ):
-                logger.warning(
-                    "AMPQ credential approaching expiration.  Recreating registry manager"
-                )
+                logger.info("AMPQ credential approaching expiration.  Recreating registry manager")
                 with self.registry_manager_lock:
                     self.registry_manager.amqp_svc_client.disconnect_sync()
                     self.registry_manager = None
@@ -314,9 +325,9 @@ class ServiceApp(app_base.AppBase):
                 pass
             else:
                 with self.pairing_list_lock:
-                    do_send = device_id in self.paired_devices
+                    device_data = self.paired_devices.get(device_id, None)
 
-                if not do_send:
+                if not device_data:
                     logger.warning(
                         "C2D found in outgoing queue for device {} which is not paired".format(
                             device_id
@@ -333,6 +344,7 @@ class ServiceApp(app_base.AppBase):
                                 device_id, str(e) or type(e)
                             ),
                             exc_info=e,
+                            extra=custom_props(device_id, device_data.run_id),
                         )
                         self.remove_device_from_pairing_list(device_id)
                     else:
@@ -453,13 +465,14 @@ class ServiceApp(app_base.AppBase):
                 if device_data:
                     # we can access device_data without holding pairing_list_lock because that lock protects the list
                     # but not the structures inside the list.
+                    index = device_data.next_c2d_message_index
                     message = json.dumps(
                         {
                             Fields.C2d.THIEF: {
                                 Fields.C2d.CMD: Types.Message.TEST_C2D,
                                 Fields.C2d.SERVICE_INSTANCE_ID: service_instance_id,
                                 Fields.C2d.RUN_ID: device_data.run_id,
-                                Fields.C2d.TEST_C2D_MESSAGE_INDEX: device_data.next_c2d_message_index,
+                                Fields.C2d.TEST_C2D_MESSAGE_INDEX: index,
                             }
                         }
                     )
@@ -469,6 +482,14 @@ class ServiceApp(app_base.AppBase):
                             device_id, device_data.next_c2d_message_index
                         ),
                         extra=custom_props(device_id, device_data.run_id),
+                    )
+                    event_logger.info(
+                        Events.SEND_C2D,
+                        extra=custom_props(
+                            device_id,
+                            device_data.run_id,
+                            extra_props={CustomDimensionNames.C2D_INDEX: index},
+                        ),
                     )
 
                     device_data.next_c2d_message_index += 1
@@ -639,11 +660,31 @@ class ServiceApp(app_base.AppBase):
                             Fields.Reported.TestContent.ReportedPropertyTest.ADD_SERVICE_ACK_ID
                         ]
                         device_data.reported_property_values[property_name] = property_value
+                        event_logger.info(
+                            Events.OBSERVE_REPORTED_PROPERTY_ADD,
+                            extra=custom_props(
+                                device_id,
+                                device_data.run_id,
+                                extra_props={
+                                    CustomDimensionNames.REPORTED_PROPERTY_NAME: property_name
+                                },
+                            ),
+                        )
                     else:
                         service_ack_id = device_data.reported_property_values[property_name][
                             Fields.Reported.TestContent.ReportedPropertyTest.REMOVE_SERVICE_ACK_ID
                         ]
                         del device_data.reported_property_values[property_name]
+                        event_logger.info(
+                            Events.OBSERVE_REPORTED_PROPERTY_REMOVE,
+                            extra=custom_props(
+                                device_id,
+                                device_data.run_id,
+                                extra_props={
+                                    CustomDimensionNames.REPORTED_PROPERTY_NAME: property_name
+                                },
+                            ),
+                        )
 
                 self.outgoing_service_ack_response_queue.put(
                     ServiceAck(device_id=device_id, service_ack_id=service_ack_id)

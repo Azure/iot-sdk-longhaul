@@ -128,11 +128,37 @@ class Events(object):
     Names of different Azure Monitor events
     """
 
+    # The test run is starting
     STARTING_RUN = "StartingRun"
+    # The test run is ending
     ENDING_RUN = "EndingRun"
+    # The device app is sending a pairing request to the service app
     SENDING_PAIRING_REQUEST = "SendingPairingRequest"
+    # The device app has received a pairing response from the service app
     RECEIVED_PAIRING_RESPONSE = "ReceivedPairingResponse"
+    # The pairing process is complete.
     PAIRING_COMPLETE = "PairingComplete"
+
+    # A test telemetry message is being sent by the device app
+    SEND_TELEMETRY = "SendTelemetry"
+    # A test telemetry message has been received by the service app
+    RECEIVE_TELEMETRY = "ReceiveTelemetry"
+    # The device app has received a serviceAck
+    RECEIVE_SERVICE_ACK = "ReceiveServiceAck"
+
+    # The service app is sending a test c2d message
+    SEND_C2D = "SendC2d"
+    # The device app has received a test c2d message
+    RECEIVE_C2D = "ReceiveC2d"
+
+    # The device app has added a reported property
+    ADD_REPORTED_PROPERTY = "AddReportedProperty"
+    # The device app has removed a reported property
+    REMOVE_REPORTED_PROPERTY = "RemoveReportedProperty"
+    # The service property has observed a reported property being added
+    OBSERVE_REPORTED_PROPERTY_ADD = "ObserveReportedPropertyAdd"
+    # The service property has observed a reported property being removed
+    OBSERVE_REPORTED_PROPERTY_REMOVE = "ObserveReportedPropertyRemove"
 
 
 class MetricNames(object):
@@ -263,15 +289,37 @@ class CustomDimensionNames(object):
     Names of customDimension fields pushed to Azure Monitor
     """
 
+    # OS type, e.g. Linux, Windows
     OS_TYPE = "osType"
+    # Langauge being used.  e.g. Python, Node, dotnet
     SDK_LANGUAGE = "sdkLanguage"
+    # Version of language being used.  e.g. 3.8.1
     SDK_LANGUAGE_VERSION = "sdkLanguageVersion"
+    # Version of the SDK library being tested.  e.g. 2.4.2
     SDK_VERSION = "sdkVersion"
 
+    # ServiceInstanceId being used for this test run
     SERVICE_INSTANCE_ID = "serviceInstanceId"
+    # RunId for the run.  May be None for service app features that aren't tied to a specific run
     RUN_ID = "runId"
+    # Service app pool being used
     POOL_ID = "poolId"
 
+    # Hub instance being used, without the .azuredevices.net suffix
     HUB = "hub"
+    # Device being tested
     DEVICE_ID = "deviceId"
+    # Transport being used by the device under test
     TRANSPORT = "transport"
+
+    # Reason the test is running
+    RUN_REASON = "runReason"
+    # Reason the test is exiting
+    EXIT_REASON = "exitReason"
+
+    # ServiceAckId associated with the message
+    SERVICE_ACK_ID = "serviceAckId"
+    # testC2dMessageIndex associated with the message
+    C2D_INDEX = "c2dIndex"
+    # reported property name associated with the message
+    REPORTED_PROPERTY_NAME = "reportedPropertyName"
