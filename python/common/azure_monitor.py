@@ -94,6 +94,23 @@ def telemetry_processor_callback(envelope):
     if _pool_id:
         envelope.data.baseData.properties[CustomDimensionNames.POOL_ID] = _pool_id
 
+    # remove some properties that we don't want
+    for name in ["level", "module", "process"]:
+        if name in envelope.data.baseData.properties:
+            del envelope.data.baseData.properties[name]
+    # also remove some tags that we don't want
+    for name in [
+        "ai.device.id",
+        "ai.device.locale",
+        "ai.device.type",
+        "ai.internal.sdkVersion",
+        "ai.operation.id",
+        "ai.operation.parentId",
+    ]:
+        if name in envelope.tags:
+            del envelope.tags[name]
+
+
     return True
 
 
