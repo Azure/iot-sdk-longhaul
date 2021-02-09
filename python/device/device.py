@@ -600,11 +600,6 @@ class DeviceApp(app_base.AppBase):
                         wait_info = self.service_ack_wait_list[service_ack_id]
                     wait_info.send_epochtime = time.time()
 
-                event_logger.info(
-                    Events.SEND_TELEMETRY,
-                    extra=custom_props({CustomDimensionNames.SERVICE_ACK_ID: service_ack_id}),
-                )
-
                 try:
                     self.metrics.send_message_count_unacked.increment()
                     self.client.send_message(msg)
@@ -667,11 +662,6 @@ class DeviceApp(app_base.AppBase):
                 def on_service_ack_received(service_ack_id, user_data):
                     logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
                     self.metrics.send_message_count_received_by_service_app.increment()
-
-                    event_logger.info(
-                        Events.RECEIVE_SERVICE_ACK,
-                        extra={CustomDimensionNames.SERVICE_ACK_ID: service_ack_id},
-                    )
 
                     with self.service_ack_list_lock:
                         wait_info = self.service_ack_wait_list.get(service_ack_id, None)
@@ -932,11 +922,8 @@ class DeviceApp(app_base.AppBase):
             if msg:
                 thief = json.loads(msg.data.decode())[Fields.C2d.THIEF]
                 self.metrics.receive_c2d_count_received.increment()
-                index = thief.get(Fields.C2d.TEST_C2D_MESSAGE_INDEX)
-                self.out_of_order_message_tracker.add_message(index)
-
-                event_logger.info(
-                    Events.RECEIVE_C2D, extra=custom_props({CustomDimensionNames.C2D_INDEX: index}),
+                self.out_of_order_message_tracker.add_message(
+                    thief.get(Fields.C2d.TEST_C2D_MESSAGE_INDEX)
                 )
 
                 now = time.time()
@@ -1019,15 +1006,7 @@ class DeviceApp(app_base.AppBase):
                             }
                         }
                     }
-
                     logger.info("Removing test property {}".format(prop_name))
-                    event_logger.info(
-                        Events.REMOVE_REPORTED_PROPERTY,
-                        extra=custom_props(
-                            {CustomDimensionNames.REPORTED_PROPERTY_NAME: prop_name}
-                        ),
-                    )
-
                     self.client.patch_twin_reported_properties(reported_properties)
                     self.metrics.reported_properties_count_removed.increment()
                     self.metrics.reported_properties_count_removed_not_verified.increment()
@@ -1068,15 +1047,7 @@ class DeviceApp(app_base.AppBase):
                         }
                     }
                 }
-
                 logger.info("Adding test property {}".format(property_name))
-                event_logger.info(
-                    Events.ADD_REPORTED_PROPERTY,
-                    extra=custom_props(
-                        {CustomDimensionNames.REPORTED_PROPERTY_NAME: property_name}
-                    ),
-                )
-
                 self.client.patch_twin_reported_properties(reported_properties)
                 self.metrics.reported_properties_count_added.increment()
                 self.metrics.reported_properties_count_added_not_verified.increment()
@@ -1178,7 +1149,7 @@ class DeviceApp(app_base.AppBase):
 if __name__ == "__main__":
     try:
         if len(sys.argv) > 1:
-            run_reason =  " ".join(sys.argv[1:])
+            run_reason = " ".join(sys.argv[1:])
         DeviceApp().main()
     except BaseException as e:
         logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)

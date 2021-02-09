@@ -65,15 +65,6 @@ Other service app logs are not device specific and do not contain `deviceId` and
 | `runReason` | string | Reason the test is running.  Free-form string added to `StartingRun` events to explain why the run is happening.  |
 | `exitReason` | string | Reason the test is exiting.  Free-form string added to `EndingRun` events to explain why the run stopped. |
 
-## Fields used for tracking Events
-
-Some custom dimensions are used for correlating events, such as being able to associate a SendTelemetry event with it's corresponding ReceiveTelemetry event.
-
-| field | format | meaning |
-| - | - | - |
-| `serviceAckId` | guid |  ServiceAckId associated with a telemetry message. Attached to all events associated with the message. |
-| `c2dIndex` | integer | `testC2dMessageIndex` value associated with a c2d message.  Attached to all events assicated with the message. |
-| `reportedPropertyName` | string | Name of a reported property that is being set or cleared for testing.  Attached to all events associated with the property. |
 
 ## Metric names
 
