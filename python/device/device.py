@@ -9,6 +9,7 @@ import json
 import datetime
 import threading
 import pprint
+import sys
 from concurrent.futures import ThreadPoolExecutor
 import dps
 import queue
@@ -26,6 +27,7 @@ from thief_constants import (
     Events,
     MetricNames,
     DeviceSettings as Settings,
+    CustomDimensionNames,
 )
 
 # TODO: exit service when device stops responding
@@ -38,6 +40,9 @@ id_scope = os.environ["THIEF_DEVICE_ID_SCOPE"]
 group_symmetric_key = os.environ["THIEF_DEVICE_GROUP_SYMMETRIC_KEY"]
 registration_id = os.environ["THIEF_DEVICE_ID"]
 requested_service_pool = os.environ["THIEF_REQUESTED_SERVICE_POOL"]
+
+# Why are we running this code.  Can be passed on the command line.
+run_reason = ""
 
 run_id = str(uuid.uuid4())
 
@@ -58,8 +63,14 @@ azure_monitor.add_logging_properties(
     pool_id=requested_service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
-azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
+
+
+def custom_props(extra_props):
+    """
+    helper function for adding customDimensions to logger calls at execution time
+    """
+    return {"custom_dimensions": extra_props}
 
 
 class ServiceAckWaitInfo(object):
@@ -100,7 +111,6 @@ class DeviceRunMetrics(object):
         self.send_message_count_unacked = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
         self.send_message_count_received_by_service_app = ThreadSafeCounter()
-        self.send_message_count_extra_service_acks_received = ThreadSafeCounter()
 
         self.receive_c2d_count_received = ThreadSafeCounter()
 
@@ -223,11 +233,6 @@ class DeviceApp(app_base.AppBase):
             "Count of messages sent to iothub and acked by the transport, but receipt not (yet) verified via service sdk",
             "message(s)",
         )
-        self.reporter.add_integer_measurement(
-            MetricNames.SEND_MESSAGE_COUNT_EXTRA_SERVICE_ACKS_RECEIVED,
-            "Number of 'extra' service acks received -- probably duplicte messages",
-            "message(s)",
-        )
 
         # -------------------
         # Receive c2d metrics
@@ -327,7 +332,6 @@ class DeviceApp(app_base.AppBase):
             MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG: self.outgoing_test_message_queue.qsize(),
             MetricNames.SEND_MESSAGE_COUNT_UNACKED: self.metrics.send_message_count_unacked.get_count(),
             MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED: sent - received_by_service_app,
-            MetricNames.SEND_MESSAGE_COUNT_EXTRA_SERVICE_ACKS_RECEIVED: self.metrics.send_message_count_extra_service_acks_received.get_count(),
             MetricNames.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
             MetricNames.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
             MetricNames.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
@@ -652,31 +656,20 @@ class DeviceApp(app_base.AppBase):
                     self.metrics.send_message_count_received_by_service_app.increment()
 
                     with self.service_ack_list_lock:
-                        wait_info = self.service_ack_wait_list.get(service_ack_id, None)
+                        wait_info = self.service_ack_wait_list[service_ack_id]
 
-                    if wait_info:
-                        with self.reporter_lock:
-                            self.reporter.set_metrics_from_dict(
-                                {
-                                    MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND: (
-                                        wait_info.send_epochtime - wait_info.queue_epochtime
-                                    )
-                                    * 1000,
-                                    MetricNames.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
-                                    - wait_info.send_epochtime,
-                                }
-                            )
-                            self.reporter.record()
-                    else:
-                        # If we don't have a wait_info struct for this service_ack_id, we assume that
-                        # The MQTT "at least once" part of QOS-1 means that we received the ack
-                        # once before and now we're receiving it again.
-                        self.metrics.send_message_count_extra_service_acks_received.increment()
-                        logger.info(
-                            "Received extra serviceAck with serviceAckId = {}".format(
-                                service_ack_id
-                            )
+                    with self.reporter_lock:
+                        self.reporter.set_metrics_from_dict(
+                            {
+                                MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND: (
+                                    wait_info.send_epochtime - wait_info.queue_epochtime
+                                )
+                                * 1000,
+                                MetricNames.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
+                                - wait_info.send_epochtime,
+                            }
                         )
+                        self.reporter.record()
 
                 # This function only queues the message.  A send_message_thread instance will pick
                 # it up and send it.
@@ -1071,10 +1064,13 @@ class DeviceApp(app_base.AppBase):
             id_scope=id_scope,
             group_symmetric_key=group_symmetric_key,
         )
-        azure_monitor.add_logging_properties(hub=self.hub, device_id=self.device_id)
+        hub_host_name = self.hub[: self.hub.find(".")]  # keep everything before the first dot
+        azure_monitor.add_logging_properties(hub=hub_host_name, device_id=self.device_id)
         self.update_initial_reported_properties()
 
-        event_logger.info(Events.STARTING_RUN)
+        event_logger.info(
+            Events.STARTING_RUN, extra=custom_props({CustomDimensionNames.RUN_REASON: run_reason})
+        )
 
         # pair with a service app instance
         self.start_pairing()
@@ -1112,10 +1108,20 @@ class DeviceApp(app_base.AppBase):
 
         # TODO: add virtual function that can be used to wait for all messages to arrive after test is done
 
-        self.run_threads(worker_thread_infos)
-
-        logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
-        event_logger.info(Events.ENDING_RUN)
+        exit_reason = "UNKNOWN EXIT REASON"
+        try:
+            self.run_threads(worker_thread_infos)
+        except BaseException as e:
+            exit_reason = str(e) or type(e)
+            raise
+        finally:
+            logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
+            if self.metrics.exit_reason:
+                exit_reason = self.metrics.exit_reason
+            event_logger.info(
+                Events.ENDING_RUN,
+                extra=custom_props({CustomDimensionNames.EXIT_REASON: exit_reason}),
+            )
 
     def disconnect(self):
         self.client.disconnect()
@@ -1123,6 +1129,8 @@ class DeviceApp(app_base.AppBase):
 
 if __name__ == "__main__":
     try:
+        if len(sys.argv) > 1:
+            run_reason = " ".join(sys.argv[1:])
         DeviceApp().main()
     except BaseException as e:
         logger.critical("App shutdown exception: {}".format(str(e) or type(e)), exc_info=True)

@@ -47,7 +47,6 @@ azure_monitor.add_logging_properties(
     pool_id=service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
-azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
@@ -297,9 +296,7 @@ class ServiceApp(app_base.AppBase):
                 time.time() - last_amqp_refresh_epochtime
                 > self.config.amqp_refresh_interval_in_seconds
             ):
-                logger.warning(
-                    "AMPQ credential approaching expiration.  Recreating registry manager"
-                )
+                logger.info("AMPQ credential approaching expiration.  Recreating registry manager")
                 with self.registry_manager_lock:
                     self.registry_manager.amqp_svc_client.disconnect_sync()
                     self.registry_manager = None
@@ -314,9 +311,9 @@ class ServiceApp(app_base.AppBase):
                 pass
             else:
                 with self.pairing_list_lock:
-                    do_send = device_id in self.paired_devices
+                    device_data = self.paired_devices.get(device_id, None)
 
-                if not do_send:
+                if not device_data:
                     logger.warning(
                         "C2D found in outgoing queue for device {} which is not paired".format(
                             device_id
@@ -333,6 +330,7 @@ class ServiceApp(app_base.AppBase):
                                 device_id, str(e) or type(e)
                             ),
                             exc_info=e,
+                            extra=custom_props(device_id, device_data.run_id),
                         )
                         self.remove_device_from_pairing_list(device_id)
                     else:
@@ -366,7 +364,10 @@ class ServiceApp(app_base.AppBase):
                     break
                 if service_ack.device_id not in service_acks:
                     service_acks[service_ack.device_id] = []
-                service_acks[service_ack.device_id].append(service_ack.service_ack_id)
+                # it's possible to get the same eventhub message twice, especially if we have to reconnect
+                # to refresh credentials. Don't send the same service ack twice.
+                if service_ack.service_ack_id not in service_acks[service_ack.device_id]:
+                    service_acks[service_ack.device_id].append(service_ack.service_ack_id)
 
             for device_id in service_acks:
 

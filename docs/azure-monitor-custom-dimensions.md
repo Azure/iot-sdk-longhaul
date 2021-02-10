@@ -50,8 +50,6 @@ Other service app logs are not device specific and do not contain `deviceId` and
   {
     "lineNumber": "291",
     "fileName": "service.py",
-    "level": "INFO",
-    "module": "service",
   }
 ```
 
@@ -59,8 +57,14 @@ Other service app logs are not device specific and do not contain `deviceId` and
 | - | - | - |
 | `level` | string | debug level for generated message |
 | `module`| string | module generating message (without path and extension) |
-| `lineNumber` | integer | line number in source file which is generating this message |
-| `fileName` | string | filename generating message (with path and extension) |
+
+## Fields for recording run details
+
+| field | format | meaning |
+| - | - | - |
+| `runReason` | string | Reason the test is running.  Free-form string added to `StartingRun` events to explain why the run is happening.  |
+| `exitReason` | string | Reason the test is exiting.  Free-form string added to `EndingRun` events to explain why the run stopped. |
+
 
 ## Metric names
 

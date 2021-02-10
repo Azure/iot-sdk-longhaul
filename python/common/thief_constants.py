@@ -128,10 +128,15 @@ class Events(object):
     Names of different Azure Monitor events
     """
 
+    # The test run is starting
     STARTING_RUN = "StartingRun"
+    # The test run is ending
     ENDING_RUN = "EndingRun"
+    # The device app is sending a pairing request to the service app
     SENDING_PAIRING_REQUEST = "SendingPairingRequest"
+    # The device app has received a pairing response from the service app
     RECEIVED_PAIRING_RESPONSE = "ReceivedPairingResponse"
+    # The pairing process is complete.
     PAIRING_COMPLETE = "PairingComplete"
 
 
@@ -174,8 +179,6 @@ class MetricNames(object):
     SEND_MESSAGE_COUNT_UNACKED = "sendMessageCountUnacked"
     # Number of telemetry messages that have not (yet) arrived at the hub
     SEND_MESSAGE_COUNT_NOT_RECEIVED = "sendMessageCountNotReceivedByServiceApp"
-    # Number of "extra" service acks received -- probably duplicte messages
-    SEND_MESSAGE_COUNT_EXTRA_SERVICE_ACKS_RECEIVED = "sendMessageCountExtraServiceAcksReceived"
 
     # -------------------
     # Receive c2d metrics
@@ -263,15 +266,30 @@ class CustomDimensionNames(object):
     Names of customDimension fields pushed to Azure Monitor
     """
 
+    # OS type, e.g. Linux, Windows
     OS_TYPE = "osType"
+    # Langauge being used.  e.g. Python, Node, dotnet
     SDK_LANGUAGE = "sdkLanguage"
+    # Version of language being used.  e.g. 3.8.1
     SDK_LANGUAGE_VERSION = "sdkLanguageVersion"
+    # Version of the SDK library being tested.  e.g. 2.4.2
     SDK_VERSION = "sdkVersion"
 
+    # ServiceInstanceId being used for this test run
     SERVICE_INSTANCE_ID = "serviceInstanceId"
+    # RunId for the run.  May be None for service app features that aren't tied to a specific run
     RUN_ID = "runId"
+    # Service app pool being used
     POOL_ID = "poolId"
 
+    # Hub instance being used, without the .azuredevices.net suffix
     HUB = "hub"
+    # Device being tested
     DEVICE_ID = "deviceId"
+    # Transport being used by the device under test
     TRANSPORT = "transport"
+
+    # Reason the test is running
+    RUN_REASON = "runReason"
+    # Reason the test is exiting
+    EXIT_REASON = "exitReason"
