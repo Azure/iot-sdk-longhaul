@@ -47,7 +47,6 @@ azure_monitor.add_logging_properties(
     pool_id=service_pool,
 )
 event_logger = azure_monitor.get_event_logger()
-azure_monitor.log_all_warnings_and_exceptions_to_azure_monitor()
 azure_monitor.log_to_azure_monitor("thief")
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
@@ -365,7 +364,10 @@ class ServiceApp(app_base.AppBase):
                     break
                 if service_ack.device_id not in service_acks:
                     service_acks[service_ack.device_id] = []
-                service_acks[service_ack.device_id].append(service_ack.service_ack_id)
+                # it's possible to get the same eventhub message twice, especially if we have to reconnect
+                # to refresh credentials. Don't send the same service ack twice.
+                if service_ack.service_ack_id not in service_acks[service_ack.device_id]:
+                    service_acks[service_ack.device_id].append(service_ack.service_ack_id)
 
             for device_id in service_acks:
 

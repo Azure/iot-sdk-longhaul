@@ -179,8 +179,6 @@ class MetricNames(object):
     SEND_MESSAGE_COUNT_UNACKED = "sendMessageCountUnacked"
     # Number of telemetry messages that have not (yet) arrived at the hub
     SEND_MESSAGE_COUNT_NOT_RECEIVED = "sendMessageCountNotReceivedByServiceApp"
-    # Number of "extra" service acks received -- probably duplicte messages
-    SEND_MESSAGE_COUNT_EXTRA_SERVICE_ACKS_RECEIVED = "sendMessageCountExtraServiceAcksReceived"
 
     # -------------------
     # Receive c2d metrics
