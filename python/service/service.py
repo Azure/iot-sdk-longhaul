@@ -160,7 +160,7 @@ class ServiceApp(app_base.AppBase):
         """
         Function to unpair a device by removing it from the list of paired devices.
 
-        Note: this doesn't do anything to inform the device that the pairing has occured,
+        Note: this doesn't do anything to inform the device that the pairing has occurred,
         such as change the state of the device twin.  This is intentional since
         `remove_device_from_pairing_list` is a reactive function (called after the unpair has
         happened), and not a proactive function (called to initiate the unpairing).
@@ -280,7 +280,7 @@ class ServiceApp(app_base.AppBase):
     def send_outgoing_c2d_messages_thread(self, worker_thread_info):
         """
         Thread which is responsible for sending C2D messages.  This is separated into it's own
-        thead in order to centralize error handling and also because sending is a synchronous
+        thread in order to centralize error handling and also because sending is a synchronous
         function and we don't want to block other threads while we're sending.
         """
         logger.info("Starting thread")
@@ -296,7 +296,7 @@ class ServiceApp(app_base.AppBase):
                 time.time() - last_amqp_refresh_epochtime
                 > self.config.amqp_refresh_interval_in_seconds
             ):
-                logger.info("AMPQ credential approaching expiration.  Recreating registry manager")
+                logger.info("AMQP credential approaching expiration.  Recreating registry manager")
                 with self.registry_manager_lock:
                     self.registry_manager.amqp_svc_client.disconnect_sync()
                     self.registry_manager = None
@@ -326,7 +326,7 @@ class ServiceApp(app_base.AppBase):
                             self.registry_manager.send_c2d_message(device_id, message, props)
                     except Exception as e:
                         logger.error(
-                            "send_c2d_messge to {} raised {}.  Forcing un-pair with device".format(
+                            "send_c2d_message to {} raised {}.  Forcing un-pair with device".format(
                                 device_id, str(e) or type(e)
                             ),
                             exc_info=e,
@@ -337,7 +337,7 @@ class ServiceApp(app_base.AppBase):
                         end = time.time()
                         if end - start > 2:
                             logger.warning(
-                                "Send throtttled.  Time delta={} seconds".format(end - start)
+                                "Send throttled.  Time delta={} seconds".format(end - start)
                             )
 
     def handle_service_ack_request_thread(self, worker_thread_info):
@@ -500,7 +500,7 @@ class ServiceApp(app_base.AppBase):
         interesting, the thread acts on it.  If not, it ignores it.
 
         A different thread is responsible for putting /thief/pairing changes into
-        `incoming_pairing_requesat_queue`.  This thread just removes events from that queue
+        `incoming_pairing_request_queue`.  This thread just removes events from that queue
         and acts on them.
         """
 
@@ -543,7 +543,7 @@ class ServiceApp(app_base.AppBase):
             if requested_service_pool and requested_service_pool != service_pool:
                 # Ignore events if the device is looking for a service pool which isn't us.
                 logger.info(
-                    "Device {} requesting an app in a diffeent pool: {}".format(
+                    "Device {} requesting an app in a different pool: {}".format(
                         device_id, requested_service_pool
                     ),
                     extra=custom_props(device_id, received_run_id),

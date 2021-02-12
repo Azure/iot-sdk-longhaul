@@ -18,14 +18,14 @@ class OutOfOrderMessageTracker(object):
 
     def __init__(self):
         """
-        max_resovled_index is the index where every message before it has been received.
+        max_resolved_index is the index where every message before it has been received.
         max_received_index is the highest index received.
         unresolved_indices is the list of indexes received that are > max_resolved
 
         So, if we receive 1,2,3, 5, and 7:
         max_resolved_index will be 3 (because we've received up until 3, but we haven't received 4)
         max_received_index will be 7 (because it's the biggest index we've received)
-        unresovled_indices will be [5, 7] because these are indices that we've received that are > 3
+        unresolved_indices will be [5, 7] because these are indices that we've received that are > 3
         """
         self.max_resolved_index = None
         self.max_received_index = 0

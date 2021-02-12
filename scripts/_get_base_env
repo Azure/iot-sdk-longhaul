@@ -57,7 +57,7 @@ case "${PLATFORM}" in
             py27|py35|py36|py37|py38)
                 ;;
             *)
-                echo "FATAL ${LANGUAGE_SHORT_NAME} not suported for ${PLATFORM}"
+                echo "FATAL ${LANGUAGE_SHORT_NAME} not supported for ${PLATFORM}"
                 return 1
                 ;;
         esac
@@ -67,7 +67,7 @@ case "${PLATFORM}" in
             py37|py38)
                 ;;
             *)
-                echo "FATAL ${LANGUAGE_SHORT_NAME} not suported for ${PLATFORM}"
+                echo "FATAL ${LANGUAGE_SHORT_NAME} not supported for ${PLATFORM}"
                 return 1
                 ;;
         esac

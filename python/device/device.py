@@ -425,7 +425,7 @@ class DeviceApp(app_base.AppBase):
             that it doesn't have a service app (by settign `serviceInstanceId` = None).
         2. An available service sets `properties/desired/thief/pairing/serviceInstanceId` to the service
             app's `runId` value
-        3. The device sets `properties/reported/thief/pairing/serviceInstanceId` to the serivce app's
+        3. The device sets `properties/reported/thief/pairing/serviceInstanceId` to the service app's
             `runId` value.
 
         Once the device starts sending telemetry with `thief/serviceInstanceId` set to the service app's
@@ -459,7 +459,7 @@ class DeviceApp(app_base.AppBase):
                     # re-send our request (by setting the desired property again), or it may be
                     # time to fail the pairing operation
                     raise Exception(
-                        "No resopnse to pairing requests after trying for {} seconds".format(
+                        "No response to pairing requests after trying for {} seconds".format(
                             self.config[Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS]
                         )
                     )
@@ -628,7 +628,7 @@ class DeviceApp(app_base.AppBase):
     def test_send_message_thread(self, worker_thread_info):
         """
         Thread to continuously send d2c messages throughout the longhaul run.  This thread doesn't
-        actually send messages becauase send_message is blocking and we want to overlap our send
+        actually send messages because send_message is blocking and we want to overlap our send
         operations.  Instead, this thread adds the messsage to a queue, and relies on a
         send_message_thread instance to actually send the message.
         """
@@ -850,7 +850,7 @@ class DeviceApp(app_base.AppBase):
                             arrivals.append(self.service_ack_wait_list[service_ack_id])
                         else:
                             logger.warning(
-                                "Received unkonwn serviceAckId: {}:".format(service_ack_id)
+                                "Received unknown serviceAckId: {}:".format(service_ack_id)
                             )
 
                 for arrival in arrivals:

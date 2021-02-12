@@ -193,7 +193,7 @@ class MetricNames(object):
     # Reported property metrics
     # -------------------------
 
-    # Number of reported properites which have been added
+    # Number of reported properties which have been added
     REPORTED_PROPERTIES_COUNT_ADDED = "reportedPropertiesCountAdded"
     # Number of reported properties which have been added, but the add was not verified by the service app
     REPORTED_PROPERTIES_COUNT_ADDED_NOT_VERIFIED = (
