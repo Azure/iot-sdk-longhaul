@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import dps
 import queue
 import app_base
+import faulthandler
 from azure.iot.device import Message
 import azure.iot.device.constant
 from measurement import ThreadSafeCounter
@@ -29,6 +30,8 @@ from thief_constants import (
     DeviceSettings as Settings,
     CustomDimensionNames,
 )
+
+faulthandler.enable()
 
 # TODO: exit service when device stops responding
 # TODO: add code to receive rest of pingacks at end.  wait for delta since last to be > 20 seconds.
@@ -1110,7 +1113,13 @@ class DeviceApp(app_base.AppBase):
 
         exit_reason = "UNKNOWN EXIT REASON"
         try:
-            self.run_threads(worker_thread_infos)
+            self.run_threads(
+                worker_thread_infos,
+                max_run_duration=self.config[Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS],
+                watchdog_failure_interval_in_seconds=self.config[
+                    Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS
+                ],
+            )
         except BaseException as e:
             exit_reason = str(e) or type(e)
             raise

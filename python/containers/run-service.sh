@@ -3,3 +3,5 @@
 # full license information.
 source /fetch-service-secrets.sh
 python -m pdb -c continue /service/service.py
+echo "Python app is complete.  Exiting in 60 seconds"
+sleep 60

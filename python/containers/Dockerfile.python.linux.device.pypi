@@ -11,5 +11,4 @@ COPY python/device/* /device/
 COPY python/common/* /common/
 RUN pip install -e common
 
-CMD ["/bin/bash", "/run-device.sh"]
-
+ENTRYPOINT ["/bin/bash", "-v", "/run-device.sh"]
