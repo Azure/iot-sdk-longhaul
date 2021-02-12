@@ -77,6 +77,21 @@ param thief_shared_resource_group string {
     description: 'Name of resource group that holds all of our shared resources.  Inherited from shared resources.'
   }
 }
+param thief_shared_log_storage_account_name string {
+  metadata: {
+    description: 'Azure storage account name for log storage'
+  }
+}
+param thief_shared_log_storage_account_key string {
+  metadata: {
+    description: 'Azure storage account key for log storage'
+  }
+}
+param thief_shared_log_storage_share_name string {
+  metadata: {
+    description: 'Azure storage share name for log storage'
+  }
+}
 
 resource thief_iot_hub 'Microsoft.Devices/IotHubs@2020-08-01' = {
   name: '${prefix}-thief-hub'
@@ -368,6 +383,36 @@ resource secret_THIEF_SHARED_RESOURCE_GROUP 'Microsoft.KeyVault/vaults/secrets@2
   name: '${thief_key_vault.name}/THIEF-SHARED-RESOURCE-GROUP'
   properties: {
     value: thief_shared_resource_group
+    attributes: {
+      enabled: true
+    }
+  }
+}
+
+resource secret_THIEF_SHARED_LOG_STORAGE_ACCOUNT_NAME 'Microsoft.KeyVault/vaults/secrets@2016-10-01' = {
+  name: '${thief_key_vault.name}/THIEF-SHARED-LOG-STORAGE-ACCOUNT-NAME
+  properties: {
+    value: thief_shared_log_storage_account_name
+    attributes: {
+      enabled: true
+    }
+  }
+}
+
+resource secret_THIEF_SHARED_LOG_STORAGE_ACCOUNT_KEY 'Microsoft.KeyVault/vaults/secrets@2016-10-01' = {
+  name: '${thief_key_vault.name}/THIEF-SHARED-LOG-STORAGE-ACCOUNT-KEY'
+  properties: {
+    value: thief_shared_log_storage_account_key
+    attributes: {
+      enabled: true
+    }
+  }
+}
+
+resource secret_THIEF_SHARED_LOG_STORAGE_SHARE_NAME 'Microsoft.KeyVault/vaults/secrets@2016-10-01' = {
+  name: '${thief_key_vault.name}/THIEF-SHARED-LOG-STORAGE-SHARE-NAME'
+  properties: {
+    value: thief_shared_log_storage_share_name
     attributes: {
       enabled: true
     }

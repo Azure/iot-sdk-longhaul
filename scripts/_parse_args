@@ -45,6 +45,18 @@ while [ "$1" != "" ]; do
             export EXTRA_TAG=$1
             shift
             ;;
+        "--run_id")
+            export RUN_ID=$1
+            shift
+            ;;
+        "--run_reason")
+            export RUN_REASON=$1
+            shift
+            ;;
+        "--service_instance_id")
+            export SERVICE_INSTANCE_ID=$1
+            shift
+            ;;
         *)
             echo "arg $arg is unknown"
             return 33
