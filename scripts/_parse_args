@@ -46,7 +46,7 @@ while [ "$1" != "" ]; do
             shift
             ;;
         *)
-            echo "arg $arg is unkonwn"
+            echo "arg $arg is unknown"
             return 33
             ;;
     esac

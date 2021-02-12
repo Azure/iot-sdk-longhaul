@@ -35,7 +35,7 @@ def create_device_client_using_dps_group_key(
     registration_result = provisioning_client.register()
 
     if registration_result.status != "assigned":
-        raise Exception("Invalid rgistration status: {}".result.status)
+        raise Exception("Invalid registration status: {}".result.status)
 
     hostname = registration_result.registration_state.assigned_hub
     device_id = registration_result.registration_state.device_id

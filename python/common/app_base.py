@@ -196,7 +196,7 @@ class AppBase(object):
 
                     if max_run_duration and (time.time() - loop_start_epochtime > max_run_duration):
                         self.metrics.run_state = COMPLETE
-                        self.metrics.exit_rason = "Run passed after {}".format(
+                        self.metrics.exit_reason = "Run passed after {}".format(
                             datetime.timedelta(max_run_duration)
                         )
                     else:

@@ -31,7 +31,7 @@ class SystemHealthTelemetry(object):
             return memory_info.rss - memory_info.shared
         elif self.system == "Windows":
             # from SYSTEM_PROCESS_INFORMATION.PrivatePageCount
-            return self.memory_info().pivate
+            return self.memory_info().private
         else:
             # osx, aix, bsd -- undefined
             return 0
