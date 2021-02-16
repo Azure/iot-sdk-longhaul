@@ -87,6 +87,24 @@
       "metadata": {
         "description": "Name of resource group that holds all of our shared resources.  Inherited from shared resources."
       }
+    },
+    "thief_shared_log_storage_account_name": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure storage account name for log storage"
+      }
+    },
+    "thief_shared_log_storage_account_key": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure storage account key for log storage"
+      }
+    },
+    "thief_shared_log_storage_share_name": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure storage share name for log storage"
+      }
     }
   },
   "functions": [],
@@ -278,7 +296,7 @@
       "apiVersion": "2016-10-01",
       "name": "[format('{0}/THIEF-DEVICE-GROUP-SYMMETRIC-KEY', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
-        "value": "Will be populated by deploy.sh",
+        "value": "Incomplete deployment. This value should be populated by create-thief-instance.sh",
         "attributes": {
           "enabled": true
         }
@@ -467,6 +485,48 @@
       "name": "[format('{0}/THIEF-SHARED-RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "[parameters('thief_shared_resource_group')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-SHARED-LOG-STORAGE-ACCOUNT-NAME', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_shared_log_storage_account_name')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-SHARED-LOG-STORAGE-ACCOUNT-KEY', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_shared_log_storage_account_key')]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2016-10-01",
+      "name": "[format('{0}/THIEF-SHARED-LOG-STORAGE-SHARE-NAME', format('{0}-thief-kv', parameters('prefix')))]",
+      "properties": {
+        "value": "[parameters('thief_shared_log_storage_share_name')]",
         "attributes": {
           "enabled": true
         }
