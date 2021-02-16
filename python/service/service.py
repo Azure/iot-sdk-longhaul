@@ -54,6 +54,8 @@ azure_monitor.log_to_azure_monitor("thief")
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
 OutgoingC2d = collections.namedtuple("OutgoingC2d", "device_id message props fail_count")
+OutgoingC2d.__new__.__defaults__ = (0,)  # applied to rightmost args, so fail_count defaults to 0
+
 
 # TODO: remove items from pairing list of no traffic for X minutes
 
@@ -114,6 +116,9 @@ class ServiceRunConfig(object):
 
         # How often to refresh the AMQP connection.  Sometime before it expires.
         self.amqp_refresh_interval_in_seconds = self.amqp_sas_expiry_in_seconds - 300
+
+        # How many times to retry sending C2D before failing
+        self.send_c2d_retry_count = 3
 
 
 def get_device_id_from_event(event):
@@ -346,7 +351,7 @@ class ServiceApp(app_base.AppBase):
                     except Exception as e:
                         fail_count = outgoing_c2d.fail_count + 1
 
-                        if fail_count <= 3:
+                        if fail_count <= self.config.send_c2d_retry_count:
                             logger.warning(
                                 "send_c2d_messge to {} raised {}. Failure count={}. Trying again.".format(
                                     device_id, str(e) or type(e), fail_count
@@ -356,12 +361,7 @@ class ServiceApp(app_base.AppBase):
                             )
                             refresh_registry_manager = True
                             self.outgoing_c2d_queue.put(
-                                OutgoingC2d(
-                                    device_id=device_id,
-                                    message=message,
-                                    props=props,
-                                    fail_count=fail_count,
-                                )
+                                outgoing_c2d._replace(fail_count=fail_count)
                             )
                         else:
                             logger.error(
@@ -441,7 +441,6 @@ class ServiceApp(app_base.AppBase):
                             device_id=device_id,
                             message=message,
                             props=Const.JSON_TYPE_AND_ENCODING,
-                            fail_count=0,
                         )
                     )
 
@@ -529,7 +528,6 @@ class ServiceApp(app_base.AppBase):
                             device_id=device_id,
                             message=message,
                             props=Const.JSON_TYPE_AND_ENCODING,
-                            fail_count=0,
                         )
                     )
 
