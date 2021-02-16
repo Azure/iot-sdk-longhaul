@@ -33,7 +33,11 @@ eventhub_connection_string = os.environ["THIEF_EVENTHUB_CONNECTION_STRING"]
 eventhub_consumer_group = os.environ["THIEF_EVENTHUB_CONSUMER_GROUP"]
 service_pool = os.environ["THIEF_SERVICE_POOL"]
 
-service_instance_id = str(uuid.uuid4())
+# Optional environment variables.
+# run_id can be an environment variable or it can be automatically generated
+service_instance_id = os.getenv("THIEF_SERVICE_INSTANCE_ID")
+if not service_instance_id:
+    service_instance_id = str(uuid.uuid4())
 
 # set default logging which will only go to the console
 logging.basicConfig(level=logging.WARNING)

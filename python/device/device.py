@@ -44,10 +44,13 @@ group_symmetric_key = os.environ["THIEF_DEVICE_GROUP_SYMMETRIC_KEY"]
 registration_id = os.environ["THIEF_DEVICE_ID"]
 requested_service_pool = os.environ["THIEF_REQUESTED_SERVICE_POOL"]
 
-# Why are we running this code.  Can be passed on the command line.
-run_reason = ""
-
-run_id = str(uuid.uuid4())
+# Optional environment variables.
+# run_reason can be an environment variable or is can be passed on the command line.
+run_reason = os.getenv("THIEF_RUN_REASON")
+# run_id can be an environment variable or it can be automatically generated
+run_id = os.getenv("THIEF_RUN_ID")
+if not run_id:
+    run_id = str(uuid.uuid4())
 
 # set default logging which will only go to the console
 
