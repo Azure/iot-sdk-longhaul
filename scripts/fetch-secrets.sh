@@ -17,7 +17,7 @@ function get-secret {
     kv_name=$2
     echo "Fetching ${bash_name}"
     value=$(az keyvault secret show --vault-name ${THIEF_KEYVAULT_NAME} --name ${kv_name} | jq -r ".value")
-    export ${bash_name}=${value}
+    export ${bash_name}="${value}"
 }
 
 # This script is intended for developer workstations.  When these tests runs in the cloud,

@@ -252,7 +252,7 @@ resource secret_THIEF_CONTAINER_REGISTRY_USER 'Microsoft.KeyVault/vaults/secrets
 resource secret_THIEF_DEVICE_GROUP_SYMMETRIC_KEY 'Microsoft.KeyVault/vaults/secrets@2016-10-01' = {
   name: '${thief_key_vault.name}/THIEF-DEVICE-GROUP-SYMMETRIC-KEY'
   properties: {
-    value: 'Will be populated by deploy.sh'
+    value: 'Incomplete deployment. This value should be populated by create-thief-instance.sh'
     attributes: {
       enabled: true
     }
@@ -390,7 +390,7 @@ resource secret_THIEF_SHARED_RESOURCE_GROUP 'Microsoft.KeyVault/vaults/secrets@2
 }
 
 resource secret_THIEF_SHARED_LOG_STORAGE_ACCOUNT_NAME 'Microsoft.KeyVault/vaults/secrets@2016-10-01' = {
-  name: '${thief_key_vault.name}/THIEF-SHARED-LOG-STORAGE-ACCOUNT-NAME
+  name: '${thief_key_vault.name}/THIEF-SHARED-LOG-STORAGE-ACCOUNT-NAME'
   properties: {
     value: thief_shared_log_storage_account_name
     attributes: {
