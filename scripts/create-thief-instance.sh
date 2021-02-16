@@ -157,6 +157,9 @@ outputs=$(az deployment group create \
         thief_shared_subscription_id=${THIEF_SHARED_SUBSCRIPTION_ID} \
         thief_shared_keyvault_name=${THIEF_SHARED_KEYVAULT_NAME} \
         thief_shared_resource_group=${THIEF_SHARED_RESOURCE_GROUP} \
+        thief_shared_log_storage_account_name=${THIEF_SHARED_LOG_STORAGE_ACCOUNT_NAME} \
+        thief_shared_log_storage_account_key=${THIEF_SHARED_LOG_STORAGE_ACCOUNT_KEY} \
+        thief_shared_log_storage_share_name=${THIEF_SHARED_LOG_STORAGE_SHARE_NAME} \
     )
 
 ####################################
