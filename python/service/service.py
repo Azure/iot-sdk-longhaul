@@ -11,8 +11,9 @@ import datetime
 import app_base
 import uuid
 import collections
+import faulthandler
 from concurrent.futures import ThreadPoolExecutor
-from azure.iot.hub import IoTHubRegistryManager
+from azure.iot.hub import IoTHubRegistryManager, iothub_amqp_client
 from azure.iot.hub.protocol.models import Twin, TwinProperties
 import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
@@ -22,6 +23,8 @@ from thief_constants import (
     Fields,
     Types,
 )
+
+faulthandler.enable()
 
 # use os.environ[] for required environment variables
 iothub_connection_string = os.environ["THIEF_SERVICE_CONNECTION_STRING"]
@@ -54,6 +57,9 @@ event_logger = azure_monitor.get_event_logger()
 azure_monitor.log_to_azure_monitor("thief")
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
+OutgoingC2d = collections.namedtuple("OutgoingC2d", "device_id message props fail_count")
+OutgoingC2d.__new__.__defaults__ = (0,)  # applied to rightmost args, so fail_count defaults to 0
+
 
 # TODO: remove items from pairing list of no traffic for X minutes
 
@@ -109,8 +115,14 @@ class ServiceRunConfig(object):
         # How long do we allow a thread to be unresponsive for.
         self.watchdog_failure_interval_in_seconds = 300
 
-        # How often to refresh the AMQP connection.  Necessary because of a 10 minute hardcoded credential interval
-        self.amqp_refresh_interval_in_seconds = 4 * 60
+        # How long until our AMQP sas tokens expire
+        self.amqp_sas_expiry_in_seconds = 3600
+
+        # How often to refresh the AMQP connection.  Sometime before it expires.
+        self.amqp_refresh_interval_in_seconds = self.amqp_sas_expiry_in_seconds - 300
+
+        # How many times to retry sending C2D before failing
+        self.send_c2d_retry_count = 3
 
 
 def get_device_id_from_event(event):
@@ -159,6 +171,9 @@ class ServiceApp(app_base.AppBase):
 
         # for incoming eventHub events
         self.incoming_eventhub_event_queue = queue.Queue()
+
+        # change the default SAS expiry
+        iothub_amqp_client.default_sas_expiry = self.config.amqp_sas_expiry_in_seconds
 
     def remove_device_from_pairing_list(self, device_id):
         """
@@ -289,6 +304,7 @@ class ServiceApp(app_base.AppBase):
         """
         logger.info("Starting thread")
         last_amqp_refresh_epochtime = time.time()
+        refresh_registry_manager = False
 
         while not (self.done.isSet() and self.outgoing_c2d_queue.empty()):
             worker_thread_info.watchdog_epochtime = time.time()
@@ -300,7 +316,11 @@ class ServiceApp(app_base.AppBase):
                 time.time() - last_amqp_refresh_epochtime
                 > self.config.amqp_refresh_interval_in_seconds
             ):
-                logger.info("AMQP credential approaching expiration.  Recreating registry manager")
+                logger.info("AMQP credential approaching expiration.")
+                refresh_registry_manager = True
+
+            if refresh_registry_manager:
+                logger.info("Creating new registry manager object.")
                 with self.registry_manager_lock:
                     self.registry_manager.amqp_svc_client.disconnect_sync()
                     self.registry_manager = None
@@ -308,9 +328,13 @@ class ServiceApp(app_base.AppBase):
                     self.registry_manager = IoTHubRegistryManager(iothub_connection_string)
                 logger.info("New registry_manager object created")
                 last_amqp_refresh_epochtime = time.time()
+                refresh_registry_manager = False
 
             try:
-                (device_id, message, props) = self.outgoing_c2d_queue.get(timeout=1)
+                outgoing_c2d = self.outgoing_c2d_queue.get(timeout=1)
+                device_id = outgoing_c2d.device_id
+                message = outgoing_c2d.message
+                props = outgoing_c2d.props
             except queue.Empty:
                 pass
             else:
@@ -329,19 +353,35 @@ class ServiceApp(app_base.AppBase):
                         with self.registry_manager_lock:
                             self.registry_manager.send_c2d_message(device_id, message, props)
                     except Exception as e:
-                        logger.error(
-                            "send_c2d_message to {} raised {}.  Forcing un-pair with device".format(
-                                device_id, str(e) or type(e)
-                            ),
-                            exc_info=e,
-                            extra=custom_props(device_id, device_data.run_id),
-                        )
-                        self.remove_device_from_pairing_list(device_id)
+                        fail_count = outgoing_c2d.fail_count + 1
+
+                        if fail_count <= self.config.send_c2d_retry_count:
+                            logger.warning(
+                                "send_c2d_messge to {} raised {}. Failure count={}. Trying again.".format(
+                                    device_id, str(e) or type(e), fail_count
+                                ),
+                                exc_info=e,
+                                extra=custom_props(device_id, device_data.run_id),
+                            )
+                            refresh_registry_manager = True
+                            self.outgoing_c2d_queue.put(
+                                outgoing_c2d._replace(fail_count=fail_count)
+                            )
+                        else:
+                            logger.error(
+                                "send_c2d_message to {} raised {}. Failure count={}. Forcing un-pair with device".format(
+                                    device_id, str(e) or type(e), fail_count
+                                ),
+                                exc_info=e,
+                                extra=custom_props(device_id, device_data.run_id),
+                            )
+                            self.remove_device_from_pairing_list(device_id)
                     else:
                         end = time.time()
                         if end - start > 2:
                             logger.warning(
-                                "Send throttled.  Time delta={} seconds".format(end - start)
+                                "Send throttled.  Time delta={} seconds".format(end - start),
+                                extra=custom_props(device_id, device_data.run_id),
                             )
 
     def handle_service_ack_request_thread(self, worker_thread_info):
@@ -400,7 +440,13 @@ class ServiceApp(app_base.AppBase):
                         }
                     )
 
-                    self.outgoing_c2d_queue.put((device_id, message, Const.JSON_TYPE_AND_ENCODING,))
+                    self.outgoing_c2d_queue.put(
+                        OutgoingC2d(
+                            device_id=device_id,
+                            message=message,
+                            props=Const.JSON_TYPE_AND_ENCODING,
+                        )
+                    )
 
             # TODO: this should be configurable
             # Too small and this causes C2D throttling
@@ -481,7 +527,13 @@ class ServiceApp(app_base.AppBase):
                         now + device_data.c2d_interval_in_seconds
                     )
 
-                    self.outgoing_c2d_queue.put((device_id, message, Const.JSON_TYPE_AND_ENCODING,))
+                    self.outgoing_c2d_queue.put(
+                        OutgoingC2d(
+                            device_id=device_id,
+                            message=message,
+                            props=Const.JSON_TYPE_AND_ENCODING,
+                        )
+                    )
 
             # loop through devices and see when our next outgoing c2d message is due to be sent.
             next_iteration_epochtime = now + 10
@@ -704,6 +756,8 @@ class ServiceApp(app_base.AppBase):
                 .get(Const.REPORTED, {})
                 .get(Fields.Reported.THIEF, {})
             )
+            if not thief:
+                thief = {}
 
             with self.pairing_list_lock:
                 if device_id in self.paired_devices:
