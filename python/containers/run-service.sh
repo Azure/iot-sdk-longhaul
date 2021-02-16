@@ -3,3 +3,5 @@
 # full license information.
 source /fetch-service-secrets.sh
 python -u /service/service.py 2>&1 | tee /mnt/logs/svc-${THIEF_SERVICE_POOL}-${THIEF_SERVICE_INSTANCE_ID}.txt
+echo "Python app is complete.  Exiting in 60 seconds"
+sleep 60
