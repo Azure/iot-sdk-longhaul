@@ -21,11 +21,6 @@ if (!provisioningHost || !idScope || !groupSymmetricKey || !registrationId || !r
   throw new Error('Required environment variable is undefined.');
 }
 
-/* TODO:
-  - Getting unhandledPromiseRejection when pairing times out
-  - App doesn't terminate if the device app fails.
-*/
-
 const settings: thiefSettings = {
     thiefMaxRunDurationInSeconds: 0,
     thiefPropertyUpdateIntervalInSeconds: 30,
@@ -69,7 +64,6 @@ class DeviceApp {
       }
     };
 
-    let attemptTimer: NodeJS.Timeout;
     const pairWithServiceAttemptRecursive = () => {
       return new Promise<void>((res, rej) => {
         console.info('Updating pairing reported props: %j', pairingRequestPatch);
@@ -89,7 +83,7 @@ class DeviceApp {
               else {
                 console.info(`Service app ${received.serviceInstanceId} claimed this device instance`);
                 this.twin.removeAllListeners('properties.desired.thief.pairing');
-                clearTimeout(attemptTimer);
+                clearTimeout(this.pairingAttemptTimer);
                 this.serviceInstanceId = received.serviceInstanceId;
                 const pairingAcceptPatch = {
                   thief: {
@@ -106,9 +100,9 @@ class DeviceApp {
               }
             });
 
-            // If it's taking too long for a service app to response to our pairing request,
+            // If it's taking too long for a service app to respond to our pairing request,
             // retry by recursively calling pairWithServiceAttemptRecursive()
-            attemptTimer = setTimeout(() => {
+            this.pairingAttemptTimer = setTimeout(() => {
               console.info('Pairing response timeout. Requesting again.');
               this.twin.removeAllListeners('properties.desired.thief.pairing');
               pairWithServiceAttemptRecursive().then(res).catch(e => rej(e));
@@ -122,26 +116,29 @@ class DeviceApp {
       // Call pairWithServiceAttemptRecursive. If its returned promise settles, handle accordingly.
       pairWithServiceAttemptRecursive().then(() => {
         console.info("Pairing with service complete.")
-        clearTimeout(pairingTimer);
+        clearTimeout(this.pairingTimer);
         res();
       }).catch(e => rej(e));
 
-      // If the promise takes too long to settle, kill the pairing operation and reject.
-      const pairingTimer = setTimeout(() => {
+      // If the promise takes too long to settle, stop the pairing operation and reject.
+      this.pairingTimer = setTimeout(() => {
         this.twin.removeAllListeners('properties.desired.thief.pairing');
-        clearTimeout(attemptTimer);
+        clearTimeout(this.pairingAttemptTimer);
         rej(new TimeoutError(`No response to pairing requests after trying for ${this.settings.pairingRequestTimeoutIntervalInSeconds} seconds.`));
       }, 1000 * this.settings.pairingRequestTimeoutIntervalInSeconds);
     });
   }
 
   // Does not deal with out-of-order messages.
-  // For example, If we get index 5 and then 7, we assume 6 is lost.
-  private handleTestC2dMessage(obj) {
+  // For example, if we get index 5 and then 7, we assume 6 is lost.
+  private handleTestC2dMessage(obj, msg) {
     if (Number.isNaN(obj.thief.testC2dMessageIndex) || typeof obj.thief.testC2dMessageIndex !== 'number') {
-      console.warn('Issue with testC2dMessageIndex property');
+      this.rejectC2d(msg);
+      return console.warn('Issue with testC2dMessageIndex property. Rejecting.');
     }
-    else if (!this.maxReceivedIndex && this.maxReceivedIndex !== 0) {
+
+    this.completeC2d(msg);
+    if (!this.maxReceivedIndex && this.maxReceivedIndex !== 0) {
       console.info(`Received initial testC2dMessageIndex: ${this.maxReceivedIndex = obj.thief.testC2dMessageIndex}`);
     }
     else if (this.maxReceivedIndex + 1 === obj.thief.testC2dMessageIndex) {
@@ -152,8 +149,7 @@ class DeviceApp {
       console.warn(`Received testC2dMessageIndex ${obj.thief.testC2dMessageIndex}, but never received indices ${missing}`);
       this.maxReceivedIndex = obj.thief.testC2dMessageIndex;
       if ((this.c2dMissingMessageCount += missing.length) > this.settings.receiveC2dAllowedMissingMessageCount) {
-        console.error(`The number of missing C2D messages exceeds receiveC2dAllowedMissingMessageCount of ${this.settings.receiveC2dAllowedMissingMessageCount}. Exiting.`)
-        //TODO: exit program
+        this.stopDeviceApp(`The number of missing C2D messages exceeds receiveC2dAllowedMissingMessageCount of ${this.settings.receiveC2dAllowedMissingMessageCount}.`);
       }
     }
     else {
@@ -161,9 +157,10 @@ class DeviceApp {
     }
   }
 
-  private handleServiceAckResponseMessage(obj) {
+  private handleServiceAckResponseMessage(obj, msg) {
     if (!Array.isArray(obj.thief.serviceAcks)) {
-      return console.warn('Issue with serviceAcks property.');
+      this.rejectC2d(msg);
+      return console.warn('Issue with serviceAcks property. Rejecting.');
     }
     console.info(`Received serviceAckIds: ${obj.thief.serviceAcks}`);
     obj.thief.serviceAcks.forEach(id => {
@@ -174,6 +171,15 @@ class DeviceApp {
         console.warn(`Received unknown serviceAckId: ${id}`);
       }
     });
+    this.completeC2d(msg);
+  }
+
+  private rejectC2d(msg) {
+    this.client.reject(msg).catch(e => {console.warn('Error when rejecting C2D message: ' + e.message)});
+  }
+
+  private completeC2d(msg) {
+    this.client.complete(msg).catch(e => {console.warn('Error when completing C2D message: ' + e.message)});
   }
 
   private registerMessageListener() {
@@ -183,20 +189,23 @@ class DeviceApp {
         obj = JSON.parse(msg.getData());
       }
       catch {
-        return console.warn('Failed to parse received C2D message.')
+        this.rejectC2d(msg);
+        return console.warn('Failed to parse received C2D message. Rejecting.');
       }
 
       if (!obj.thief || obj.thief.runId !== runId || obj.thief.serviceInstanceId !== this.serviceInstanceId) {
-        console.warn("C2D received, but it's not for us: %j", obj);
+        this.rejectC2d(msg);
+        console.warn("C2D received, but it's not for us: %j. Rejecting.", obj);
       }
       else if (obj.thief.cmd === 'serviceAckResponse') {
-        this.handleServiceAckResponseMessage(obj);
+        this.handleServiceAckResponseMessage(obj, msg);
       }
       else if (obj.thief.cmd === 'testC2d') {
-        this.handleTestC2dMessage(obj);
+        this.handleTestC2dMessage(obj, msg);
       }
       else {
-        console.warn('Unknown command received: %j', obj);
+        this.rejectC2d(msg);
+        console.warn('Unknown command received: %j. Rejecting', obj);
       }
     });
   }
@@ -219,8 +228,7 @@ class DeviceApp {
   private startTelemetrySending() {
     this.telemetrySendingInterval = setInterval(() => {
       if (this.serviceAckWaitList.size > this.settings.sendMessageAllowedFailureCount) {
-        console.error(`The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${this.settings.sendMessageAllowedFailureCount}. Exiting.`);
-        //TODO kill the program
+        this.stopDeviceApp(`The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${this.settings.sendMessageAllowedFailureCount}.`);
       }
 
       const serviceAckId = uuidv4();
@@ -239,21 +247,44 @@ class DeviceApp {
     }, 1000 * this.settings.sendMessageOperationsPerSecond);
   }
 
-  private async startTestOperations() {
+  private startTestOperations() {
     this.registerMessageListener();
     this.startC2dMessageSending().catch(e => {throw new Error('Starting C2D message sending failed: ' + e.message)});
     this.startTelemetrySending();
   }
 
-  async main(settings: thiefSettings) {
+  stopDeviceApp(reason?: string | Error) {
+    console.warn('Stopping device app' + (reason ? `: ${reason}`: ''));
+    clearInterval(this.telemetrySendingInterval);
+    clearTimeout(this.pairingAttemptTimer);
+    clearTimeout(this.pairingTimer);
+    if (this.twin) {
+      this.twin.removeAllListeners();
+    }
+    if (this.client) {
+      this.client.removeAllListeners();
+      this.client.close().catch(e => console.error(`Error closing client: ${e}`));
+    }
+  }
+
+  async startDeviceApp(settings: thiefSettings) {
+    console.info('Starting device app.');
     this.settings = settings;
-    this.telemetrySendingInterval; //avoid tsc complaining about not reading this value
-    this.client = await this.createDeviceClientUsingDpsGroupKey().catch(e => {throw new Error('Creating device client failed: ' + e.message)});
-    this.twin = await this.client.getTwin().catch(e => {throw new Error('Getting twin failed: ' + e.message)});
-    await this.pairWithService().catch(e => {throw new Error('Pairing with service failed: ' + e.message)});
-    await this.startTestOperations().catch(e => {throw new Error('Testing operation failed: ' + e.message)});
+    try {
+      this.client = await this.createDeviceClientUsingDpsGroupKey();
+      this.twin = await this.client.getTwin();
+      await this.pairWithService();
+    }
+    catch (e) {
+      this.stopDeviceApp(e);
+      throw(e);
+    }
+
+    this.startTestOperations();
   }
   
+  private pairingTimer: NodeJS.Timeout;
+  private pairingAttemptTimer: NodeJS.Timeout;
   private telemetrySendingInterval: NodeJS.Timeout;
   private serviceAckWaitList: Set<string>;
   private maxReceivedIndex: number;
@@ -276,4 +307,12 @@ class DeviceApp {
   }
 }
 
-DeviceApp.getInstance().main(settings).catch(e => {throw new Error('Device app failed: ' + e.message)});
+function signalHandler(signal: string) {
+  DeviceApp.getInstance().stopDeviceApp(`Received ${signal} signal.`);
+}
+process.on('SIGTERM', () => signalHandler('SIGTERM'));
+process.on('SIGINT', () => signalHandler('SIGINT'));
+process.on('SIGHUP', () => signalHandler('SIGHUP'));
+process.on('SIGBREAK', () => signalHandler('SIGBREAK'));
+
+DeviceApp.getInstance().startDeviceApp(settings).catch(() => console.error('Device app failed.'));
