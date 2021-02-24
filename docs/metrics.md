@@ -8,6 +8,7 @@ Test metrics are sent to 3 different places:
 Not all metrics are sent to all destinations.
 
 | group | reported properties | test telemetry | Azure Monitor |
+| - | - | - | - |
 | Session Metrics | X | X | - |
 | Test Metrics | X | X | X |
 | System Health Metrics | - | X | X |
