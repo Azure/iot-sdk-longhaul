@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@types/uuid": "^8.3.0",
+    "applicationinsights": "^1.8.10",
     "azure-iot-common": "^1.12.7",
     "azure-iot-device": "^1.17.3",
     "azure-iot-device-mqtt": "^1.15.3",
