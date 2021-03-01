@@ -408,7 +408,7 @@ class DeviceApp {
         if (
           this.serviceAckWaitList.size > settings.sendMessageAllowedFailureCount
         ) {
-          return this.stopDeviceApp(
+          this.stopDeviceApp(
             new Error(
               `The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${settings.sendMessageAllowedFailureCount}.`
             )

@@ -6,9 +6,9 @@ import { format } from "util";
 
 export const enum LoggerSeverityLevel {
   INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-  CRITICAL = 4,
+  WARN,
+  ERROR,
+  CRITICAL,
 }
 
 export type LoggerSettings = {
