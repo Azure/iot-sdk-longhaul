@@ -45,7 +45,7 @@ export type AzureMonitorCustomProperties = {
 };
 
 export type SessionMetics = {
-  exitReason: string;
+  exitReason?: string;
   lastUpdateTimeUtc: string;
   runStartUtc: string;
   runState: "waiting" | "running" | "failed" | "complete" | "interrupted";
@@ -56,4 +56,4 @@ export const enum Signal {
   SIGHUP = 1,
   SIGINT = 2,
   SIGTERM = 15,
-};
+}

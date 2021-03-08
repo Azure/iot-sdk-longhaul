@@ -17,7 +17,7 @@ import { ProvisioningDeviceClient } from "azure-iot-provisioning-device";
 import { Client, Message, Twin } from "azure-iot-device";
 import { NotImplementedError } from "azure-iot-common/dist/errors";
 import * as appInsights from "applicationinsights";
-import { Data, EventTelemetry } from "applicationinsights/out/Declarations/Contracts";
+import { EventTelemetry } from "applicationinsights/out/Declarations/Contracts";
 import { createHmac } from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { promisify } from "util";
@@ -388,19 +388,27 @@ class DeviceApp {
   private onThiefReportedPropertyInterval = () => {
     const now = new Date();
     this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
-    this.sessionMetrics.runTime = msToDurationString(now.getTime() - this.runStart.getTime());
-    const thiefPropertyPatch = {thief: {sessionMetrics: this.sessionMetrics}};
-    logger.info("Updating pairing reported props: %j", thiefPropertyPatch);
-    promisify(this.twin.properties.reported.update)(thiefPropertyPatch).catch((e: Error) => {
-      logger.error(`Updating thief reported properties failed: ${e}`);
-    });
+    this.sessionMetrics.runTime = msToDurationString(
+      now.getTime() - this.runStart.getTime()
+    );
+    const thiefPropertyPatch = {
+      thief: { sessionMetrics: this.sessionMetrics },
+    };
+    logger.info("Updating thief reported props: %j", thiefPropertyPatch);
+    promisify(this.twin.properties.reported.update)(thiefPropertyPatch).catch(
+      (e: Error) => {
+        logger.error(`Updating thief reported properties failed: ${e}`);
+      }
+    );
   };
 
   private onTelemetrySendInterval = () => {
     const serviceAckId = uuidv4();
     const now = new Date();
     this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
-    this.sessionMetrics.runTime = msToDurationString(now.getTime() - this.runStart.getTime());
+    this.sessionMetrics.runTime = msToDurationString(
+      now.getTime() - this.runStart.getTime()
+    );
     const message = new Message(
       JSON.stringify({
         thief: {
@@ -409,7 +417,7 @@ class DeviceApp {
           runId: runId,
           serviceAckId: serviceAckId,
           serviceAckType: "telemetry",
-          sessionMetrics: this.sessionMetrics
+          sessionMetrics: this.sessionMetrics,
         },
       })
     );
@@ -476,6 +484,7 @@ class DeviceApp {
     });
 
     clearInterval(this.telemetrySendingInterval);
+    clearInterval(this.thiefPropertySendingInterval);
     clearTimeout(this.pairingAttemptTimer);
     clearTimeout(this.pairingTimer);
     if (this.twin) {
@@ -497,8 +506,12 @@ class DeviceApp {
 
   async startDeviceApp() {
     this.runStart = new Date();
-    this.sessionMetrics.runStartUtc = this.runStart.toISOString();
-    this.sessionMetrics.runState = 'running';
+    this.sessionMetrics = {
+      lastUpdateTimeUtc: this.runStart.toISOString(),
+      runStartUtc: this.runStart.toISOString(),
+      runState: "running",
+      runTime: msToDurationString(0),
+    };
     logger.info("Starting device app.");
     const startingRunEvent: EventTelemetry = { name: "StartingRun" };
     if (runReason) {
