@@ -6,6 +6,7 @@ import {
   ThiefPairingProperties,
   ThiefC2dMessage,
   AzureMonitorCustomProperties,
+  SessionMetics,
 } from "./types";
 import { TimeoutError } from "./timeout";
 import { Logger, LoggerSeverityLevel } from "./logger";
@@ -16,11 +17,12 @@ import { ProvisioningDeviceClient } from "azure-iot-provisioning-device";
 import { Client, Message, Twin } from "azure-iot-device";
 import { NotImplementedError } from "azure-iot-common/dist/errors";
 import * as appInsights from "applicationinsights";
-import { EventTelemetry } from "applicationinsights/out/Declarations/Contracts";
+import { Data, EventTelemetry } from "applicationinsights/out/Declarations/Contracts";
 import { createHmac } from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { promisify } from "util";
 import * as os from "os";
+import { msToDurationString } from "./duration";
 
 const provisioningHost = process.env.THIEF_DEVICE_PROVISIONING_HOST;
 const idScope = process.env.THIEF_DEVICE_ID_SCOPE;
@@ -194,10 +196,10 @@ class DeviceApp {
       },
     };
 
-    const startTime = new Date().getTime();
+    const startTime = Date.now();
 
     while (
-      new Date().getTime() - startTime <=
+      Date.now() - startTime <=
       1000 * settings.pairingRequestTimeoutIntervalInSeconds
     ) {
       appInsights.defaultClient.trackEvent({ name: "SendingPairingRequest" });
@@ -231,6 +233,7 @@ class DeviceApp {
           },
         },
       };
+      logger.info("Accepting pairing: %j", pairingAcceptPatch);
       await promisify(this.twin.properties.reported.update)(
         pairingAcceptPatch
       ).catch((e: Error) => {
@@ -382,8 +385,22 @@ class DeviceApp {
     );
   }
 
+  private onThiefReportedPropertyInterval = () => {
+    const now = new Date();
+    this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
+    this.sessionMetrics.runTime = msToDurationString(now.getTime() - this.runStart.getTime());
+    const thiefPropertyPatch = {thief: {sessionMetrics: this.sessionMetrics}};
+    logger.info("Updating pairing reported props: %j", thiefPropertyPatch);
+    promisify(this.twin.properties.reported.update)(thiefPropertyPatch).catch((e: Error) => {
+      logger.error(`Updating thief reported properties failed: ${e}`);
+    });
+  };
+
   private onTelemetrySendInterval = () => {
     const serviceAckId = uuidv4();
+    const now = new Date();
+    this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
+    this.sessionMetrics.runTime = msToDurationString(now.getTime() - this.runStart.getTime());
     const message = new Message(
       JSON.stringify({
         thief: {
@@ -392,6 +409,7 @@ class DeviceApp {
           runId: runId,
           serviceAckId: serviceAckId,
           serviceAckType: "telemetry",
+          sessionMetrics: this.sessionMetrics
         },
       })
     );
@@ -418,6 +436,11 @@ class DeviceApp {
   };
 
   private async startTestOperations() {
+    logger.info("Starting thief reported property sending.");
+    this.thiefPropertySendingInterval = setInterval(
+      this.onThiefReportedPropertyInterval,
+      1000 * settings.thiefPropertyUpdateIntervalInSeconds
+    );
     this.client.on("message", this.c2dMessageListener);
     logger.info("Starting telemetry sending.");
     this.telemetrySendingInterval = setInterval(
@@ -473,12 +496,16 @@ class DeviceApp {
   }
 
   async startDeviceApp() {
+    this.runStart = new Date();
+    this.sessionMetrics.runStartUtc = this.runStart.toISOString();
+    this.sessionMetrics.runState = 'running';
     logger.info("Starting device app.");
     const startingRunEvent: EventTelemetry = { name: "StartingRun" };
     if (runReason) {
       startingRunEvent.properties = { runReason: runReason };
     }
     appInsights.defaultClient.trackEvent(startingRunEvent);
+
     try {
       this.client = await this.createDeviceClientUsingDpsGroupKey();
       this.twin = await this.client.getTwin();
@@ -489,9 +516,12 @@ class DeviceApp {
     }
   }
 
+  private runStart: Date;
+  private sessionMetrics: SessionMetics;
   private pairingTimer: NodeJS.Timeout;
   private pairingAttemptTimer: NodeJS.Timeout;
   private telemetrySendingInterval: NodeJS.Timeout;
+  private thiefPropertySendingInterval: NodeJS.Timeout;
   private serviceAckWaitList: Set<string>;
   private maxReceivedIndex: number;
   private c2dMissingMessageCount: number;
