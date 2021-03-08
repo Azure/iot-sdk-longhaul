@@ -4,14 +4,11 @@
 export function msToDurationString(delta: number) {
   // [D:]h:m:s[.UUUUUU]
   delta = Math.trunc(delta);
-  let [ms, sec, min, hr] = [1000, 60, 60, 24].reduce(
-    (accumulator: number[], currentValue) => {
-      accumulator.push(delta % currentValue);
-      delta = (delta - (delta % currentValue)) / currentValue;
-      return accumulator;
-    },
-    []
-  );
+  let [ms, sec, min, hr] = [1000, 60, 60, 24].map((currentValue) => {
+    const mod = delta % currentValue;
+    delta = (delta - mod) / currentValue;
+    return mod;
+  });
   return (
     (delta ? `${delta}:` : "") +
     hr +
