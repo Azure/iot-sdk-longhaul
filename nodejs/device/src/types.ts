@@ -44,6 +44,14 @@ export type AzureMonitorCustomProperties = {
   runId: string;
 };
 
+export type SessionMetics = {
+  exitReason?: string;
+  lastUpdateTimeUtc: string;
+  runStartUtc: string;
+  runState: "waiting" | "running" | "failed" | "complete" | "interrupted";
+  runTime: string;
+};
+
 export const enum Signal {
   SIGHUP = 1,
   SIGINT = 2,
