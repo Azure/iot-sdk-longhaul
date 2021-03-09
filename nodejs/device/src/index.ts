@@ -55,6 +55,7 @@ const azureMonitorProperties: AzureMonitorCustomProperties = {
   transport: "mqtt",
   deviceId: registrationId,
   runId: runId,
+  hub: process.env.THIEF_IOTHUB_NAME,
 };
 
 appInsights
@@ -128,8 +129,6 @@ class DeviceApp {
     logger.info(
       `DPS registration complete. Assigned hub: ${registrationResult.assignedHub}`
     );
-    appInsights.defaultClient.commonProperties["hub"] =
-      registrationResult.assignedHub;
     const connectionString = `HostName=${registrationResult.assignedHub};DeviceId=${registrationResult.deviceId};SharedAccessKey=${deviceKey}`;
     const hubClient = Client.fromConnectionString(
       connectionString,
@@ -239,6 +238,7 @@ class DeviceApp {
       ).catch((e: Error) => {
         throw new Error(`Updating reported properties failed: ${e}`);
       });
+      appInsights.defaultClient.commonProperties.serviceInstanceId = this.serviceInstanceId;
       appInsights.defaultClient.trackEvent({ name: "PairingComplete" });
       return logger.info("Pairing with service complete.");
     }
