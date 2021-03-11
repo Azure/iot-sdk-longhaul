@@ -7,7 +7,7 @@ script_dir=$(cd "$(dirname "$0")" && pwd)
 
 NODE_SDK_ROOT=$1
 if [ ! -f ${NODE_SDK_ROOT}/tslint.json ]; then
-  echo Usage: $0 [node_root]
+  echo Usage: $0 [node sdk root]
   echo ex: $0 /home/repos/node
   exit 1
 fi
