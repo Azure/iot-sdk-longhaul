@@ -121,8 +121,8 @@ class DeviceApp {
       );
     }
     const registrationResult = await registrationResultPromise.catch(
-      (e: Error) => {
-        throw new Error(`DPS registration failed: ${e}`);
+      (err: Error) => {
+        throw new Error(`DPS registration failed: ${err}`);
       }
     );
     logger.info(
@@ -136,18 +136,29 @@ class DeviceApp {
       IotHubTransport
     );
     logger.info("Connecting to IoT Hub.");
-    await hubClient.open().catch((e: Error) => {
-      throw new Error(`Opening client failed: ${e}`);
+    await hubClient.open().catch((err: Error) => {
+      throw new Error(`Opening client failed: ${err}`);
     });
     return hubClient;
   }
 
-  private pairingAttempt() {
-    let finished = false;
-    let cancel = () => {
-      finished = true;
-    };
+  private pairingAttempt(): [Promise<ThiefPairingProperties>, () => void] {
+    let cancel: () => void;
     const promise = new Promise<ThiefPairingProperties>((resolve, reject) => {
+      let cleanedUp = false;
+      const cleanUp = () => {
+        cleanedUp = true;
+        this.twin.removeListener("properties.desired.thief.pairing", listener);
+        clearTimeout(pairingAttemptTimer);
+      };
+      cancel = () => {
+        if (cleanedUp) {
+          return;
+        }
+        logger.warn("Pairing canceled.");
+        cleanUp();
+        reject(new Canceled());
+      };
       const listener = (received: ThiefPairingProperties) => {
         appInsights.defaultClient.trackEvent({
           name: "ReceivedPairingResponse",
@@ -165,12 +176,11 @@ class DeviceApp {
         logger.info(
           `Service app ${received.serviceInstanceId} claimed this device instance`
         );
-        this.twin.removeListener("properties.desired.thief.pairing", listener);
-        clearTimeout(pairingAttemptTimer);
+        cleanUp();
         resolve(received);
       };
       const on_timeout = () => {
-        this.twin.removeListener("properties.desired.thief.pairing", listener);
+        cleanUp();
         reject(
           new TimeoutError(
             "Pairing desired properties event not received in time."
@@ -182,34 +192,8 @@ class DeviceApp {
         on_timeout,
         1000 * settings.pairingRequestSendIntervalInSeconds
       );
-
-      const finish = () => {
-        logger.warn("Pairing canceled.");
-        this.twin.removeListener("properties.desired.thief.pairing", listener);
-        clearTimeout(pairingAttemptTimer);
-        reject(new Canceled());
-      };
-
-      cancel = () => {
-        if (finished) {
-          return;
-        }
-        finish();
-      };
-
-      if (finished) {
-        finish();
-      }
-    })
-      .then<ThiefPairingProperties>((received) => {
-        finished = true;
-        return received;
-      })
-      .catch<ThiefPairingProperties>((err) => {
-        finished = true;
-        return err;
-      });
-    return { promise, cancel };
+    });
+    return [promise, cancel];
   }
 
   private async pairWithService() {
@@ -234,16 +218,19 @@ class DeviceApp {
     ) {
       appInsights.defaultClient.trackEvent({ name: "SendingPairingRequest" });
       logger.info("Updating pairing reported props: %j", pairingRequestPatch);
-      const pairingAttemptCancelable = this.pairingAttempt();
-      this.cancelPairingAttempt = pairingAttemptCancelable.cancel;
+      let pairingAttemptPromise: Promise<ThiefPairingProperties>;
+      [
+        pairingAttemptPromise,
+        this.cancelPairingAttempt,
+      ] = this.pairingAttempt();
       await promisify(this.twin.properties.reported.update)(
         pairingRequestPatch
-      ).catch((e: Error) => {
-        throw new Error(`Updating reported properties failed: ${e}`);
+      ).catch((err: Error) => {
+        throw new Error(`Updating reported properties failed: ${err}`);
       });
       let patch: ThiefPairingProperties;
       try {
-        patch = await pairingAttemptCancelable.promise;
+        patch = await pairingAttemptPromise;
       } catch (err) {
         if (err instanceof TimeoutError) {
           logger.warn(
@@ -268,8 +255,8 @@ class DeviceApp {
       logger.info("Accepting pairing: %j", pairingAcceptPatch);
       await promisify(this.twin.properties.reported.update)(
         pairingAcceptPatch
-      ).catch((e: Error) => {
-        throw new Error(`Updating reported properties failed: ${e}`);
+      ).catch((err: Error) => {
+        throw new Error(`Updating reported properties failed: ${err}`);
       });
       appInsights.defaultClient.trackEvent({ name: "PairingComplete" });
       return logger.info("Pairing with service complete.");
@@ -280,22 +267,32 @@ class DeviceApp {
     );
   }
 
-  private handleC2dMessages() {
-    let finished = false;
-    let cancel = () => {
-      finished = true;
-    };
+  private handleC2dMessages(): [Promise<void>, () => void] {
+    let cancel: () => void;
     const promise = new Promise<void>((_, reject) => {
-      const handleRejectC2dError = (e: Error) => {
-        if (e instanceof NotImplementedError) {
+      let cleanedUp = false;
+      const cleanUpAndReject = (err: Error) => {
+        cleanedUp = true;
+        this.client.removeListener("message", c2dMessageListener);
+        reject(err);
+      };
+      cancel = () => {
+        if (cleanedUp) {
           return;
         }
-        logger.error(`Error when rejecting C2D message: ${e}`);
+        logger.warn("C2D message handling canceled.");
+        cleanUpAndReject(new Canceled());
+      };
+      const handleRejectC2dError = (err: Error) => {
+        if (err instanceof NotImplementedError) {
+          return;
+        }
+        logger.error(`Error when rejecting C2D message: ${err}`);
         if (
           ++this.clientLibraryExceptionCount >
           settings.thiefAllowedClientLibraryExceptionCount
         ) {
-          reject(
+          cleanUpAndReject(
             new Error(
               `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
             )
@@ -303,13 +300,13 @@ class DeviceApp {
         }
       };
 
-      const handleCompleteC2dError = (e: Error) => {
-        logger.error(`Error when completing C2D message: ${e}`);
+      const handleCompleteC2dError = (err: Error) => {
+        logger.error(`Error when completing C2D message: ${err}`);
         if (
           ++this.clientLibraryExceptionCount >
           settings.thiefAllowedClientLibraryExceptionCount
         ) {
-          reject(
+          cleanUpAndReject(
             new Error(
               `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
             )
@@ -377,7 +374,7 @@ class DeviceApp {
             (this.c2dMissingMessageCount += missing.length) >
             settings.receiveC2dAllowedMissingMessageCount
           ) {
-            reject(
+            cleanUpAndReject(
               new Error(
                 `The number of missing C2D messages exceeds receiveC2dAllowedMissingMessageCount of ${settings.receiveC2dAllowedMissingMessageCount}.`
               )
@@ -421,32 +418,8 @@ class DeviceApp {
       };
 
       this.client.on("message", c2dMessageListener);
-
-      const finish = () => {
-        logger.warn("C2D message handling canceled.");
-        this.client.removeListener("message", c2dMessageListener);
-        reject(new Canceled());
-      };
-
-      cancel = () => {
-        if (finished) {
-          return;
-        }
-        finish();
-      };
-
-      if (finished) {
-        finish();
-      }
-    })
-      .then(() => {
-        finished = true;
-      })
-      .catch((err) => {
-        finished = true;
-        return err;
-      });
-    return { promise, cancel };
+    });
+    return [promise, cancel];
   }
 
   private async startC2dMessageSending() {
@@ -462,19 +435,29 @@ class DeviceApp {
     };
     logger.info("Enabling C2D message testing: %j", patch);
     await promisify(this.twin.properties.reported.update)(patch).catch(
-      (e: Error) => {
-        throw new Error(`Updating reported properties failed: ${e}`);
+      (err: Error) => {
+        throw new Error(`Updating reported properties failed: ${err}`);
       }
     );
   }
 
-  private sendTelemetry() {
+  private sendTelemetry(): [Promise<void>, () => void] {
     logger.info("Starting telemetry sending.");
-    let finished = false;
-    let cancel = () => {
-      finished = true;
-    };
+    let cancel: () => void;
     const promise = new Promise<void>((_, reject) => {
+      let cleanedUp = false;
+      let cleanupAndReject = (err: Error) => {
+        cleanedUp = true;
+        clearInterval(interval);
+        reject(err);
+      };
+      cancel = () => {
+        if (cleanedUp) {
+          return;
+        }
+        logger.warn("Telemetry sending canceled.");
+        cleanupAndReject(new Canceled());
+      };
       const interval = setInterval(() => {
         const serviceAckId = uuidv4();
         const now = new Date();
@@ -508,7 +491,7 @@ class DeviceApp {
               this.serviceAckWaitList.size >
               settings.sendMessageAllowedFailureCount
             ) {
-              reject(
+              cleanupAndReject(
                 new Error(
                   `The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${settings.sendMessageAllowedFailureCount}.`
                 )
@@ -516,41 +499,28 @@ class DeviceApp {
             }
           });
       }, 1000 * settings.sendMessageOperationsPerSecond);
-
-      const finish = () => {
-        logger.warn("Telemetry sending canceled.");
-        clearInterval(interval);
-        reject(new Canceled());
-      };
-
-      cancel = () => {
-        if (finished) {
-          return;
-        }
-        finish();
-      };
-
-      if (finished) {
-        finish();
-      }
-    })
-      .then(() => {
-        finished = true;
-      })
-      .catch((err) => {
-        finished = true;
-        return err;
-      });
-    return { promise, cancel };
+    });
+    return [promise, cancel];
   }
 
-  private sendThiefReportedProperties() {
+  private sendThiefReportedProperties(): [Promise<void>, () => void] {
     logger.info("Starting thief reported property sending.");
-    let finished = false;
-    let cancel = () => {
-      finished = true;
-    };
+    let cancel: () => void;
     const promise = new Promise<void>((_, reject) => {
+      let cleanedUp = false;
+      let cleanUpAndReject = (err: Error) => {
+        cleanedUp = true;
+        clearInterval(interval);
+        reject(err);
+      };
+      cancel = () => {
+        if (cleanedUp) {
+          return;
+        }
+        logger.warn("Thief reported properties sending canceled.");
+        cleanUpAndReject(new Canceled());
+      };
+
       const interval = setInterval(() => {
         const now = new Date();
         this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
@@ -563,65 +533,46 @@ class DeviceApp {
         logger.info("Updating thief reported props: %j", thiefPropertyPatch);
         promisify(this.twin.properties.reported.update)(
           thiefPropertyPatch
-        ).catch((e: Error) => {
-          logger.error(`Updating thief reported properties failed: ${e}`); //TODO: add a counter for these errors
+        ).catch((err: Error) => {
+          logger.error(`Updating thief reported properties failed: ${err}`); //TODO: add a counter for these errors
         });
       }, 1000 * settings.thiefPropertyUpdateIntervalInSeconds);
-
-      const finish = () => {
-        logger.warn("Thief reported properties sending canceled.");
-        clearInterval(interval);
-        reject(new Canceled());
-      };
-
-      cancel = () => {
-        if (finished) {
-          return;
-        }
-        finish();
-      };
-
-      if (finished) {
-        finish();
-      }
-    })
-      .then(() => {
-        finished = true;
-      })
-      .catch((err) => {
-        finished = true;
-        return err;
-      });
-    return { promise, cancel };
+    });
+    return [promise, cancel];
   }
 
   private async startTestOperations() {
     const promises = [];
-    const sendThiefReportedPropertiesCancelable = this.sendThiefReportedProperties();
-    this.cancelSendThiefReportedProperties =
-      sendThiefReportedPropertiesCancelable.cancel;
+    let sendThiefReportedPropertiesPromise: Promise<void>;
+    [
+      sendThiefReportedPropertiesPromise,
+      this.cancelSendThiefReportedProperties,
+    ] = this.sendThiefReportedProperties();
     promises.push(
-      sendThiefReportedPropertiesCancelable.promise.catch((err) => {
+      sendThiefReportedPropertiesPromise.catch((err) => {
         if (!(err instanceof Canceled)) {
           throw err;
         }
       })
     );
 
-    const sendTelemetryCancelable = this.sendTelemetry();
-    this.cancelSendTelemetry = sendTelemetryCancelable.cancel;
+    let sendTelemetryPromise: Promise<void>;
+    [sendTelemetryPromise, this.cancelSendTelemetry] = this.sendTelemetry();
     promises.push(
-      sendTelemetryCancelable.promise.catch((err) => {
+      sendTelemetryPromise.catch((err) => {
         if (!(err instanceof Canceled)) {
           throw err;
         }
       })
     );
 
-    const handleC2dMessagesCancelable = this.handleC2dMessages();
-    this.cancelHandleC2dMessages = handleC2dMessagesCancelable.cancel;
+    let handleC2dMessagesPromise: Promise<void>;
+    [
+      handleC2dMessagesPromise,
+      this.cancelHandleC2dMessages,
+    ] = this.handleC2dMessages();
     promises.push(
-      handleC2dMessagesCancelable.promise.catch((err) => {
+      handleC2dMessagesPromise.catch((err) => {
         if (!(err instanceof Canceled)) {
           throw err;
         }
@@ -674,7 +625,7 @@ class DeviceApp {
       this.client
         .close()
         .then(() => logger.info("Device client closed."))
-        .catch((e: Error) => logger.error(`Error closing client: ${e}`))
+        .catch((err: Error) => logger.error(`Error closing client: ${err}`))
         .finally(() => process.exit(code));
       return;
     }
