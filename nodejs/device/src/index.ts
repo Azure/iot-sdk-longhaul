@@ -8,7 +8,7 @@ import {
   AzureMonitorCustomProperties,
   SessionMetics,
 } from "./types";
-import { TimeoutError } from "./timeout";
+import { Canceled, TimeoutError } from "./errors";
 import { Logger, LoggerSeverityLevel } from "./logger";
 import { Mqtt as ProvisioningTransport } from "azure-iot-provisioning-device-mqtt";
 import { Mqtt as IotHubTransport } from "azure-iot-device-mqtt";
@@ -122,8 +122,8 @@ class DeviceApp {
       );
     }
     const registrationResult = await registrationResultPromise.catch(
-      (e: Error) => {
-        throw new Error(`DPS registration failed: ${e}`);
+      (err: Error) => {
+        throw new Error(`DPS registration failed: ${err}`);
       }
     );
     logger.info(
@@ -135,15 +135,30 @@ class DeviceApp {
       IotHubTransport
     );
     logger.info("Connecting to IoT Hub.");
-    await hubClient.open().catch((e: Error) => {
-      throw new Error(`Opening client failed: ${e}`);
+    await hubClient.open().catch((err: Error) => {
+      throw new Error(`Opening client failed: ${err}`);
     });
     return hubClient;
   }
 
-  private onReceivePairingPatch(): Promise<ThiefPairingProperties> {
-    return new Promise((resolve, reject) => {
-      const listener = (received: any) => {
+  private pairingAttempt(): [Promise<ThiefPairingProperties>, () => void] {
+    let cancel: () => void;
+    const promise = new Promise<ThiefPairingProperties>((resolve, reject) => {
+      let cleanedUp = false;
+      const cleanUp = () => {
+        cleanedUp = true;
+        this.twin.removeListener("properties.desired.thief.pairing", listener);
+        clearTimeout(pairingAttemptTimer);
+      };
+      cancel = () => {
+        if (cleanedUp) {
+          return;
+        }
+        logger.warn("Pairing canceled.");
+        cleanUp();
+        reject(new Canceled());
+      };
+      const listener = (received: ThiefPairingProperties) => {
         appInsights.defaultClient.trackEvent({
           name: "ReceivedPairingResponse",
         });
@@ -160,13 +175,11 @@ class DeviceApp {
         logger.info(
           `Service app ${received.serviceInstanceId} claimed this device instance`
         );
-        this.serviceInstanceId = received.serviceInstanceId;
-        this.twin.removeListener("properties.desired.thief.pairing", listener);
-        clearTimeout(timer);
+        cleanUp();
         resolve(received);
       };
       const on_timeout = () => {
-        this.twin.removeListener("properties.desired.thief.pairing", listener);
+        cleanUp();
         reject(
           new TimeoutError(
             "Pairing desired properties event not received in time."
@@ -174,11 +187,12 @@ class DeviceApp {
         );
       };
       this.twin.on("properties.desired.thief.pairing", listener);
-      const timer = setTimeout(
+      const pairingAttemptTimer = setTimeout(
         on_timeout,
         1000 * settings.pairingRequestSendIntervalInSeconds
       );
     });
+    return [promise, cancel];
   }
 
   private async pairWithService() {
@@ -203,25 +217,30 @@ class DeviceApp {
     ) {
       appInsights.defaultClient.trackEvent({ name: "SendingPairingRequest" });
       logger.info("Updating pairing reported props: %j", pairingRequestPatch);
-      const patchReceived = this.onReceivePairingPatch();
+      let pairingAttemptPromise: Promise<ThiefPairingProperties>;
+      [
+        pairingAttemptPromise,
+        this.cancelPairingAttempt,
+      ] = this.pairingAttempt();
       await promisify(this.twin.properties.reported.update)(
         pairingRequestPatch
-      ).catch((e: Error) => {
-        throw new Error(`Updating reported properties failed: ${e}`);
+      ).catch((err: Error) => {
+        throw new Error(`Updating reported properties failed: ${err}`);
       });
       let patch: ThiefPairingProperties;
       try {
-        patch = await patchReceived;
-      } catch (e) {
-        if (e instanceof TimeoutError) {
+        patch = await pairingAttemptPromise;
+      } catch (err) {
+        if (err instanceof TimeoutError) {
           logger.warn(
             `Pairing response timed out after waiting for ${settings.pairingRequestSendIntervalInSeconds} seconds. Requesting again.`
           );
           continue;
         } else {
-          throw e;
+          throw err;
         }
       }
+      this.serviceInstanceId = patch.serviceInstanceId;
       const pairingAcceptPatch: {
         thief: { pairing: ThiefPairingProperties };
       } = {
@@ -235,8 +254,8 @@ class DeviceApp {
       logger.info("Accepting pairing: %j", pairingAcceptPatch);
       await promisify(this.twin.properties.reported.update)(
         pairingAcceptPatch
-      ).catch((e: Error) => {
-        throw new Error(`Updating reported properties failed: ${e}`);
+      ).catch((err: Error) => {
+        throw new Error(`Updating reported properties failed: ${err}`);
       });
       appInsights.defaultClient.commonProperties.serviceInstanceId = this.serviceInstanceId;
       appInsights.defaultClient.trackEvent({ name: "PairingComplete" });
@@ -248,123 +267,160 @@ class DeviceApp {
     );
   }
 
-  // Does not deal with out-of-order messages.
-  // For example, if we get index 5 and then 7, we assume 6 is lost.
-  private handleTestC2dMessage(obj: ThiefC2dMessage, msg: Message) {
-    if (
-      Number.isNaN(obj.thief.testC2dMessageIndex) ||
-      typeof obj.thief.testC2dMessageIndex !== "number"
-    ) {
-      this.client.reject(msg).catch(this.handleRejectC2dError);
-      return logger.warn("Issue with testC2dMessageIndex property. Rejecting.");
-    }
+  private handleC2dMessages(): [Promise<void>, () => void] {
+    let cancel: () => void;
+    const promise = new Promise<void>((_, reject) => {
+      let cleanedUp = false;
+      const cleanUpAndReject = (err: Error) => {
+        cleanedUp = true;
+        this.client.removeListener("message", c2dMessageListener);
+        reject(err);
+      };
+      cancel = () => {
+        if (cleanedUp) {
+          return;
+        }
+        logger.warn("C2D message handling canceled.");
+        cleanUpAndReject(new Canceled());
+      };
+      const handleRejectC2dError = (err: Error) => {
+        if (err instanceof NotImplementedError) {
+          return;
+        }
+        logger.error(`Error when rejecting C2D message: ${err}`);
+        if (
+          ++this.clientLibraryExceptionCount >
+          settings.thiefAllowedClientLibraryExceptionCount
+        ) {
+          cleanUpAndReject(
+            new Error(
+              `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
+            )
+          );
+        }
+      };
 
-    this.client.complete(msg).catch(this.handleCompleteC2dError);
-    if (!this.maxReceivedIndex && this.maxReceivedIndex !== 0) {
-      logger.info(
-        `Received initial testC2dMessageIndex: ${(this.maxReceivedIndex =
-          obj.thief.testC2dMessageIndex)}`
-      );
-    } else if (this.maxReceivedIndex + 1 === obj.thief.testC2dMessageIndex) {
-      logger.info(
-        `Received next testC2dMessageIndex: ${++this.maxReceivedIndex}`
-      );
-    } else if (this.maxReceivedIndex < obj.thief.testC2dMessageIndex) {
-      const missing = Array.from(
-        { length: obj.thief.testC2dMessageIndex - this.maxReceivedIndex - 1 },
-        (_, i) => 1 + i + this.maxReceivedIndex
-      );
-      logger.warn(
-        `Received testC2dMessageIndex ${obj.thief.testC2dMessageIndex}, but never received indices ${missing}`
-      );
-      this.maxReceivedIndex = obj.thief.testC2dMessageIndex;
-      if (
-        (this.c2dMissingMessageCount += missing.length) >
-        settings.receiveC2dAllowedMissingMessageCount
-      ) {
-        this.stopDeviceApp(
-          new Error(
-            `The number of missing C2D messages exceeds receiveC2dAllowedMissingMessageCount of ${settings.receiveC2dAllowedMissingMessageCount}.`
-          )
-        );
-      }
-    } else {
-      logger.warn(`Received old index: ${obj.thief.testC2dMessageIndex}`);
-    }
-  }
+      const handleCompleteC2dError = (err: Error) => {
+        logger.error(`Error when completing C2D message: ${err}`);
+        if (
+          ++this.clientLibraryExceptionCount >
+          settings.thiefAllowedClientLibraryExceptionCount
+        ) {
+          cleanUpAndReject(
+            new Error(
+              `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
+            )
+          );
+        }
+      };
 
-  private handleServiceAckResponseMessage(obj: ThiefC2dMessage, msg: Message) {
-    if (!Array.isArray(obj.thief.serviceAcks)) {
-      this.client.reject(msg).catch(this.handleRejectC2dError);
-      return logger.warn("Issue with serviceAcks property. Rejecting.");
-    }
-    logger.info(`Received serviceAckIds: ${obj.thief.serviceAcks}`);
-    obj.thief.serviceAcks.forEach((id: string) => {
-      if (this.serviceAckWaitList.has(id)) {
-        this.serviceAckWaitList.delete(id);
-      } else {
-        logger.warn(`Received unknown serviceAckId: ${id}`);
-      }
+      const handleServiceAckResponseMessage = (
+        obj: ThiefC2dMessage,
+        msg: Message
+      ) => {
+        if (!Array.isArray(obj.thief.serviceAcks)) {
+          this.client.reject(msg).catch(handleRejectC2dError);
+          return logger.warn("Issue with serviceAcks property. Rejecting.");
+        }
+        this.client.complete(msg).catch(handleCompleteC2dError);
+        logger.info(`Received serviceAckIds: ${obj.thief.serviceAcks}`);
+        obj.thief.serviceAcks.forEach((id: string) => {
+          if (this.serviceAckWaitList.has(id)) {
+            this.serviceAckWaitList.delete(id);
+          } else {
+            logger.warn(`Received unknown serviceAckId: ${id}`);
+          }
+        });
+      };
+
+      // Does not deal with out-of-order messages.
+      // For example, if we get index 5 and then 7, we assume 6 is lost.
+      const handleTestC2dMessage = (obj: ThiefC2dMessage, msg: Message) => {
+        if (
+          Number.isNaN(obj.thief.testC2dMessageIndex) ||
+          typeof obj.thief.testC2dMessageIndex !== "number"
+        ) {
+          this.client.reject(msg).catch(handleRejectC2dError);
+          return logger.warn(
+            "Issue with testC2dMessageIndex property. Rejecting."
+          );
+        }
+
+        this.client.complete(msg).catch(handleCompleteC2dError);
+        if (!this.maxReceivedIndex && this.maxReceivedIndex !== 0) {
+          logger.info(
+            `Received initial testC2dMessageIndex: ${(this.maxReceivedIndex =
+              obj.thief.testC2dMessageIndex)}`
+          );
+        } else if (
+          this.maxReceivedIndex + 1 ===
+          obj.thief.testC2dMessageIndex
+        ) {
+          logger.info(
+            `Received next testC2dMessageIndex: ${++this.maxReceivedIndex}`
+          );
+        } else if (this.maxReceivedIndex < obj.thief.testC2dMessageIndex) {
+          const missing = Array.from(
+            {
+              length: obj.thief.testC2dMessageIndex - this.maxReceivedIndex - 1,
+            },
+            (_, i) => 1 + i + this.maxReceivedIndex
+          );
+          logger.warn(
+            `Received testC2dMessageIndex ${obj.thief.testC2dMessageIndex}, but never received indices ${missing}`
+          );
+          this.maxReceivedIndex = obj.thief.testC2dMessageIndex;
+          if (
+            (this.c2dMissingMessageCount += missing.length) >
+            settings.receiveC2dAllowedMissingMessageCount
+          ) {
+            cleanUpAndReject(
+              new Error(
+                `The number of missing C2D messages exceeds receiveC2dAllowedMissingMessageCount of ${settings.receiveC2dAllowedMissingMessageCount}.`
+              )
+            );
+          }
+        } else {
+          logger.warn(`Received old index: ${obj.thief.testC2dMessageIndex}`);
+        }
+      };
+
+      const c2dMessageListener = (msg: Message) => {
+        process.nextTick(() => {
+          let obj: ThiefC2dMessage;
+          try {
+            obj = JSON.parse(msg.getData().toString());
+          } catch {
+            this.client.reject(msg).catch(handleRejectC2dError);
+            return logger.error(
+              "Failed to parse received C2D message. Rejecting."
+            );
+          }
+          if (
+            !obj.thief ||
+            obj.thief.runId !== runId ||
+            obj.thief.serviceInstanceId !== this.serviceInstanceId
+          ) {
+            this.client.reject(msg).catch(handleRejectC2dError);
+            logger.warn(
+              "C2D received, but it's not for us: %j. Rejecting.",
+              obj
+            );
+          } else if (obj.thief.cmd === "serviceAckResponse") {
+            handleServiceAckResponseMessage(obj, msg);
+          } else if (obj.thief.cmd === "testC2d") {
+            handleTestC2dMessage(obj, msg);
+          } else {
+            this.client.reject(msg).catch(handleRejectC2dError);
+            logger.error("Unknown command received: %j. Rejecting", obj);
+          }
+        });
+      };
+
+      this.client.on("message", c2dMessageListener);
     });
-    this.client.reject(msg).catch(this.handleRejectC2dError);
+    return [promise, cancel];
   }
-
-  private handleRejectC2dError = (e: Error) => {
-    if (e instanceof NotImplementedError) {
-      return;
-    }
-    logger.error(`Error when rejecting C2D message: ${e}`);
-    if (
-      ++this.clientLibraryExceptionCount >
-      settings.thiefAllowedClientLibraryExceptionCount
-    ) {
-      this.stopDeviceApp(
-        new Error(
-          `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
-        )
-      );
-    }
-  };
-
-  private handleCompleteC2dError = (e: Error) => {
-    logger.error(`Error when completing C2D message: ${e}`);
-    if (
-      ++this.clientLibraryExceptionCount >
-      settings.thiefAllowedClientLibraryExceptionCount
-    ) {
-      this.stopDeviceApp(
-        new Error(
-          `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
-        )
-      );
-    }
-  };
-
-  private c2dMessageListener = (msg: Message) => {
-    let obj: ThiefC2dMessage;
-    try {
-      obj = JSON.parse(msg.getData().toString());
-    } catch {
-      this.client.reject(msg).catch(this.handleRejectC2dError);
-      return logger.error("Failed to parse received C2D message. Rejecting.");
-    }
-
-    if (
-      !obj.thief ||
-      obj.thief.runId !== runId ||
-      obj.thief.serviceInstanceId !== this.serviceInstanceId
-    ) {
-      this.client.reject(msg).catch(this.handleRejectC2dError);
-      logger.warn("C2D received, but it's not for us: %j. Rejecting.", obj);
-    } else if (obj.thief.cmd === "serviceAckResponse") {
-      this.handleServiceAckResponseMessage(obj, msg);
-    } else if (obj.thief.cmd === "testC2d") {
-      this.handleTestC2dMessage(obj, msg);
-    } else {
-      this.client.reject(msg).catch(this.handleRejectC2dError);
-      logger.error("Unknown command received: %j. Rejecting", obj);
-    }
-  };
 
   private async startC2dMessageSending() {
     const patch = {
@@ -379,85 +435,153 @@ class DeviceApp {
     };
     logger.info("Enabling C2D message testing: %j", patch);
     await promisify(this.twin.properties.reported.update)(patch).catch(
-      (e: Error) => {
-        throw new Error(`Updating reported properties failed: ${e}`);
+      (err: Error) => {
+        throw new Error(`Updating reported properties failed: ${err}`);
       }
     );
   }
 
-  private onThiefReportedPropertyInterval = () => {
-    const now = new Date();
-    this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
-    this.sessionMetrics.runTime = msToDurationString(
-      now.getTime() - this.runStart.getTime()
-    );
-    const thiefPropertyPatch = {
-      thief: { sessionMetrics: this.sessionMetrics },
-    };
-    logger.info("Updating thief reported props: %j", thiefPropertyPatch);
-    promisify(this.twin.properties.reported.update)(thiefPropertyPatch).catch(
-      (e: Error) => {
-        logger.error(`Updating thief reported properties failed: ${e}`);
-      }
-    );
-  };
-
-  private onTelemetrySendInterval = () => {
-    const serviceAckId = uuidv4();
-    const now = new Date();
-    this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
-    this.sessionMetrics.runTime = msToDurationString(
-      now.getTime() - this.runStart.getTime()
-    );
-    const message = new Message(
-      JSON.stringify({
-        thief: {
-          cmd: "serviceAckRequest",
-          serviceInstanceId: this.serviceInstanceId,
-          runId: runId,
-          serviceAckId: serviceAckId,
-          serviceAckType: "telemetry",
-          sessionMetrics: this.sessionMetrics,
-        },
-      })
-    );
-    logger.info(`Sending message with serviceAckId: ${serviceAckId}`);
-    this.client
-      .sendEvent(message)
-      .catch(() => {
-        logger.error(
-          `Error sending message with serviceAckId: ${serviceAckId}`
-        );
-      })
-      .finally(() => {
-        this.serviceAckWaitList.add(serviceAckId);
-        if (
-          this.serviceAckWaitList.size > settings.sendMessageAllowedFailureCount
-        ) {
-          this.stopDeviceApp(
-            new Error(
-              `The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${settings.sendMessageAllowedFailureCount}.`
-            )
-          );
+  private sendTelemetry(): [Promise<void>, () => void] {
+    logger.info("Starting telemetry sending.");
+    let cancel: () => void;
+    const promise = new Promise<void>((_, reject) => {
+      let cleanedUp = false;
+      let cleanupAndReject = (err: Error) => {
+        cleanedUp = true;
+        clearInterval(interval);
+        reject(err);
+      };
+      cancel = () => {
+        if (cleanedUp) {
+          return;
         }
-      });
-  };
+        logger.warn("Telemetry sending canceled.");
+        cleanupAndReject(new Canceled());
+      };
+      const interval = setInterval(() => {
+        const serviceAckId = uuidv4();
+        const now = new Date();
+        this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
+        this.sessionMetrics.runTime = msToDurationString(
+          now.getTime() - this.runStart.getTime()
+        );
+        const message = new Message(
+          JSON.stringify({
+            thief: {
+              cmd: "serviceAckRequest",
+              serviceInstanceId: this.serviceInstanceId,
+              runId: runId,
+              serviceAckId: serviceAckId,
+              serviceAckType: "telemetry",
+              sessionMetrics: this.sessionMetrics,
+            },
+          })
+        );
+        logger.info(`Sending message with serviceAckId: ${serviceAckId}`);
+        this.client
+          .sendEvent(message)
+          .catch(() => {
+            logger.error(
+              `Error sending message with serviceAckId: ${serviceAckId}`
+            );
+          })
+          .finally(() => {
+            this.serviceAckWaitList.add(serviceAckId);
+            if (
+              this.serviceAckWaitList.size >
+              settings.sendMessageAllowedFailureCount
+            ) {
+              cleanupAndReject(
+                new Error(
+                  `The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${settings.sendMessageAllowedFailureCount}.`
+                )
+              );
+            }
+          });
+      }, 1000 * settings.sendMessageOperationsPerSecond);
+    });
+    return [promise, cancel];
+  }
+
+  private sendThiefReportedProperties(): [Promise<void>, () => void] {
+    logger.info("Starting thief reported property sending.");
+    let cancel: () => void;
+    const promise = new Promise<void>((_, reject) => {
+      let cleanedUp = false;
+      let cleanUpAndReject = (err: Error) => {
+        cleanedUp = true;
+        clearInterval(interval);
+        reject(err);
+      };
+      cancel = () => {
+        if (cleanedUp) {
+          return;
+        }
+        logger.warn("Thief reported properties sending canceled.");
+        cleanUpAndReject(new Canceled());
+      };
+
+      const interval = setInterval(() => {
+        const now = new Date();
+        this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
+        this.sessionMetrics.runTime = msToDurationString(
+          now.getTime() - this.runStart.getTime()
+        );
+        const thiefPropertyPatch = {
+          thief: { sessionMetrics: this.sessionMetrics },
+        };
+        logger.info("Updating thief reported props: %j", thiefPropertyPatch);
+        promisify(this.twin.properties.reported.update)(
+          thiefPropertyPatch
+        ).catch((err: Error) => {
+          logger.error(`Updating thief reported properties failed: ${err}`); //TODO: add a counter for these errors
+        });
+      }, 1000 * settings.thiefPropertyUpdateIntervalInSeconds);
+    });
+    return [promise, cancel];
+  }
 
   private async startTestOperations() {
-    logger.info("Starting thief reported property sending.");
-    this.thiefPropertySendingInterval = setInterval(
-      this.onThiefReportedPropertyInterval,
-      1000 * settings.thiefPropertyUpdateIntervalInSeconds
+    const promises = [];
+    let sendThiefReportedPropertiesPromise: Promise<void>;
+    [
+      sendThiefReportedPropertiesPromise,
+      this.cancelSendThiefReportedProperties,
+    ] = this.sendThiefReportedProperties();
+    promises.push(
+      sendThiefReportedPropertiesPromise.catch((err) => {
+        if (!(err instanceof Canceled)) {
+          throw err;
+        }
+      })
     );
-    this.client.on("message", this.c2dMessageListener);
-    logger.info("Starting telemetry sending.");
-    this.telemetrySendingInterval = setInterval(
-      this.onTelemetrySendInterval,
-      1000 * settings.sendMessageOperationsPerSecond
+
+    let sendTelemetryPromise: Promise<void>;
+    [sendTelemetryPromise, this.cancelSendTelemetry] = this.sendTelemetry();
+    promises.push(
+      sendTelemetryPromise.catch((err) => {
+        if (!(err instanceof Canceled)) {
+          throw err;
+        }
+      })
     );
-    await this.startC2dMessageSending().catch((e: Error) => {
-      throw new Error(`Starting C2D message sending failed: ${e}`);
-    });
+
+    let handleC2dMessagesPromise: Promise<void>;
+    [
+      handleC2dMessagesPromise,
+      this.cancelHandleC2dMessages,
+    ] = this.handleC2dMessages();
+    promises.push(
+      handleC2dMessagesPromise.catch((err) => {
+        if (!(err instanceof Canceled)) {
+          throw err;
+        }
+      })
+    );
+
+    promises.push(this.startC2dMessageSending());
+
+    await Promise.all(promises);
   }
 
   stopDeviceApp(reason?: Signal | Error) {
@@ -483,21 +607,25 @@ class DeviceApp {
       properties: { exitReason: exitReasonString },
     });
 
-    clearInterval(this.telemetrySendingInterval);
-    clearInterval(this.thiefPropertySendingInterval);
-    clearTimeout(this.pairingAttemptTimer);
-    clearTimeout(this.pairingTimer);
-    if (this.twin) {
-      this.twin.removeAllListeners();
+    if (this.cancelPairingAttempt) {
+      this.cancelPairingAttempt();
     }
-    if (this.client) {
-      this.client.removeAllListeners();
+    if (this.cancelSendTelemetry) {
+      this.cancelSendTelemetry();
+    }
+    if (this.cancelSendThiefReportedProperties) {
+      this.cancelSendThiefReportedProperties();
+    }
+    if (this.cancelHandleC2dMessages) {
+      this.cancelHandleC2dMessages();
+    }
 
+    if (this.client) {
       logger.info("Closing device client.");
       this.client
         .close()
         .then(() => logger.info("Device client closed."))
-        .catch((e: Error) => logger.error(`Error closing client: ${e}`))
+        .catch((err: Error) => logger.error(`Error closing client: ${err}`))
         .finally(() => process.exit(code));
       return;
     }
@@ -524,17 +652,17 @@ class DeviceApp {
       this.twin = await this.client.getTwin();
       await this.pairWithService();
       await this.startTestOperations();
-    } catch (e) {
-      this.stopDeviceApp(e);
+    } catch (err) {
+      this.stopDeviceApp(err);
     }
   }
 
+  private cancelSendThiefReportedProperties: () => void;
+  private cancelSendTelemetry: () => void;
+  private cancelHandleC2dMessages: () => void;
+  private cancelPairingAttempt: () => void;
   private runStart: Date;
   private sessionMetrics: SessionMetics;
-  private pairingTimer: NodeJS.Timeout;
-  private pairingAttemptTimer: NodeJS.Timeout;
-  private telemetrySendingInterval: NodeJS.Timeout;
-  private thiefPropertySendingInterval: NodeJS.Timeout;
   private serviceAckWaitList: Set<string>;
   private maxReceivedIndex: number;
   private c2dMissingMessageCount: number;
