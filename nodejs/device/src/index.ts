@@ -7,6 +7,7 @@ import {
   ThiefC2dMessage,
   AzureMonitorCustomProperties,
   SessionMetics,
+  TestReportedProperties,
 } from "./types";
 import { Canceled, TimeoutError } from "./errors";
 import { Logger, LoggerSeverityLevel } from "./logger";
@@ -23,6 +24,7 @@ import { v4 as uuidv4 } from "uuid";
 import { promisify } from "util";
 import * as os from "os";
 import { msToDurationString } from "./duration";
+import { ServiceAckType, ServiceAckWaitList } from "./waitlist";
 
 const provisioningHost = process.env.THIEF_DEVICE_PROVISIONING_HOST;
 const idScope = process.env.THIEF_DEVICE_ID_SCOPE;
@@ -259,15 +261,16 @@ class DeviceApp {
       });
       appInsights.defaultClient.commonProperties.serviceInstanceId = this.serviceInstanceId;
       appInsights.defaultClient.trackEvent({ name: "PairingComplete" });
+      this.cancelPairingAttempt = undefined;
       return logger.info("Pairing with service complete.");
     }
-
+    this.cancelPairingAttempt = undefined;
     throw new TimeoutError(
       `Pairing failed after trying for ${settings.pairingRequestTimeoutIntervalInSeconds} seconds`
     );
   }
 
-  private handleC2dMessages(): [Promise<void>, () => void] {
+  private startListeningC2dMessages(): [Promise<void>, () => void] {
     let cancel: () => void;
     const promise = new Promise<void>((_, reject) => {
       let cleanedUp = false;
@@ -323,11 +326,8 @@ class DeviceApp {
           return logger.warn("Issue with serviceAcks property. Rejecting.");
         }
         this.client.complete(msg).catch(handleCompleteC2dError);
-        logger.info(`Received serviceAckIds: ${obj.thief.serviceAcks}`);
         obj.thief.serviceAcks.forEach((id: string) => {
-          if (this.serviceAckWaitList.has(id)) {
-            this.serviceAckWaitList.delete(id);
-          } else {
+          if (!this.serviceAckWaitList.remove(id)) {
             logger.warn(`Received unknown serviceAckId: ${id}`);
           }
         });
@@ -441,7 +441,7 @@ class DeviceApp {
     );
   }
 
-  private sendTelemetry(): [Promise<void>, () => void] {
+  private startSendingTelemetry(): [Promise<void>, () => void] {
     logger.info("Starting telemetry sending.");
     let cancel: () => void;
     const promise = new Promise<void>((_, reject) => {
@@ -478,32 +478,53 @@ class DeviceApp {
           })
         );
         logger.info(`Sending message with serviceAckId: ${serviceAckId}`);
-        this.client
-          .sendEvent(message)
-          .catch(() => {
-            logger.error(
-              `Error sending message with serviceAckId: ${serviceAckId}`
+        this.client.sendEvent(message).catch(() => {
+          logger.error(
+            `Error sending message with serviceAckId: ${serviceAckId}` //TODO: add a counter for these errors?
+          );
+        });
+        this.serviceAckWaitList.add(
+          serviceAckId,
+          ServiceAckType.TELEMETRY_SERVICE_ACK,
+          (_latency: number, userData: { [key: string]: any }) => {
+            logger.info(
+              `Received serviceAck with serviceAckId ${userData.serviceAckId}`
             );
-          })
-          .finally(() => {
-            this.serviceAckWaitList.add(serviceAckId);
-            if (
-              this.serviceAckWaitList.size >
-              settings.sendMessageAllowedFailureCount
-            ) {
-              cleanupAndReject(
-                new Error(
-                  `The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${settings.sendMessageAllowedFailureCount}.`
-                )
-              );
-            }
-          });
+            //TODO: record latency
+          },
+          {
+            serviceAckId: serviceAckId,
+          }
+        );
+        if (
+          this.serviceAckWaitList.getPendingTelemetryServiceAcks() >
+          settings.sendMessageAllowedFailureCount
+        ) {
+          cleanupAndReject(
+            new Error(
+              `The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${settings.sendMessageAllowedFailureCount}.`
+            )
+          );
+        }
       }, 1000 * settings.sendMessageOperationsPerSecond);
     });
     return [promise, cancel];
   }
 
-  private sendThiefReportedProperties(): [Promise<void>, () => void] {
+  private updateThiefReportedProperties: () => Promise<void> = () => {
+    const now = new Date();
+    this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
+    this.sessionMetrics.runTime = msToDurationString(
+      now.getTime() - this.runStart.getTime()
+    );
+    const thiefPropertyPatch = {
+      thief: { sessionMetrics: this.sessionMetrics },
+    };
+    logger.info("Updating thief reported props: %j", thiefPropertyPatch);
+    return promisify(this.twin.properties.reported.update)(thiefPropertyPatch);
+  };
+
+  private startSendingThiefReportedProperties(): [Promise<void>, () => void] {
     logger.info("Starting thief reported property sending.");
     let cancel: () => void;
     const promise = new Promise<void>((_, reject) => {
@@ -520,20 +541,8 @@ class DeviceApp {
         logger.warn("Thief reported properties sending canceled.");
         cleanUpAndReject(new Canceled());
       };
-
       const interval = setInterval(() => {
-        const now = new Date();
-        this.sessionMetrics.lastUpdateTimeUtc = now.toISOString();
-        this.sessionMetrics.runTime = msToDurationString(
-          now.getTime() - this.runStart.getTime()
-        );
-        const thiefPropertyPatch = {
-          thief: { sessionMetrics: this.sessionMetrics },
-        };
-        logger.info("Updating thief reported props: %j", thiefPropertyPatch);
-        promisify(this.twin.properties.reported.update)(
-          thiefPropertyPatch
-        ).catch((err: Error) => {
+        this.updateThiefReportedProperties().catch((err) => {
           logger.error(`Updating thief reported properties failed: ${err}`); //TODO: add a counter for these errors
         });
       }, 1000 * settings.thiefPropertyUpdateIntervalInSeconds);
@@ -541,38 +550,149 @@ class DeviceApp {
     return [promise, cancel];
   }
 
+  private startTestingReportedProperties(): [Promise<void>, () => void] {
+    logger.info("Starting reported properties testing.");
+    let cancel: () => void;
+    const promise = new Promise<void>((_, reject) => {
+      let cleanedUp = false;
+      let cleanUpAndReject = (err: Error) => {
+        cleanedUp = true;
+        clearInterval(interval);
+        reject(err);
+      };
+      cancel = () => {
+        if (cleanedUp) {
+          return;
+        }
+        logger.warn("Reported properties testing cancelled.");
+        cleanUpAndReject(new Canceled());
+      };
+
+      const onPropertyRemoved = (
+        _latency: number,
+        userData: {
+          [key: string]: any;
+        }
+      ) => {
+        logger.info(
+          `Remove of reported property ${userData.propName} verified by service`
+        );
+        //TODO: record latency
+      };
+
+      const onPropertyAdded = (
+        _latency: number,
+        userData: {
+          [key: string]: any;
+        }
+      ) => {
+        logger.info(
+          `Add of reported property ${userData.propName} verified by service`
+        );
+        this.serviceAckWaitList.add(
+          userData.removeAckId,
+          ServiceAckType.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
+          onPropertyRemoved,
+          { propName: userData.propName }
+        );
+        const patch: TestReportedProperties = {
+          thief: {
+            testContent: {
+              reportedPropertyTest: {},
+            },
+          },
+        };
+        patch.thief.testContent.reportedPropertyTest[userData.propName] = null;
+        logger.info(`Removing test property ${userData.propName}`);
+        promisify(this.twin.properties.reported.update)(patch).catch(() => {
+          logger.error(`Removing test property ${userData.propName} failed.`); //TODO: increment a counter?
+        });
+        //TODO: record latency
+      };
+
+      let propertyIndex = 1;
+      const interval = setInterval(() => {
+        const addServiceAckId = uuidv4();
+        const removeServiceAckId = uuidv4();
+        const propertyName = `prop_${propertyIndex++}`;
+        const patch: TestReportedProperties = {
+          thief: {
+            testContent: {
+              reportedPropertyTest: {},
+            },
+          },
+        };
+        patch.thief.testContent.reportedPropertyTest[propertyName] = {
+          addServiceAckId: addServiceAckId,
+          removeServiceAckId: removeServiceAckId,
+        };
+        logger.info(`Adding test property ${propertyName}`);
+        promisify(this.twin.properties.reported.update)(patch).catch(() => {
+          logger.error(`Adding test property ${propertyName} failed.`); //TODO: increment a counter?
+        });
+        this.serviceAckWaitList.add(
+          addServiceAckId,
+          ServiceAckType.ADD_REPORTED_PROPERTY_SERVICE_ACK,
+          onPropertyAdded,
+          {
+            propName: propertyName,
+            removeAckId: removeServiceAckId,
+          }
+        );
+      }, 1000 * settings.reportedPropertiesUpdateIntervalInSeconds);
+    });
+
+    return [promise, cancel];
+  }
+
   private async startTestOperations() {
     const promises = [];
-    let sendThiefReportedPropertiesPromise: Promise<void>;
+    let startSendingThiefReportedPropertiesPromise: Promise<void>;
     [
-      sendThiefReportedPropertiesPromise,
-      this.cancelSendThiefReportedProperties,
-    ] = this.sendThiefReportedProperties();
+      startSendingThiefReportedPropertiesPromise,
+      this.cancelSendingThiefReportedProperties,
+    ] = this.startSendingThiefReportedProperties();
     promises.push(
-      sendThiefReportedPropertiesPromise.catch((err) => {
+      startSendingThiefReportedPropertiesPromise.catch((err) => {
         if (!(err instanceof Canceled)) {
           throw err;
         }
       })
     );
 
-    let sendTelemetryPromise: Promise<void>;
-    [sendTelemetryPromise, this.cancelSendTelemetry] = this.sendTelemetry();
+    let startListeningC2dMessagesPromise: Promise<void>;
+    [
+      startListeningC2dMessagesPromise,
+      this.cancelListeningC2dMessages,
+    ] = this.startListeningC2dMessages();
     promises.push(
-      sendTelemetryPromise.catch((err) => {
+      startListeningC2dMessagesPromise.catch((err) => {
         if (!(err instanceof Canceled)) {
           throw err;
         }
       })
     );
 
-    let handleC2dMessagesPromise: Promise<void>;
+    let startSendingTelemetryPromise: Promise<void>;
     [
-      handleC2dMessagesPromise,
-      this.cancelHandleC2dMessages,
-    ] = this.handleC2dMessages();
+      startSendingTelemetryPromise,
+      this.cancelSendingTelemetry,
+    ] = this.startSendingTelemetry();
     promises.push(
-      handleC2dMessagesPromise.catch((err) => {
+      startSendingTelemetryPromise.catch((err) => {
+        if (!(err instanceof Canceled)) {
+          throw err;
+        }
+      })
+    );
+
+    let startTestingReportedPropertiesPromise: Promise<void>;
+    [
+      startTestingReportedPropertiesPromise,
+      this.cancelTestingReportedProperties,
+    ] = this.startTestingReportedProperties();
+    promises.push(
+      startTestingReportedPropertiesPromise.catch((err) => {
         if (!(err instanceof Canceled)) {
           throw err;
         }
@@ -591,6 +711,7 @@ class DeviceApp {
       code = 1;
       exitReasonString = `Stopping device app due to error: ${reason}`;
       logger.critical(exitReasonString);
+      this.sessionMetrics.runState = "Failed";
     } else {
       code = 128 + reason;
       const signal =
@@ -601,24 +722,32 @@ class DeviceApp {
           : "SIGKILL";
       exitReasonString = `Stopping device app due to signal ${signal}`;
       logger.warn(exitReasonString);
+      this.sessionMetrics.runState = "Interrupted";
     }
-    appInsights.defaultClient.trackEvent({
-      name: "EndingRun",
-      properties: { exitReason: exitReasonString },
-    });
 
     if (this.cancelPairingAttempt) {
       this.cancelPairingAttempt();
     }
-    if (this.cancelSendTelemetry) {
-      this.cancelSendTelemetry();
+    if (this.cancelSendingTelemetry) {
+      this.cancelSendingTelemetry();
     }
-    if (this.cancelSendThiefReportedProperties) {
-      this.cancelSendThiefReportedProperties();
+    if (this.cancelSendingThiefReportedProperties) {
+      this.cancelSendingThiefReportedProperties();
     }
-    if (this.cancelHandleC2dMessages) {
-      this.cancelHandleC2dMessages();
+    if (this.cancelListeningC2dMessages) {
+      this.cancelListeningC2dMessages();
     }
+    if (this.cancelTestingReportedProperties) {
+      this.cancelTestingReportedProperties();
+    }
+
+    appInsights.defaultClient.trackEvent({
+      name: "EndingRun",
+      properties: { exitReason: exitReasonString },
+    });
+    this.updateThiefReportedProperties().catch((err: Error) => {
+      logger.error(`Updating thief reported properties failed: ${err}`);
+    });
 
     if (this.client) {
       logger.info("Closing device client.");
@@ -637,7 +766,7 @@ class DeviceApp {
     this.sessionMetrics = {
       lastUpdateTimeUtc: this.runStart.toISOString(),
       runStartUtc: this.runStart.toISOString(),
-      runState: "running",
+      runState: "Running",
       runTime: msToDurationString(0),
     };
     logger.info("Starting device app.");
@@ -657,13 +786,14 @@ class DeviceApp {
     }
   }
 
-  private cancelSendThiefReportedProperties: () => void;
-  private cancelSendTelemetry: () => void;
-  private cancelHandleC2dMessages: () => void;
+  private cancelSendingThiefReportedProperties: () => void;
+  private cancelSendingTelemetry: () => void;
+  private cancelListeningC2dMessages: () => void;
   private cancelPairingAttempt: () => void;
+  private cancelTestingReportedProperties: () => void;
   private runStart: Date;
   private sessionMetrics: SessionMetics;
-  private serviceAckWaitList: Set<string>;
+  private serviceAckWaitList: ServiceAckWaitList;
   private maxReceivedIndex: number;
   private c2dMissingMessageCount: number;
   private clientLibraryExceptionCount: number;
@@ -679,7 +809,7 @@ class DeviceApp {
     return this.instance;
   }
   private constructor() {
-    this.serviceAckWaitList = new Set();
+    this.serviceAckWaitList = new ServiceAckWaitList();
     this.c2dMissingMessageCount = 0;
   }
 }
