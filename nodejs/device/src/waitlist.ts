@@ -2,7 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 export type ServiceAckWaitInfo = {
-  onRemove: (latency: number) => void;
+  onRemove: (latency: number, userData?: { [key: string]: any }) => void;
   addEpochTime: number;
   serviceAckType: ServiceAckType;
   userData?: any;

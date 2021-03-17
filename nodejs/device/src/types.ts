@@ -2,9 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 export type ThiefSettings = {
-  thiefMaxRunDurationInSeconds: number; //ignored for now
+  thiefMaxRunDurationInSeconds: number;
   thiefPropertyUpdateIntervalInSeconds: number;
-  thiefWatchdogFailureIntervalInSeconds: number; //ignored for now
+  thiefWatchdogFailureIntervalInSeconds: number;
   thiefAllowedClientLibraryExceptionCount: number;
   pairingRequestTimeoutIntervalInSeconds: number;
   pairingRequestSendIntervalInSeconds: number;
@@ -13,7 +13,7 @@ export type ThiefSettings = {
   receiveC2dIntervalInSeconds: number;
   receiveC2dAllowedMissingMessageCount: number;
   reportedPropertiesUpdateIntervalInSeconds: number;
-  reportedPropertiesAllowedFailureCount: number;
+  reportedPropertiesUpdateAllowedFailureCount: number;
 };
 
 export type ThiefPairingProperties = {
@@ -54,12 +54,25 @@ export type AzureMonitorCustomProperties = {
   runId: string;
 };
 
-export type SessionMetics = {
+export type SessionMetrics = {
   exitReason?: string;
   lastUpdateTimeUtc: string;
   runStartUtc: string;
   runState: "Waiting" | "Running" | "Failed" | "Complete" | "Interrupted"; //TODO: should this be uppercase or lowercase?
   runTime: string;
+};
+
+export type TestMetrics = {
+  receiveC2dCountMissing: number;
+  receiveC2dCountReceived: number;
+  reportedPropertiesCountAdded: number;
+  reportedPropertiesCountAddedButNotVerifiedByServiceApp: number;
+  reportedPropertiesCountRemoved: number;
+  reportedPropertiesCountRemovedButNotVerifiedByServiceApp: number;
+  clientLibraryCountExceptions: number;
+  sendMessageCountNotReceivedByServiceApp: number;
+  sendMessageCountSent: number;
+  sendMessageCountUnacked: number;
 };
 
 export const enum Signal {
