@@ -6,8 +6,9 @@ import {
   ThiefPairingProperties,
   ThiefC2dMessage,
   AzureMonitorCustomProperties,
-  SessionMetics,
+  SessionMetrics,
   TestReportedProperties,
+  TestMetrics,
 } from "./types";
 import { Canceled, TimeoutError } from "./errors";
 import { Logger, LoggerSeverityLevel } from "./logger";
@@ -84,9 +85,9 @@ const logger = new Logger({
 });
 
 const settings: ThiefSettings = {
-  thiefMaxRunDurationInSeconds: 0,
+  thiefMaxRunDurationInSeconds: 0, //ignored for now
   thiefPropertyUpdateIntervalInSeconds: 30,
-  thiefWatchdogFailureIntervalInSeconds: 300,
+  thiefWatchdogFailureIntervalInSeconds: 300, //ignored for now
   thiefAllowedClientLibraryExceptionCount: 10,
   pairingRequestTimeoutIntervalInSeconds: 900,
   pairingRequestSendIntervalInSeconds: 30,
@@ -95,7 +96,7 @@ const settings: ThiefSettings = {
   receiveC2dIntervalInSeconds: 20,
   receiveC2dAllowedMissingMessageCount: 100,
   reportedPropertiesUpdateIntervalInSeconds: 10,
-  reportedPropertiesAllowedFailureCount: 50,
+  reportedPropertiesUpdateAllowedFailureCount: 50,
 };
 
 class DeviceApp {
@@ -270,6 +271,21 @@ class DeviceApp {
     );
   }
 
+  private incrementClientErrors() {
+    appInsights.defaultClient.trackMetric({
+      name: "ClientLibraryCountExceptions",
+      value: ++this.testMetrics.clientLibraryCountExceptions,
+    });
+    if (
+      this.testMetrics.clientLibraryCountExceptions >
+      settings.thiefAllowedClientLibraryExceptionCount
+    ) {
+      throw new Error(
+        `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
+      );
+    }
+  }
+
   private startListeningC2dMessages(): [Promise<void>, () => void] {
     let cancel: () => void;
     const promise = new Promise<void>((_, reject) => {
@@ -291,29 +307,19 @@ class DeviceApp {
           return;
         }
         logger.error(`Error when rejecting C2D message: ${err}`);
-        if (
-          ++this.clientLibraryExceptionCount >
-          settings.thiefAllowedClientLibraryExceptionCount
-        ) {
-          cleanUpAndReject(
-            new Error(
-              `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
-            )
-          );
+        try {
+          this.incrementClientErrors();
+        } catch (err) {
+          cleanUpAndReject(err);
         }
       };
 
       const handleCompleteC2dError = (err: Error) => {
         logger.error(`Error when completing C2D message: ${err}`);
-        if (
-          ++this.clientLibraryExceptionCount >
-          settings.thiefAllowedClientLibraryExceptionCount
-        ) {
-          cleanUpAndReject(
-            new Error(
-              `The number of client errors exceeds thiefAllowedClientLibraryExceptionCount of ${settings.thiefAllowedClientLibraryExceptionCount}.`
-            )
-          );
+        try {
+          this.incrementClientErrors();
+        } catch (err) {
+          cleanUpAndReject(err);
         }
       };
 
@@ -352,6 +358,10 @@ class DeviceApp {
             `Received initial testC2dMessageIndex: ${(this.maxReceivedIndex =
               obj.thief.testC2dMessageIndex)}`
           );
+          appInsights.defaultClient.trackMetric({
+            name: "ReceiveC2dCountReceived",
+            value: ++this.testMetrics.receiveC2dCountReceived,
+          });
         } else if (
           this.maxReceivedIndex + 1 ===
           obj.thief.testC2dMessageIndex
@@ -359,6 +369,10 @@ class DeviceApp {
           logger.info(
             `Received next testC2dMessageIndex: ${++this.maxReceivedIndex}`
           );
+          appInsights.defaultClient.trackMetric({
+            name: "ReceiveC2dCountReceived",
+            value: ++this.testMetrics.receiveC2dCountReceived,
+          });
         } else if (this.maxReceivedIndex < obj.thief.testC2dMessageIndex) {
           const missing = Array.from(
             {
@@ -370,8 +384,12 @@ class DeviceApp {
             `Received testC2dMessageIndex ${obj.thief.testC2dMessageIndex}, but never received indices ${missing}`
           );
           this.maxReceivedIndex = obj.thief.testC2dMessageIndex;
+          appInsights.defaultClient.trackMetric({
+            name: "ReceiveC2dCountMissing",
+            value: (this.testMetrics.receiveC2dCountMissing += missing.length),
+          });
           if (
-            (this.c2dMissingMessageCount += missing.length) >
+            (this.testMetrics.receiveC2dCountMissing += missing.length) >
             settings.receiveC2dAllowedMissingMessageCount
           ) {
             cleanUpAndReject(
@@ -446,7 +464,7 @@ class DeviceApp {
     let cancel: () => void;
     const promise = new Promise<void>((_, reject) => {
       let cleanedUp = false;
-      let cleanupAndReject = (err: Error) => {
+      let cleanUpAndReject = (err: Error) => {
         cleanedUp = true;
         clearInterval(interval);
         reject(err);
@@ -456,7 +474,7 @@ class DeviceApp {
           return;
         }
         logger.warn("Telemetry sending canceled.");
-        cleanupAndReject(new Canceled());
+        cleanUpAndReject(new Canceled());
       };
       const interval = setInterval(() => {
         const serviceAckId = uuidv4();
@@ -478,34 +496,65 @@ class DeviceApp {
           })
         );
         logger.info(`Sending message with serviceAckId: ${serviceAckId}`);
-        this.client.sendEvent(message).catch(() => {
-          logger.error(
-            `Error sending message with serviceAckId: ${serviceAckId}` //TODO: add a counter for these errors?
-          );
-        });
-        this.serviceAckWaitList.add(
-          serviceAckId,
-          ServiceAckType.TELEMETRY_SERVICE_ACK,
-          (_latency: number, userData: { [key: string]: any }) => {
-            logger.info(
-              `Received serviceAck with serviceAckId ${userData.serviceAckId}`
+        this.client
+          .sendEvent(message)
+          .then(() => {
+            this.serviceAckWaitList.add(
+              serviceAckId,
+              ServiceAckType.TELEMETRY_SERVICE_ACK,
+              (_latency: number, userData: { [key: string]: any }) => {
+                logger.info(
+                  `Received serviceAck with serviceAckId ${userData.serviceAckId}`
+                );
+                appInsights.defaultClient.trackMetric({
+                  name: "SendMessageCountNotReceivedByServiceApp",
+                  value: this.serviceAckWaitList.getPendingTelemetryServiceAcks(),
+                });
+                //TODO: record latency
+              },
+              {
+                serviceAckId: serviceAckId,
+              }
             );
-            //TODO: record latency
-          },
-          {
-            serviceAckId: serviceAckId,
-          }
-        );
-        if (
-          this.serviceAckWaitList.getPendingTelemetryServiceAcks() >
-          settings.sendMessageAllowedFailureCount
-        ) {
-          cleanupAndReject(
-            new Error(
-              `The number of service acks being waited on exceeds sendMessageAllowedFailureCount of ${settings.sendMessageAllowedFailureCount}.`
-            )
-          );
-        }
+            appInsights.defaultClient.trackMetric({
+              name: "SendMessageCountSent",
+              value: ++this.testMetrics.sendMessageCountSent,
+            });
+            appInsights.defaultClient.trackMetric({
+              name: "SendMessageCountNotReceivedByServiceApp",
+              value: this.serviceAckWaitList.getPendingTelemetryServiceAcks(),
+            });
+            if (
+              this.serviceAckWaitList.getPendingTelemetryServiceAcks() >
+              settings.sendMessageAllowedFailureCount
+            ) {
+              cleanUpAndReject(
+                new Error(
+                  `The number of pending telemetry service acks being exceeds sendMessageAllowedFailureCount of ${settings.sendMessageAllowedFailureCount}.`
+                )
+              );
+            }
+          })
+          .catch((err) => {
+            logger.error(
+              `Error sending message with serviceAckId ${serviceAckId}: ${err}`
+            );
+            try {
+              this.incrementClientErrors();
+            } catch (err) {
+              cleanUpAndReject(err);
+            }
+          })
+          .finally(() => {
+            appInsights.defaultClient.trackMetric({
+              name: "SendMessageCountUnacked",
+              value: --this.testMetrics.sendMessageCountUnacked,
+            });
+          });
+        appInsights.defaultClient.trackMetric({
+          name: "SendMessageCountUnacked",
+          value: ++this.testMetrics.sendMessageCountUnacked,
+        });
       }, 1000 * settings.sendMessageOperationsPerSecond);
     });
     return [promise, cancel];
@@ -518,7 +567,10 @@ class DeviceApp {
       now.getTime() - this.runStart.getTime()
     );
     const thiefPropertyPatch = {
-      thief: { sessionMetrics: this.sessionMetrics },
+      thief: {
+        sessionMetrics: this.sessionMetrics,
+        testMetrics: this.testMetrics,
+      },
     };
     logger.info("Updating thief reported props: %j", thiefPropertyPatch);
     return promisify(this.twin.properties.reported.update)(thiefPropertyPatch);
@@ -543,7 +595,12 @@ class DeviceApp {
       };
       const interval = setInterval(() => {
         this.updateThiefReportedProperties().catch((err) => {
-          logger.error(`Updating thief reported properties failed: ${err}`); //TODO: add a counter for these errors
+          logger.error(`Updating thief reported properties failed: ${err}`);
+          try {
+            this.incrementClientErrors();
+          } catch (err) {
+            cleanUpAndReject(err);
+          }
         });
       }, 1000 * settings.thiefPropertyUpdateIntervalInSeconds);
     });
@@ -568,7 +625,7 @@ class DeviceApp {
         cleanUpAndReject(new Canceled());
       };
 
-      const onPropertyRemoved = (
+      const onPropertyRemovedAck = (
         _latency: number,
         userData: {
           [key: string]: any;
@@ -577,10 +634,14 @@ class DeviceApp {
         logger.info(
           `Remove of reported property ${userData.propName} verified by service`
         );
+        appInsights.defaultClient.trackMetric({
+          name: "ReportedPropertiesCountRemovedButNotVerifiedByServiceApp",
+          value: (this.testMetrics.reportedPropertiesCountRemoved = this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks()),
+        });
         //TODO: record latency
       };
 
-      const onPropertyAdded = (
+      const onPropertyAddedAck = (
         _latency: number,
         userData: {
           [key: string]: any;
@@ -589,12 +650,10 @@ class DeviceApp {
         logger.info(
           `Add of reported property ${userData.propName} verified by service`
         );
-        this.serviceAckWaitList.add(
-          userData.removeAckId,
-          ServiceAckType.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
-          onPropertyRemoved,
-          { propName: userData.propName }
-        );
+        appInsights.defaultClient.trackMetric({
+          name: "ReportedPropertiesCountAddedButNotVerifiedByServiceApp",
+          value: (this.testMetrics.reportedPropertiesCountAdded = this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks()),
+        });
         const patch: TestReportedProperties = {
           thief: {
             testContent: {
@@ -604,9 +663,44 @@ class DeviceApp {
         };
         patch.thief.testContent.reportedPropertyTest[userData.propName] = null;
         logger.info(`Removing test property ${userData.propName}`);
-        promisify(this.twin.properties.reported.update)(patch).catch(() => {
-          logger.error(`Removing test property ${userData.propName} failed.`); //TODO: increment a counter?
-        });
+        promisify(this.twin.properties.reported.update)(patch)
+          .then(() => {
+            this.serviceAckWaitList.add(
+              userData.removeAckId,
+              ServiceAckType.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
+              onPropertyRemovedAck,
+              { propName: userData.propName }
+            );
+            appInsights.defaultClient.trackMetric({
+              name: "ReportedPropertiesCountRemoved",
+              value: ++this.testMetrics.reportedPropertiesCountRemoved,
+            });
+            appInsights.defaultClient.trackMetric({
+              name: "ReportedPropertiesCountRemovedButNotVerifiedByServiceApp",
+              value: (this.testMetrics.reportedPropertiesCountRemoved = this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks()),
+            });
+            const pendingCount =
+              this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks() +
+              this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks();
+            if (
+              pendingCount >
+              settings.reportedPropertiesUpdateAllowedFailureCount
+            ) {
+              cleanUpAndReject(
+                new Error(
+                  `The number of pending twin reported property add+remove service acks exceeds reportedPropertiesUpdateAllowedFailureCount of ${settings.reportedPropertiesUpdateAllowedFailureCount}.`
+                )
+              );
+            }
+          })
+          .catch(() => {
+            logger.error(`Removing test property ${userData.propName} failed.`);
+            try {
+              this.incrementClientErrors();
+            } catch (err) {
+              cleanUpAndReject(err);
+            }
+          });
         //TODO: record latency
       };
 
@@ -627,18 +721,47 @@ class DeviceApp {
           removeServiceAckId: removeServiceAckId,
         };
         logger.info(`Adding test property ${propertyName}`);
-        promisify(this.twin.properties.reported.update)(patch).catch(() => {
-          logger.error(`Adding test property ${propertyName} failed.`); //TODO: increment a counter?
-        });
-        this.serviceAckWaitList.add(
-          addServiceAckId,
-          ServiceAckType.ADD_REPORTED_PROPERTY_SERVICE_ACK,
-          onPropertyAdded,
-          {
-            propName: propertyName,
-            removeAckId: removeServiceAckId,
-          }
-        );
+        promisify(this.twin.properties.reported.update)(patch)
+          .then(() => {
+            this.serviceAckWaitList.add(
+              addServiceAckId,
+              ServiceAckType.ADD_REPORTED_PROPERTY_SERVICE_ACK,
+              onPropertyAddedAck,
+              {
+                propName: propertyName,
+                removeAckId: removeServiceAckId,
+              }
+            );
+            appInsights.defaultClient.trackMetric({
+              name: "ReportedPropertiesCountAdded",
+              value: ++this.testMetrics.reportedPropertiesCountAdded,
+            });
+            appInsights.defaultClient.trackMetric({
+              name: "ReportedPropertiesCountAddedButNotVerifiedByServiceApp",
+              value: (this.testMetrics.reportedPropertiesCountAdded = this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks()),
+            });
+            const pendingCount =
+              this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks() +
+              this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks();
+            if (
+              pendingCount >
+              settings.reportedPropertiesUpdateAllowedFailureCount
+            ) {
+              cleanUpAndReject(
+                new Error(
+                  `The number of pending twin reported property add+remove service acks exceeds reportedPropertiesUpdateAllowedFailureCount of ${settings.reportedPropertiesUpdateAllowedFailureCount}.`
+                )
+              );
+            }
+          })
+          .catch(() => {
+            logger.error(`Adding test property ${propertyName} failed.`);
+            try {
+              this.incrementClientErrors();
+            } catch (err) {
+              cleanUpAndReject(err);
+            }
+          });
       }, 1000 * settings.reportedPropertiesUpdateIntervalInSeconds);
     });
 
@@ -792,11 +915,10 @@ class DeviceApp {
   private cancelPairingAttempt: () => void;
   private cancelTestingReportedProperties: () => void;
   private runStart: Date;
-  private sessionMetrics: SessionMetics;
+  private sessionMetrics: SessionMetrics;
+  private testMetrics: TestMetrics;
   private serviceAckWaitList: ServiceAckWaitList;
   private maxReceivedIndex: number;
-  private c2dMissingMessageCount: number;
-  private clientLibraryExceptionCount: number;
   private serviceInstanceId: string;
   private client: Client;
   private twin: Twin;
@@ -810,7 +932,18 @@ class DeviceApp {
   }
   private constructor() {
     this.serviceAckWaitList = new ServiceAckWaitList();
-    this.c2dMissingMessageCount = 0;
+    this.testMetrics = {
+      receiveC2dCountMissing: 0,
+      receiveC2dCountReceived: 0,
+      reportedPropertiesCountAdded: 0,
+      reportedPropertiesCountAddedButNotVerifiedByServiceApp: 0,
+      reportedPropertiesCountRemoved: 0,
+      reportedPropertiesCountRemovedButNotVerifiedByServiceApp: 0,
+      clientLibraryCountExceptions: 0,
+      sendMessageCountNotReceivedByServiceApp: 0,
+      sendMessageCountSent: 0,
+      sendMessageCountUnacked: 0,
+    };
   }
 }
 
