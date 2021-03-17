@@ -22,6 +22,16 @@ export type ThiefPairingProperties = {
   runId: string;
 };
 
+export type TestReportedProperties = {
+  thief: {
+    testContent: {
+      reportedPropertyTest: {
+        [key: string]: any;
+      };
+    };
+  };
+};
+
 export type ThiefC2dMessage = {
   thief: {
     runId: string;
@@ -48,7 +58,7 @@ export type SessionMetics = {
   exitReason?: string;
   lastUpdateTimeUtc: string;
   runStartUtc: string;
-  runState: "waiting" | "running" | "failed" | "complete" | "interrupted";
+  runState: "Waiting" | "Running" | "Failed" | "Complete" | "Interrupted"; //TODO: should this be uppercase or lowercase?
   runTime: string;
 };
 
