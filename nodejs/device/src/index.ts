@@ -358,6 +358,7 @@ class DeviceApp {
             `Received initial testC2dMessageIndex: ${(this.maxReceivedIndex =
               obj.thief.testC2dMessageIndex)}`
           );
+          this.lastReceiveC2dTime = Date.now();
           appInsights.defaultClient.trackMetric({
             name: "ReceiveC2dCountReceived",
             value: ++this.testMetrics.receiveC2dCountReceived,
@@ -369,6 +370,12 @@ class DeviceApp {
           logger.info(
             `Received next testC2dMessageIndex: ${++this.maxReceivedIndex}`
           );
+          const now = Date.now();
+          appInsights.defaultClient.trackMetric({
+            name: "LatencyBetweenC2dInSeconds",
+            value: (now - this.lastReceiveC2dTime) / 1000,
+          });
+          this.lastReceiveC2dTime = now;
           appInsights.defaultClient.trackMetric({
             name: "ReceiveC2dCountReceived",
             value: ++this.testMetrics.receiveC2dCountReceived,
@@ -383,10 +390,20 @@ class DeviceApp {
           logger.warn(
             `Received testC2dMessageIndex ${obj.thief.testC2dMessageIndex}, but never received indices ${missing}`
           );
+          const now = Date.now();
+          appInsights.defaultClient.trackMetric({
+            name: "LatencyBetweenC2dInSeconds",
+            value: (now - this.lastReceiveC2dTime) / 1000,
+          });
+          this.lastReceiveC2dTime = now;
           this.maxReceivedIndex = obj.thief.testC2dMessageIndex;
           appInsights.defaultClient.trackMetric({
             name: "ReceiveC2dCountMissing",
             value: (this.testMetrics.receiveC2dCountMissing += missing.length),
+          });
+          appInsights.defaultClient.trackMetric({
+            name: "ReceiveC2dCountReceived",
+            value: ++this.testMetrics.receiveC2dCountReceived,
           });
           if (
             (this.testMetrics.receiveC2dCountMissing += missing.length) >
@@ -502,7 +519,7 @@ class DeviceApp {
             this.serviceAckWaitList.add(
               serviceAckId,
               ServiceAckType.TELEMETRY_SERVICE_ACK,
-              (_latency: number, userData: { [key: string]: any }) => {
+              (latency: number, userData: { [key: string]: any }) => {
                 logger.info(
                   `Received serviceAck with serviceAckId ${userData.serviceAckId}`
                 );
@@ -510,7 +527,10 @@ class DeviceApp {
                   name: "SendMessageCountNotReceivedByServiceApp",
                   value: this.serviceAckWaitList.getPendingTelemetryServiceAcks(),
                 });
-                //TODO: record latency
+                appInsights.defaultClient.trackMetric({
+                  name: "LatencySendMessageToServiceAckInSeconds",
+                  value: latency / 1000,
+                });
               },
               {
                 serviceAckId: serviceAckId,
@@ -626,7 +646,7 @@ class DeviceApp {
       };
 
       const onPropertyRemovedAck = (
-        _latency: number,
+        latency: number,
         userData: {
           [key: string]: any;
         }
@@ -638,11 +658,14 @@ class DeviceApp {
           name: "ReportedPropertiesCountRemovedButNotVerifiedByServiceApp",
           value: (this.testMetrics.reportedPropertiesCountRemoved = this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks()),
         });
-        //TODO: record latency
+        appInsights.defaultClient.trackMetric({
+          name: "LatencyRemoveReportedPropertyToServiceAckInSeconds",
+          value: latency / 1000,
+        });
       };
 
       const onPropertyAddedAck = (
-        _latency: number,
+        latency: number,
         userData: {
           [key: string]: any;
         }
@@ -653,6 +676,10 @@ class DeviceApp {
         appInsights.defaultClient.trackMetric({
           name: "ReportedPropertiesCountAddedButNotVerifiedByServiceApp",
           value: (this.testMetrics.reportedPropertiesCountAdded = this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks()),
+        });
+        appInsights.defaultClient.trackMetric({
+          name: "LatencyAddReportedPropertyToServiceAckInSeconds",
+          value: latency / 1000,
         });
         const patch: TestReportedProperties = {
           thief: {
@@ -701,7 +728,6 @@ class DeviceApp {
               cleanUpAndReject(err);
             }
           });
-        //TODO: record latency
       };
 
       let propertyIndex = 1;
@@ -919,6 +945,7 @@ class DeviceApp {
   private testMetrics: TestMetrics;
   private serviceAckWaitList: ServiceAckWaitList;
   private maxReceivedIndex: number;
+  private lastReceiveC2dTime: number;
   private serviceInstanceId: string;
   private client: Client;
   private twin: Twin;
