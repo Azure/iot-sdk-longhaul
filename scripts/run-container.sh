@@ -89,7 +89,7 @@ az container create \
     --environment-variables "${ENV[@]}" \
     --registry-username ${THIEF_CONTAINER_REGISTRY_USER} \
     --registry-password ${THIEF_CONTAINER_REGISTRY_PASSWORD} \
-    --restart-policy Never \
+    --restart-policy Always \
     --azure-file-volume-account-name ${THIEF_SHARED_LOG_STORAGE_ACCOUNT_NAME} \
     --azure-file-volume-account-key ${THIEF_SHARED_LOG_STORAGE_ACCOUNT_KEY} \
     --azure-file-volume-share-name ${THIEF_SHARED_LOG_STORAGE_SHARE_NAME} \
