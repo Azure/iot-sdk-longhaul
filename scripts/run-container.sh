@@ -5,7 +5,7 @@ set -e
 script_dir=$(cd "$(dirname "$0")" && pwd)
 
 function usage {
-    echo "USAGE: ${0} [--platform platform] --langauge language_short_name --library library [--source library_source] --version library_version --pool service_pool [--device_id device_id] [--tag extra_tag] [--runid id] [--run_reason ] [--service_instance_id id]"
+    echo "USAGE: ${0} [--platform platform] --langauge language_short_name --library library [--source library_source] --version library_version --pool service_pool [--device_id device_id] [--tag extra_tag] [--run_reason ]"
     echo "  ex: ${0} --language py37 --library device --source pypi --version 2.3.0 --pool pool_1"
     exit 1
 }
@@ -35,13 +35,6 @@ case ${LIBRARY} in
             echo "ERROR: --device_id is required when library==device"
             usage
         fi
-        if [ "${SERVICE_INSTANCE_ID}" != "" ]; then
-            echo "ERROR: --service_instance_id is not valid when library==device"
-            usage
-        fi
-        if [ "${RUN_ID}" == "" ]; then
-            RUN_ID=$(uuidgen)
-        fi
         CONTAINER_NAME=${DEVICE_ID}-device
         ;;
     service)
@@ -49,16 +42,9 @@ case ${LIBRARY} in
             echo "ERROR: --device_id must not used when library==service"
             usage
         fi
-        if [ "${RUN_ID}" != "" ]; then
-            echo "ERROR: --run_id is not valid when library==service"
-            usage
-        fi
         if [ "${RUN_REASON}" != "" ]; then
             echo "ERROR: --run_reason is not valid when library==service"
             usage
-        fi
-        if [ "${SERVICE_INSTANCE_ID}" == "" ]; then
-            SERVICE_INSTANCE_ID=$(uuidgen)
         fi
         CONTAINER_NAME=${SERVICE_POOL}-service
         ;;
@@ -81,7 +67,6 @@ case ${LIBRARY} in
             THIEF_DEVICE_ID=${DEVICE_ID} \
             THIEF_REQUESTED_SERVICE_POOL=${SERVICE_POOL} \
             THIEF_KEYVAULT_NAME=${THIEF_KEYVAULT_NAME} \
-            THIEF_RUN_ID=${RUN_ID} \
             THIEF_RUN_REASON=\"${RUN_REASON}\" \
         )
         ;;
@@ -89,7 +74,6 @@ case ${LIBRARY} in
         ENV=(\
             THIEF_SERVICE_POOL=${SERVICE_POOL} \
             THIEF_KEYVAULT_NAME=${THIEF_KEYVAULT_NAME} \
-            THIEF_SERVICE_INSTANCE_ID=${SERVICE_INSTANCE_ID} \
         )
         ;;
 esac
