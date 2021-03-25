@@ -13,7 +13,7 @@ using System.Net.WebSockets;
 using System.Runtime.InteropServices;
 using System.Security.Authentication;
 
-namespace Microsoft.Azure.Iot.Thief.Device
+namespace Microsoft.Azure.IoT.Thief.Device
 {
     // Sample exception handler class - this class should be modified based on your application's logic
     internal class ExceptionHelper

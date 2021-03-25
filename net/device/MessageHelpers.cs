@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Microsoft.Azure.Iot.Thief.Device
+namespace Microsoft.Azure.IoT.Thief.Device
 {
     internal static class MessageHelpers
     {

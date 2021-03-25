@@ -11,9 +11,9 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using static Microsoft.Azure.Iot.Thief.Device.LoggingConstants;
+using static Microsoft.Azure.IoT.Thief.Device.LoggingConstants;
 
-namespace Microsoft.Azure.Iot.Thief.Device
+namespace Microsoft.Azure.IoT.Thief.Device
 {
     internal class IotHub : IIotHub, IDisposable
     {

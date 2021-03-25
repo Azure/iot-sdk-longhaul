@@ -1,6 +1,6 @@
 ﻿using Microsoft.Azure.Devices.Client;
 
-namespace Microsoft.Azure.Iot.Thief.Device
+namespace Microsoft.Azure.IoT.Thief.Device
 {
     internal class Settings
     {
