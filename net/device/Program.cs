@@ -1,7 +1,7 @@
 ﻿using Mash.Logging;
 using Mash.Logging.ApplicationInsights;
 using Microsoft.Azure.Devices.Client;
-using Microsoft.Azure.Iot.Thief.Device;
+using Microsoft.Azure.IoT.Thief.Device;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
@@ -9,7 +9,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using static Microsoft.Azure.Iot.Thief.Device.LoggingConstants;
+using static Microsoft.Azure.IoT.Thief.Device.LoggingConstants;
 
 namespace ThiefDevice
 {

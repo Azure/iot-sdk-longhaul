@@ -2,7 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Microsoft.Azure.Iot.Thief.Device
+namespace Microsoft.Azure.IoT.Thief.Device
 {
     /// <summary>
     /// An interface for device code to interact with hub

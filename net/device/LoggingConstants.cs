@@ -1,4 +1,4 @@
-﻿namespace Microsoft.Azure.Iot.Thief.Device
+﻿namespace Microsoft.Azure.IoT.Thief.Device
 {
     internal static class LoggingConstants
     {
