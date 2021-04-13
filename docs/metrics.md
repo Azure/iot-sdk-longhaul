@@ -85,7 +85,7 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
 | `receiveC2dCountReceived` | integer | Count of c2d messges received by device app.  Only applies to test c2d messges |
 | `reportedPropertiesCountAdded` | integer | Count of reported properties added,  Only applies to `testContent` properties. |
 | `reportedPropertiesCountRemoved` | integer | Count of reported properties removed,  Only applies to `testContent` properties. |
-| `reportedPropertiesCountTimedOut` | integer | Count of reported property operations (add + remote) which timed out.  Only applies to `testContent` properties. |
+| `reportedPropertiesCountTimedOut` | integer | Count of reported property operations (add + remove) which timed out.  Only applies to `testContent` properties. |
 | `sendMessageCountSent` | integer | Count of test telemetry messages sent |
 | `sendMessageCountUnacked` | integer |  Count of test telemetry messages where send API did not complete and did not fail.  (most likely dropped in transit.) |
 | `sendMessageCountExceptions` | integer | Count of test telemetry operations which failed.  Failures could be caused by raised exceptions or by messages withoug a matching `serviceAck`. |

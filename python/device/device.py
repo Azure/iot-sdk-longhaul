@@ -930,7 +930,7 @@ class DeviceApp(app_base.AppBase):
                         )
                     )
 
-    def test_reported_properties_threads(self, worker_thread_info):
+    def test_reported_properties_thread(self, worker_thread_info):
         """
         Thread to test reported properties.  It does this by setting properties inside
         `properties/reported/thief/testContent/reportedPropertyTest`.  Each property has
@@ -1138,7 +1138,7 @@ class DeviceApp(app_base.AppBase):
             ),
             app_base.WorkerThreadInfo(self.pairing_thread, "pairing_thread"),
             app_base.WorkerThreadInfo(
-                self.test_reported_properties_threads, "test_reported_properties_threads"
+                self.test_reported_properties_thread, "test_reported_properties_thread"
             ),
         ]
         for i in range(0, self.config[Settings.SEND_MESSAGE_THREAD_COUNT]):
