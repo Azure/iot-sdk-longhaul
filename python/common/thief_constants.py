@@ -111,15 +111,6 @@ class Types(object):
     Names for different types
     """
 
-    class ServiceAck(object):
-        """
-        Names of different types of serviceAck messages
-        """
-
-        TELEMETRY_SERVICE_ACK = "telemetry"
-        ADD_REPORTED_PROPERTY_SERVICE_ACK = "add_reported"
-        REMOVE_REPORTED_PROPERTY_SERVICE_ACK = "remove_reported"
-
     class Message(object):
         """
         Names of different types of messsages
