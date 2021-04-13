@@ -36,6 +36,9 @@ class MetricsReporter(object):
         self.metrics = {}
 
     def add_integer_measurement(self, json_name, description, units):
+        """
+        Add a measurement for an integer value
+        """
         metric_name = json_name_to_metric_name(json_name)
 
         new_measure = measure_module.MeasureInt(metric_name, description, units)
@@ -50,6 +53,9 @@ class MetricsReporter(object):
         self.metrics[json_name] = new_setter
 
     def add_float_measurement(self, json_name, description, units):
+        """
+        Add a measurement for a float value
+        """
         metric_name = json_name_to_metric_name(json_name)
 
         new_measure = measure_module.MeasureFloat(metric_name, description, units)
@@ -69,9 +75,14 @@ class MetricsReporter(object):
         appropriate metric name
         """
         for key in metrics:
-            setter = self.metrics[key]
-            value = metrics[key]
-            setter(value)
+            self.set_metric(key, metrics[key])
+
+    def set_metric(self, key, value):
+        """
+        Set the value of an individual metric
+        """
+        setter = self.metrics[key]
+        setter(value)
 
     def record(self):
         self.mmap.record(self.tmap)

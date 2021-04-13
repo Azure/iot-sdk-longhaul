@@ -30,9 +30,11 @@ from thief_constants import (
     DeviceSettings as Settings,
     CustomDimensionNames,
 )
+from service_ack_wait_list import ServiceAckWaitList
 
 faulthandler.enable()
 
+# TODO: service_ack_wait_info should be running_operation  and list should be running_operation_list
 # TODO: exit service when device stops responding
 # TODO: add code to receive rest of pingacks at end.  wait for delta since last to be > 20 seconds.
 # TODO: add mid to debug logs as custom property, maybe service_ack id
@@ -79,24 +81,6 @@ def custom_props(extra_props):
     return {"custom_dimensions": extra_props}
 
 
-class ServiceAckWaitInfo(object):
-    def __init__(
-        self,
-        on_service_ack_received,
-        service_ack_id,
-        service_ack_type,
-        queue_epochtime=None,
-        send_epochtime=None,
-        user_data=None,
-    ):
-        self.on_service_ack_received = on_service_ack_received
-        self.service_ack_id = service_ack_id
-        self.service_ack_type = service_ack_type
-        self.queue_epochtime = queue_epochtime
-        self.send_epochtime = send_epochtime
-        self.user_data = user_data
-
-
 class CustomPropertyNames(object):
     EVENT_DATE_TIME_UTC = "eventDateTimeUtc"
     SERVICE_ACK_ID = "serviceAckid"
@@ -116,14 +100,20 @@ class DeviceRunMetrics(object):
 
         self.send_message_count_unacked = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
+        self.send_message_count_in_backlog = ThreadSafeCounter()
         self.send_message_count_received_by_service_app = ThreadSafeCounter()
 
         self.receive_c2d_count_received = ThreadSafeCounter()
 
         self.reported_properties_count_added = ThreadSafeCounter()
-        self.reported_properties_count_added_not_verified = ThreadSafeCounter()
         self.reported_properties_count_removed = ThreadSafeCounter()
-        self.reported_properties_count_removed_not_verified = ThreadSafeCounter()
+        self.reported_properties_count_timed_out = ThreadSafeCounter()
+
+        self.get_twin_count_succeeded = ThreadSafeCounter()
+        self.get_twin_count_timed_out = ThreadSafeCounter()
+
+        self.desired_property_patch_count_received = ThreadSafeCounter()
+        self.desired_property_patch_count_timed_out = ThreadSafeCounter()
 
 
 """
@@ -135,15 +125,15 @@ device_run_config = {
     Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS: 30,
     Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
     Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT: 10,
+    Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
+    Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 1000,
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
     Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS: 30,
     Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
     Settings.SEND_MESSAGE_THREAD_COUNT: 10,
-    Settings.SEND_MESSAGE_ALLOWED_FAILURE_COUNT: 1000,
     Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS: 20,
     Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT: 100,
-    Settings.REPORTED_PROPERTIES_UPDATE_INTERVAL_IN_SECONDS: 10,
-    Settings.REPORTED_PROPERTIES_UPDATE_ALLOWED_FAILURE_COUNT: 50,
+    Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS: 5,
 }
 
 
@@ -165,8 +155,7 @@ class DeviceApp(app_base.AppBase):
         self.config = device_run_config
         self.service_instance_id = None
         # for service_acks
-        self.service_ack_list_lock = threading.Lock()
-        self.service_ack_wait_list = {}
+        self.service_ack_wait_list = ServiceAckWaitList()
         self.incoming_service_ack_response_queue = queue.Queue()
         # for telemetry
         self.outgoing_test_message_queue = queue.Queue()
@@ -180,6 +169,9 @@ class DeviceApp(app_base.AppBase):
         # for c2d
         self.out_of_order_message_tracker = OutOfOrderMessageTracker()
         self.incoming_test_c2d_message_queue = queue.Queue()
+        # for twin
+        self.reported_property_index = 1
+        self.incoming_desired_property_patch_queue = queue.Queue()
 
     def _configure_azure_monitor_metrics(self):
         # ---------------------
@@ -263,19 +255,42 @@ class DeviceApp(app_base.AppBase):
             "patches with add operation(s)",
         )
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountAddedButNotVerifiedByServiceApp",
-            "Count of reported properties added, but the add was not verified by the service app",
-            "patches with add operation(s)",
-        )
-        self.reporter.add_integer_measurement(
-            MetricNames.REPORTED_PROPERTIES_REMOVED,
+            MetricNames.REPORTED_PROPERTIES_COUNT_REMOVED,
             "Count of reported properties removed",
             "patches with remove operation(s)",
         )
         self.reporter.add_integer_measurement(
-            "reportedPropertiesCountRemovedButNotVerifiedbyServiceApp",
-            "Count of reported properties removed, but the remove was not verified by the service app",
-            "patches with remove operations(s)",
+            MetricNames.REPORTED_PROPERTIES_COUNT_TIMED_OUT,
+            "Count of reported property updates which timed out.",
+            "add or remove pathches",
+        )
+
+        # ----------------
+        # Get-twin metrics
+        # ----------------
+        self.reporter.add_integer_measurement(
+            MetricNames.GET_TWIN_COUNT_SUCCEEDED,
+            "Number of times get_twin successfully verified a property update",
+            "property updates that were verified",
+        )
+        self.reporter.add_integer_measurement(
+            MetricNames.GET_TWIN_COUNT_TIMED_OUT,
+            "Number of times get_twin was unable to verify a property update",
+            "property updates that were not verified",
+        )
+
+        # ------------------------------
+        # desired property patch metrics
+        # ------------------------------
+        self.reporter.add_integer_measurement(
+            MetricNames.DESIRED_PROPERTY_PATCH_COUNT_RECEIVED,
+            "Count of desired property patches that were successfully received",
+            "patch operations",
+        )
+        self.reporter.add_integer_measurement(
+            MetricNames.DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT,
+            "Count of desired property patches that were not received",
+            "patch operations",
         )
 
         # ---------------
@@ -341,11 +356,45 @@ class DeviceApp(app_base.AppBase):
             MetricNames.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
             MetricNames.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
             MetricNames.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
-            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED_NOT_VERIFIED: self.metrics.reported_properties_count_added_not_verified.get_count(),
-            MetricNames.REPORTED_PROPERTIES_REMOVED: self.metrics.reported_properties_count_removed.get_count(),
-            MetricNames.REPORTED_PROPERTIES_REMOVED_NOT_VERIFIED: self.metrics.reported_properties_count_removed_not_verified.get_count(),
+            MetricNames.REPORTED_PROPERTIES_COUNT_REMOVED: self.metrics.reported_properties_count_removed.get_count(),
+            MetricNames.REPORTED_PROPERTIES_COUNT_TIMED_OUT: self.metrics.reported_properties_count_timed_out.get_count(),
+            MetricNames.GET_TWIN_COUNT_SUCCEEDED: self.metrics.get_twin_count_succeeded.get_count(),
+            MetricNames.GET_TWIN_COUNT_TIMED_OUT: self.metrics.get_twin_count_timed_out.get_count(),
+            MetricNames.DESIRED_PROPERTY_PATCH_COUNT_RECEIVED: self.metrics.desired_property_patch_count_received.get_count(),
+            MetricNames.DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT: self.metrics.desired_property_patch_count_timed_out.get_count(),
         }
         return props
+
+    def check_failure_counts(self):
+        """
+        Check all failure counts and raise an exception if they exceeded the allowed count
+        """
+        if (
+            self.metrics.client_library_count_exceptions.get_count()
+            > self.config[Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT]
+        ):
+            raise Exception(
+                "Client library exception count ({}) too high.".format(
+                    self.metrics.client_library_count_exceptions.get_count()
+                )
+            )
+
+        messages_not_received = (
+            self.metrics.send_message_count_sent.get_count()
+            - self.metrics.send_message_count_received_by_service_app.get_count()
+        )
+
+        timeout_count = (
+            messages_not_received
+            + self.metrics.send_message_count_in_backlog.get_count()
+            + self.metrics.send_message_count_unacked.get_count()
+            + self.out_of_order_message_tracker.get_missing_count()
+            + self.metrics.reported_properties_count_timed_out.get_count()
+            + self.metrics.get_twin_count_timed_out.get_count()
+            + self.metrics.desired_property_patch_count_timed_out.get_count()
+        )
+        if timeout_count > self.config[Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT]:
+            raise Exception("Timeout count ({}) too high.".format(timeout_count))
 
     def update_initial_reported_properties(self):
         """
@@ -399,26 +448,18 @@ class DeviceApp(app_base.AppBase):
         helper function to create a message from a dict and add service_ack
         properties.
         """
-        service_ack_id = str(uuid.uuid4())
+        service_ack = self.service_ack_wait_list.make_callback(on_service_ack_received, user_data)
+        service_ack.queue_epochtime = time.time()
 
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
         assert props[Fields.Telemetry.THIEF].get(Fields.Telemetry.CMD, None) is None
         props[Fields.Telemetry.THIEF][Fields.Telemetry.CMD] = Types.Message.SERVICE_ACK_REQUEST
-        props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_ACK_ID] = service_ack_id
+        props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_ACK_ID] = service_ack.id
 
-        with self.service_ack_list_lock:
-            self.service_ack_wait_list[service_ack_id] = ServiceAckWaitInfo(
-                on_service_ack_received=on_service_ack_received,
-                service_ack_id=service_ack_id,
-                service_ack_type=Types.ServiceAck.TELEMETRY_SERVICE_ACK,
-                queue_epochtime=time.time(),
-                user_data=user_data,
-            )
-
-        logger.info("Requesting service_ack for serviceAckId = {}".format(service_ack_id))
+        logger.info("Requesting service_ack for serviceAckId = {}".format(service_ack.id))
         msg = self.create_message_from_dict(props)
-        msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = service_ack_id
+        msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = service_ack.id
         return msg
 
     def pairing_thread(self, worker_thread_info):
@@ -594,8 +635,7 @@ class DeviceApp(app_base.AppBase):
             if msg:
                 service_ack_id = msg.custom_properties.get(CustomPropertyNames.SERVICE_ACK_ID, "")
                 if service_ack_id:
-                    with self.service_ack_list_lock:
-                        wait_info = self.service_ack_wait_list[service_ack_id]
+                    wait_info = self.service_ack_wait_list.get(service_ack_id)
                     wait_info.send_epochtime = time.time()
 
                 try:
@@ -604,15 +644,6 @@ class DeviceApp(app_base.AppBase):
                 except Exception as e:
                     self.metrics.client_library_count_exceptions.increment()
                     logger.error("send_message raised {}".format(str(e) or type(e)), exc_info=True)
-                    if (
-                        self.metrics.client_library_count_exceptions.get_count()
-                        > self.config[Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT]
-                    ):
-                        raise Exception(
-                            "Client library exception count ({}) too high.".format(
-                                self.metrics.client_library_count_exceptions.get_count()
-                            )
-                        )
                 else:
                     self.metrics.send_message_count_sent.increment()
                 finally:
@@ -661,8 +692,7 @@ class DeviceApp(app_base.AppBase):
                     logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
                     self.metrics.send_message_count_received_by_service_app.increment()
 
-                    with self.service_ack_list_lock:
-                        wait_info = self.service_ack_wait_list[service_ack_id]
+                    wait_info = self.service_ack_wait_list.get(service_ack_id)
 
                     with self.reporter_lock:
                         self.reporter.set_metrics_from_dict(
@@ -683,36 +713,6 @@ class DeviceApp(app_base.AppBase):
                     props=props, on_service_ack_received=on_service_ack_received
                 )
                 self.outgoing_test_message_queue.put(msg)
-
-                # check backlog size for failure
-                if (
-                    self.outgoing_test_message_queue.qsize()
-                    > self.config[Settings.SEND_MESSAGE_ALLOWED_FAILURE_COUNT]
-                ):
-                    raise Exception(
-                        "Send message queue size {} is too big".format(
-                            self.outgoing_test_message_qsize()
-                        )
-                    )
-                # check for count of messages that failed to send (no PUBACK)
-                if (
-                    self.metrics.send_message_count_unacked.get_count()
-                    > self.config[Settings.SEND_MESSAGE_ALLOWED_FAILURE_COUNT]
-                ):
-                    raise Exception(
-                        "Un-acked message count of {} is too big".format(
-                            self.metrics.send_message_count_unacked.get_count()
-                        )
-                    )
-                # check the count of messages that were sent but not received
-                not_received = (
-                    self.metrics.send_message_count_sent.get_count()
-                    - self.metrics.send_message_count_received_by_service_app.get_count()
-                )
-                if not_received > self.config[Settings.SEND_MESSAGE_ALLOWED_FAILURE_COUNT]:
-                    raise Exception(
-                        "Un-received message count of {} is too big".format(not_received)
-                    )
 
                 # sleep until we need to send again
                 self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
@@ -750,6 +750,8 @@ class DeviceApp(app_base.AppBase):
             logger.info("Updating thief props: {}".format(pprint.pformat(props)))
             self.client.patch_twin_reported_properties(props)
 
+            self.check_failure_counts()
+
             self.done.wait(self.config[Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS])
 
     def wait_for_desired_properties_thread(self, worker_thread_info):
@@ -769,8 +771,9 @@ class DeviceApp(app_base.AppBase):
                 if props.get(Fields.Desired.THIEF, {}).get(Fields.Desired.PAIRING, {}):
                     self.incoming_pairing_message_queue.put(props)
 
-                # Other props get dropped.  Eventually we'll use this to test desired properties.
-                # self.incoming_desired_property_patch_queue.put(props)
+                # other props go into incoming_deisred_property_patch_queue
+                else:
+                    self.incoming_desired_property_patch_queue.put(props)
 
     def dispatch_incoming_message_thread(self, worker_thread_info):
         """
@@ -846,25 +849,20 @@ class DeviceApp(app_base.AppBase):
                 arrivals = []
                 thief = json.loads(msg.data.decode())[Fields.Telemetry.THIEF]
 
-                with self.service_ack_list_lock:
-                    for service_ack_id in thief[Fields.C2d.SERVICE_ACKS]:
-
-                        if service_ack_id in self.service_ack_wait_list:
-                            # we've received a service_ack.  Don't call back here because we're holding
-                            # service_ack_list_lock.  Instead, add to a list and call back when we're
-                            # not holding the lock.
-                            arrivals.append(self.service_ack_wait_list[service_ack_id])
-                        else:
-                            logger.warning(
-                                "Received unknown serviceAckId: {}:".format(service_ack_id)
-                            )
+                for service_ack_id in thief[Fields.C2d.SERVICE_ACKS]:
+                    e = self.service_ack_wait_list.get(service_ack_id)
+                    if e:
+                        arrivals.append(e)
+                    else:
+                        logger.warning("Received unknown serviceAckId: {}:".format(service_ack_id))
 
                 for arrival in arrivals:
-                    arrival.on_service_ack_received(arrival.service_ack_id, arrival.user_data)
+                    if hasattr(arrival, "callback"):
+                        arrival.callback(arrival.id, arrival.user_data)
+                    else:
+                        arrival.event.set()
                     # remove this from our list _after_ we call on_service_ack_received
-                    with self.service_ack_list_lock:
-                        if arrival.service_ack_id in self.service_ack_wait_list:
-                            del self.service_ack_wait_list[arrival.service_ack_id]
+                    self.service_ack_wait_list.remove(arrival.id)
 
     def start_c2d_message_sending(self):
         """
@@ -932,7 +930,7 @@ class DeviceApp(app_base.AppBase):
                         )
                     )
 
-    def test_reported_properties_threads(self, worker_thread_info):
+    def test_reported_properties_thread(self, worker_thread_info):
         """
         Thread to test reported properties.  It does this by setting properties inside
         `properties/reported/thief/testContent/reportedPropertyTest`.  Each property has
@@ -942,120 +940,158 @@ class DeviceApp(app_base.AppBase):
         can add a property, verify that it was added, then remove it and verify that it was removed.
         """
 
-        property_index = 1
-
         while not self.done.isSet():
             worker_thread_info.watchdog_epochtime = time.time()
             if self.is_paused():
                 time.sleep(1)
                 continue
 
-            if self.is_pairing_complete():
-                add_service_ack_id = str(uuid.uuid4())
-                remove_service_ack_id = str(uuid.uuid4())
+            elif not self.is_pairing_complete():
+                time.sleep(1)
+                continue
 
-                property_name = "prop_{}".format(property_index)
-                property_value = {
-                    Fields.Reported.TestContent.ReportedPropertyTest.ADD_SERVICE_ACK_ID: add_service_ack_id,
-                    Fields.Reported.TestContent.ReportedPropertyTest.REMOVE_SERVICE_ACK_ID: remove_service_ack_id,
-                }
+            else:
+                self.subtest_send_single_reported_prop()
+                worker_thread_info.watchdog_epochtime = time.time()
+                time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
-                def on_property_added(service_ack_id, user_data):
-                    self.metrics.reported_properties_count_added_not_verified.decrement()
-                    (prop_name, add_ack_id, remove_ack_id) = user_data
-                    logger.info("Add of reported property {} verified by service".format(prop_name))
+                self.subtest_desired_properties()
+                worker_thread_info.watchdog_epochtime = time.time()
+                time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
-                    with self.service_ack_list_lock:
-                        add_wait_info = self.service_ack_wait_list[add_ack_id]
-                        self.service_ack_wait_list[remove_ack_id] = ServiceAckWaitInfo(
-                            on_service_ack_received=on_property_removed,
-                            service_ack_id=remove_ack_id,
-                            send_epochtime=time.time(),
-                            service_ack_type=Types.ServiceAck.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
-                            user_data=user_data,
-                        )
+    def subtest_send_single_reported_prop(self):
+        """
+        test function to send a single reported property and then clear it after the
+        server verifies it.
+        """
 
-                    with self.reporter_lock:
-                        self.reporter.set_metrics_from_dict(
-                            {
-                                MetricNames.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK: time.time()
-                                - add_wait_info.send_epochtime
-                            }
-                        )
-                        self.reporter.record()
-
-                    reported_properties = {
-                        Fields.Reported.THIEF: {
-                            Fields.Reported.TEST_CONTENT: {
-                                Fields.Reported.TestContent.REPORTED_PROPERTY_TEST: {
-                                    prop_name: None
-                                }
-                            }
-                        }
-                    }
-                    logger.info("Removing test property {}".format(prop_name))
-                    self.client.patch_twin_reported_properties(reported_properties)
-                    self.metrics.reported_properties_count_removed.increment()
-                    self.metrics.reported_properties_count_removed_not_verified.increment()
-
-                def on_property_removed(service_ack_id, user_data):
-                    self.metrics.reported_properties_count_removed_not_verified.decrement()
-                    (prop_name, add_ack_id, remove_ack_id) = user_data
-                    logger.info(
-                        "Remove of reported property {} verified by service".format(prop_name)
-                    )
-
-                    with self.service_ack_list_lock:
-                        remove_wait_info = self.service_ack_wait_list[remove_ack_id]
-                    with self.reporter_lock:
-                        self.reporter.set_metrics_from_dict(
-                            {
-                                MetricNames.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK: time.time()
-                                - remove_wait_info.send_epochtime
-                            }
-                        )
-                        self.reporter.record()
-
-                with self.service_ack_list_lock:
-                    self.service_ack_wait_list[add_service_ack_id] = ServiceAckWaitInfo(
-                        on_service_ack_received=on_property_added,
-                        service_ack_id=add_service_ack_id,
-                        send_epochtime=time.time(),
-                        service_ack_type=Types.ServiceAck.ADD_REPORTED_PROPERTY_SERVICE_ACK,
-                        user_data=(property_name, add_service_ack_id, remove_service_ack_id),
-                    )
-
-                reported_properties = {
-                    Fields.Reported.THIEF: {
-                        Fields.Reported.TEST_CONTENT: {
-                            Fields.Reported.TestContent.REPORTED_PROPERTY_TEST: {
-                                property_name: property_value
-                            }
-                        }
+        def make_reported_prop(property_name, val):
+            return {
+                Fields.Reported.THIEF: {
+                    Fields.Reported.TEST_CONTENT: {
+                        Fields.Reported.TestContent.REPORTED_PROPERTY_TEST: {property_name: val}
                     }
                 }
-                logger.info("Adding test property {}".format(property_name))
-                self.client.patch_twin_reported_properties(reported_properties)
-                self.metrics.reported_properties_count_added.increment()
-                self.metrics.reported_properties_count_added_not_verified.increment()
+            }
 
-                property_index += 1
+        add_service_ack = self.service_ack_wait_list.make_event()
+        remove_service_ack = self.service_ack_wait_list.make_event()
 
-                failure_count = (
-                    self.metrics.reported_properties_count_added_not_verified.get_count()
-                    + self.metrics.reported_properties_count_removed_not_verified.get_count()
+        prop_name = "prop_{}".format(self.reported_property_index)
+        self.reported_property_index += 1
+
+        prop_value = {
+            Fields.Reported.TestContent.ReportedPropertyTest.ADD_SERVICE_ACK_ID: add_service_ack.id,
+            Fields.Reported.TestContent.ReportedPropertyTest.REMOVE_SERVICE_ACK_ID: remove_service_ack.id,
+        }
+
+        logger.info("Adding test property {}".format(prop_name))
+        start_time = time.time()
+        self.client.patch_twin_reported_properties(make_reported_prop(prop_name, prop_value))
+
+        if add_service_ack.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+            logger.info("Add of reported property {} verified by service".format(prop_name))
+            self.metrics.reported_properties_count_added.increment()
+            self.reporter.set_metric(
+                MetricNames.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK, time.time() - start_time
+            )
+            self.reporter.record()
+        else:
+            logger.info("Add of reported property {} verification timeout".format(prop_name))
+            self.metrics.reported_properties_count_timed_out.increment()
+
+        logger.info("Removing test property {}".format(prop_name))
+        start_time = time.time()
+        self.client.patch_twin_reported_properties(make_reported_prop(prop_name, None))
+
+        if remove_service_ack.event.wait(
+            timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
+        ):
+            logger.info("Remove of reported property {} verified by service".format(prop_name))
+            self.metrics.reported_properties_count_removed.increment()
+            self.reporter.set_metric(
+                MetricNames.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK,
+                time.time() - start_time,
+            )
+            self.reporter.record()
+        else:
+            logger.info("Remove of reported property {} verification timeout".format(prop_name))
+            self.metrics.reported_properties_count_timed_out.increment()
+
+    def subtest_desired_properties(self):
+        """
+        Test function to set a desired property, wait for the patch to arrive at the client,
+        then get the twin to verify that it shows up in the twin.
+        """
+        twin_guid = str(uuid.uuid4())
+
+        payload_set_desired_props = {
+            Fields.Telemetry.THIEF: {
+                Fields.Telemetry.CMD: Types.Message.SET_DESIRED_PROPS,
+                Fields.Telemetry.DESIRED_PROPERTIES: {
+                    Fields.Desired.THIEF: {
+                        Fields.Desired.TEST_CONTENT: {
+                            Fields.Desired.TestContent.TWIN_GUID: twin_guid
+                        }
+                    }
+                },
+            }
+        }
+        msg = self.create_message_from_dict(payload_set_desired_props)
+        logger.info("Sending message to update desired getTwin property to {}".format(twin_guid))
+        self.outgoing_test_message_queue.put(msg)
+
+        start_time = time.time()
+        end_time = start_time + self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
+
+        while time.time() <= end_time:
+            try:
+                patch = self.incoming_desired_property_patch_queue.get(
+                    max(0, end_time - time.time())
                 )
-                if (
-                    failure_count
-                    > self.config[Settings.REPORTED_PROPERTIES_UPDATE_ALLOWED_FAILURE_COUNT]
-                ):
-                    raise Exception(
-                        "Twin reported property add+remove failure count {} is too big".format(
-                            failure_count
+            except queue.Empty:
+                logger.warning(
+                    "wait_for_desired_property_patch did not retrieve exppected properties within expected time.  expected={}".format(
+                        twin_guid
+                    )
+                )
+                self.metrics.desired_property_patch_count_timed_out.increment()
+                break
+            else:
+                thief = patch.get(Fields.Desired.THIEF, {})
+                test_content = thief.get(Fields.Desired.TEST_CONTENT, {})
+                actual_twin_guid = test_content.get(Fields.Desired.TestContent.TWIN_GUID)
+                if actual_twin_guid == twin_guid:
+                    logger.info("received expected patch: {} succeeded".format(twin_guid))
+                    self.metrics.desired_property_patch_count_received.increment()
+                    break
+                else:
+                    logger.info(
+                        "Did not receive expected patch (yet). actual = {}.  expected = {}".format(
+                            actual_twin_guid, twin_guid
                         )
                     )
 
-            time.sleep(self.config[Settings.REPORTED_PROPERTIES_UPDATE_INTERVAL_IN_SECONDS])
+        # Now test the twin.  Since we already received the patch, our property should
+        # be in the twin.
+        twin = self.client.get_twin()
+        logger.info("Got twin: {}".format(twin))
+
+        desired = twin.get(Const.DESIRED, {})
+        thief = desired.get(Fields.Desired.THIEF, {})
+        test_content = thief.get(Fields.Desired.TEST_CONTENT, {})
+        actual_twin_guid = test_content.get(Fields.Desired.TestContent.TWIN_GUID)
+
+        if actual_twin_guid == twin_guid:
+            logger.info("Got desired_twin: {} succeeded".format(twin_guid))
+            self.metrics.get_twin_count_succeeded.increment()
+        else:
+            logger.info(
+                "get_twin property did not match: actual = {} expected = {}".format(
+                    actual_twin_guid, twin_guid
+                )
+            )
+            self.metrics.get_twin_count_timed_out_out.increment()
 
     def main(self):
 
@@ -1102,7 +1138,7 @@ class DeviceApp(app_base.AppBase):
             ),
             app_base.WorkerThreadInfo(self.pairing_thread, "pairing_thread"),
             app_base.WorkerThreadInfo(
-                self.test_reported_properties_threads, "test_reported_properties_threads"
+                self.test_reported_properties_thread, "test_reported_properties_thread"
             ),
         ]
         for i in range(0, self.config[Settings.SEND_MESSAGE_THREAD_COUNT]):

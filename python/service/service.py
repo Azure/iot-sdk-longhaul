@@ -252,6 +252,15 @@ class ServiceApp(app_base.AppBase):
                                 service_ack_id=thief[Fields.Telemetry.SERVICE_ACK_ID],
                             )
                         )
+                    elif cmd == Types.Message.SET_DESIRED_PROPS:
+                        desired = thief.get(Fields.Telemetry.DESIRED_PROPERTIES, {})
+                        if desired:
+                            logger.info("Updating desired props: {}".format(desired))
+                            with self.registry_manager_lock:
+                                self.registry_manager.update_twin(
+                                    device_id, Twin(properties=TwinProperties(desired=desired)), "*"
+                                )
+
                     else:
                         logger.info(
                             "Unknown command received from {}: {}".format(device_id, body),

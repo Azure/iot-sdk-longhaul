@@ -16,6 +16,7 @@ class Const(object):
     }
     PROPERTIES = "properties"
     REPORTED = "reported"
+    DESIRED = "desired"
 
 
 class Fields(object):
@@ -33,6 +34,7 @@ class Fields(object):
         SERVICE_ACK_ID = "serviceAckId"
         SERVICE_INSTANCE_ID = "serviceInstanceId"
         RUN_ID = "runId"
+        DESIRED_PROPERTIES = "desiredProperties"
 
     class Reported(object):
         """
@@ -84,6 +86,11 @@ class Fields(object):
             SERVICE_INSTANCE_ID = "serviceInstanceId"
             RUN_ID = "runId"
 
+        TEST_CONTENT = "testContent"
+
+        class TestContent(object):
+            TWIN_GUID = "twinGuid"
+
     class C2d(object):
         """
         Names of fields inside c2d messages
@@ -121,6 +128,7 @@ class Types(object):
         SERVICE_ACK_REQUEST = "serviceAckRequest"
         SERVICE_ACK_RESPONSE = "serviceAckResponse"
         TEST_C2D = "testC2d"
+        SET_DESIRED_PROPS = "setDesiredProps"
 
 
 class Events(object):
@@ -195,16 +203,28 @@ class MetricNames(object):
 
     # Number of reported properties which have been added
     REPORTED_PROPERTIES_COUNT_ADDED = "reportedPropertiesCountAdded"
-    # Number of reported properties which have been added, but the add was not verified by the service app
-    REPORTED_PROPERTIES_COUNT_ADDED_NOT_VERIFIED = (
-        "reportedPropertiesCountAddedButNotVerifiedByServiceApp"
-    )
     # Number of reported properties which have been removed
-    REPORTED_PROPERTIES_REMOVED = "reportedPropertiesCountRemoved"
-    # Number of reported properties which have been removed, but the removal was not verified by the service app
-    REPORTED_PROPERTIES_REMOVED_NOT_VERIFIED = (
-        "reportedPropertiesCountRemovedButNotVerifiedbyServiceApp"
-    )
+    REPORTED_PROPERTIES_COUNT_REMOVED = "reportedPropertiesCountRemoved"
+    # Number of reported property add & remove operations that timed out
+    REPORTED_PROPERTIES_COUNT_TIMED_OUT = "reportedPropertiesCountTimedOut"
+
+    # ----------------
+    # Get-twin metrics
+    # ----------------
+
+    # Number of times get_twin successfully verified a property update
+    GET_TWIN_COUNT_SUCCEEDED = "getTwinCountSucceeded"
+    # Number of times get_twin was unable to verify a property update
+    GET_TWIN_COUNT_TIMED_OUT = "getTwinCountTimedOut"
+
+    # ------------------------------
+    # desired property patch metrics
+    # ------------------------------
+
+    # Count of desired property patches that were successfully received
+    DESIRED_PROPERTY_PATCH_COUNT_RECEIVED = "desiredPropertyPatchCountReceived"
+    # Count of desired property patches that were not received
+    DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT = "desiredPropertyPatchCountTimedOut"
 
     # ---------------
     # Latency metrics
@@ -238,6 +258,11 @@ class DeviceSettings(object):
     # How many client exceptions do we allow before we fail the test?
     THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT = "thiefAllowedClientLibraryExceptionCount"
 
+    # Generic value for operation timeouts
+    OPERATION_TIMEOUT_IN_SECONDS = "operationTimeoutInSeconds"
+    # How many timeouts are allowed before the test fails
+    OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT = "operationTimeoutAllowedFailureCount"
+
     # How long to keep trying to pair with a service instance before giving up
     PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS = "pairingRequestTimeoutIntervalInSeconds"
     # How many seconds to wait while pairing before trying to pair again
@@ -247,18 +272,14 @@ class DeviceSettings(object):
     SEND_MESSAGE_OPERATIONS_PER_SECOND = "sendMessageOperationsPerSecond"
     # How many threads do we spin up for overlapped send_message calls
     SEND_MESSAGE_THREAD_COUNT = "sendMessageThreadCount"
-    # How many messages fail to arrive at the service before we fail the test
-    SEND_MESSAGE_ALLOWED_FAILURE_COUNT = "sendMessageAllowedFailureCount"
 
     # How often do we want the service to send test C2D messages?
     RECEIVE_C2D_INTERVAL_IN_SECONDS = "receiveC2dIntervalInSeconds"
     # How many missing C2D messages will cause the test to fail?
     RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT = "receiveC2dAllowedMissingMessageCount"
 
-    # How many seconds between reported property patches
-    REPORTED_PROPERTIES_UPDATE_INTERVAL_IN_SECONDS = "reportedPropertiesUpdateIntervalInSeconds"
-    # How many reported property patches are allowed to fail before we fail the test
-    REPORTED_PROPERTIES_UPDATE_ALLOWED_FAILURE_COUNT = "reportedPropertiesUpdateAllowedFailureCount"
+    # How many seconds between twin property updates
+    TWIN_UPDATE_INTERVAL_IN_SECONDS = "twinUpdateIntervalInSeconds"
 
 
 class CustomDimensionNames(object):

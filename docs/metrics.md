@@ -84,14 +84,17 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
 | `receiveC2dCountMissing` | integer | Count of c2d messages sent by service app but not (yet) received by device app.  Only applies to test c2d messages. |
 | `receiveC2dCountReceived` | integer | Count of c2d messges received by device app.  Only applies to test c2d messges |
 | `reportedPropertiesCountAdded` | integer | Count of reported properties added,  Only applies to `testContent` properties. |
-| `reportedPropertiesCountAddedButNotVerifiedByServiceApp` | integer | Count of reported properties added but the add was not verified by the service app |
 | `reportedPropertiesCountRemoved` | integer | Count of reported properties removed,  Only applies to `testContent` properties. |
-| `reportedPropertiesCountRemovedButNotVerifiedByServiceApp` | integer | Count of reported properties removed, but the removal was not verified by the service app. |
+| `reportedPropertiesCountTimedOut` | integer | Count of reported property operations (add + remove) which timed out.  Only applies to `testContent` properties. |
 | `sendMessageCountSent` | integer | Count of test telemetry messages sent |
 | `sendMessageCountUnacked` | integer |  Count of test telemetry messages where send API did not complete and did not fail.  (most likely dropped in transit.) |
 | `sendMessageCountExceptions` | integer | Count of test telemetry operations which failed.  Failures could be caused by raised exceptions or by messages withoug a matching `serviceAck`. |
 | `sendMessageCountInBacklog` | integer | Count of test telemetry messages currently queued in the  acklock.  Queued messages are scheduled to be sent, but not yet in transit. Not all test implementations queue in the client, so this metric may be meaningless in cases where queueing happens inside the SDK. |
 | `sendMessageCountNotReceivedByServiceApp` | integer | Count of test telemetry messages which were sent, ack'ed by the transport (`PUBACK`), but not received by the service (no `serviceAck`) |
+| `getTwinCountSucceeded` | integer | Count of getTwin operations which succeeded and returned the expected property values. |
+| `getTwinCountTimedOut` | integer | Count of getTwin operations which did not return the expected property values within the timeout period. |
+| `desiredPropertyPatchCountReceived` | integer | Count of desired properties patch operations which were received with the expected property values. |
+| `desiredPropertyPatchCountTimedOut` | integer | Count of the desired property patch operations which were not received with the expected property values within the timeout period. |
 
 ## System Health Metrics
 
