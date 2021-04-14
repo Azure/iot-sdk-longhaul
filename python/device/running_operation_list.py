@@ -19,7 +19,7 @@ class OperationBase(object):
 
     def remove_from_owning_list(self, in_dunder_del=False):
         """
-        remove an operation fron the list which owns it.
+        remove an operation fron the RunningOperationList which owns it.
         """
         owner = self.owner_weakref and self.owner_weakref()
         if owner:
@@ -42,7 +42,7 @@ class EventBasedOperation(OperationBase):
     def complete(self):
         """
         Mark a running operation as complete.  This sets the operation's event and removes
-        the operation from the list which owns it.
+        the operation from the RunningOperationList which owns it.
         """
         if self.event:
             self.event.set()
@@ -66,7 +66,7 @@ class CallbackBasedOperation(OperationBase):
     def complete(self):
         """
         Mark a running operation as complete.  This calls the operation's callback and removes
-        the operation from the list which owns it.
+        the operation from the RunningOperationList which owns it.
         """
         if self.callback:
             self.callback(self.id, self.user_data)
@@ -97,19 +97,19 @@ class RunningOperationList(object):
         """
         Make and return a running opreation object which fires an event when it is complete.
         """
-        e = EventBasedOperation(self)
+        operation = EventBasedOperation(self)
         with self.lock:
-            self.list[e.id] = e
-        return e
+            self.list[operation.id] = operation
+        return operation
 
     def make_callback_based_operation(self, callback, user_data):
         """
         Make and return a running opreation object which calls a callback when it is complete.
         """
-        e = CallbackBasedOperation(self, callback, user_data)
+        operation = CallbackBasedOperation(self, callback, user_data)
         with self.lock:
-            self.list[e.id] = e
-        return e
+            self.list[operation.id] = operation
+        return operation
 
     def remove(self, id):
         """
@@ -118,9 +118,9 @@ class RunningOperationList(object):
         """
         with self.lock:
             if id in self.list:
-                e = self.list[id]
+                operation = self.list[id]
                 del self.list[id]
-                return e
+                return operation
             else:
                 return None
 
