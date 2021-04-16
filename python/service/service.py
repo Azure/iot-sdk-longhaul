@@ -18,11 +18,7 @@ from azure.iot.hub.protocol.models import Twin, TwinProperties
 import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
 import azure_monitor
-from thief_constants import (
-    Const,
-    Fields,
-    Types,
-)
+from thief_constants import Const, Fields, Commands
 
 faulthandler.enable()
 
@@ -214,46 +210,43 @@ class ServiceApp(app_base.AppBase):
             device_id = get_device_id_from_event(event)
 
             body = event.body_as_json()
-            thief = body.get(Fields.Telemetry.THIEF, {})
-            received_service_instance_id = thief.get(Fields.Telemetry.SERVICE_INSTANCE_ID, None)
-            received_run_id = thief.get(Fields.Telemetry.RUN_ID, None)
+            thief = body.get(Fields.THIEF, {})
+            received_service_instance_id = thief.get(Fields.SERVICE_INSTANCE_ID, None)
+            received_run_id = thief.get(Fields.RUN_ID, None)
 
             with self.pairing_list_lock:
                 device_data = self.paired_devices.get(device_id, None)
 
             if get_message_source_from_event(event) == "twinChangeEvents":
                 thief = (
-                    body.get(Const.PROPERTIES, {})
-                    .get(Const.REPORTED, {})
-                    .get(Fields.Reported.THIEF, {})
+                    body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {}).get(Fields.THIEF, {})
                 )
-                if thief and thief.get(Fields.Reported.PAIRING, {}):
+                if thief and thief.get(Fields.PAIRING, {}):
                     self.incoming_pairing_request_queue.put(event)
                 if device_data:
                     self.incoming_twin_changes.put(event)
 
             elif received_run_id and received_service_instance_id:
-                cmd = thief.get(Fields.Telemetry.CMD, None)
+                cmd = thief.get(Fields.CMD, None)
 
                 with self.pairing_list_lock:
                     device_data = self.paired_devices.get(device_id, None)
 
                 if device_data:
-                    if cmd == Types.Message.SERVICE_ACK_REQUEST:
+                    if cmd == Commands.SERVICE_ACK_REQUEST:
                         logger.info(
                             "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
-                                device_id, thief[Fields.Telemetry.SERVICE_ACK_ID]
+                                device_id, thief[Fields.SERVICE_ACK_ID]
                             ),
                             extra=custom_props(device_id, device_data.run_id),
                         )
                         self.outgoing_service_ack_response_queue.put(
                             ServiceAck(
-                                device_id=device_id,
-                                service_ack_id=thief[Fields.Telemetry.SERVICE_ACK_ID],
+                                device_id=device_id, service_ack_id=thief[Fields.SERVICE_ACK_ID],
                             )
                         )
-                    elif cmd == Types.Message.SET_DESIRED_PROPS:
-                        desired = thief.get(Fields.Telemetry.DESIRED_PROPERTIES, {})
+                    elif cmd == Commands.SET_DESIRED_PROPS:
+                        desired = thief.get(Fields.DESIRED_PROPERTIES, {})
                         if desired:
                             logger.info("Updating desired props: {}".format(desired))
                             with self.registry_manager_lock:
@@ -440,11 +433,11 @@ class ServiceApp(app_base.AppBase):
 
                     message = json.dumps(
                         {
-                            Fields.C2d.THIEF: {
-                                Fields.C2d.CMD: Types.Message.SERVICE_ACK_RESPONSE,
-                                Fields.C2d.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.C2d.RUN_ID: device_data.run_id,
-                                Fields.C2d.SERVICE_ACKS: service_acks[device_id],
+                            Fields.THIEF: {
+                                Fields.CMD: Commands.SERVICE_ACK_RESPONSE,
+                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                                Fields.RUN_ID: device_data.run_id,
+                                Fields.SERVICE_ACKS: service_acks[device_id],
                             }
                         }
                     )
@@ -515,11 +508,11 @@ class ServiceApp(app_base.AppBase):
                     # but not the structures inside the list.
                     message = json.dumps(
                         {
-                            Fields.C2d.THIEF: {
-                                Fields.C2d.CMD: Types.Message.TEST_C2D,
-                                Fields.C2d.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.C2d.RUN_ID: device_data.run_id,
-                                Fields.C2d.TEST_C2D_MESSAGE_INDEX: device_data.next_c2d_message_index,
+                            Fields.THIEF: {
+                                Fields.CMD: Commands.TEST_C2D,
+                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                                Fields.RUN_ID: device_data.run_id,
+                                Fields.TEST_C2D_MESSAGE_INDEX: device_data.next_c2d_message_index,
                             }
                         }
                     )
@@ -583,19 +576,15 @@ class ServiceApp(app_base.AppBase):
             device_id = get_device_id_from_event(event)
             body = event.body_as_json()
             pairing = (
-                body.get(Const.PROPERTIES, {})
-                .get(Const.REPORTED, {})
-                .get(Fields.Reported.THIEF, {})
-                .get(Fields.Reported.PAIRING, {})
+                body.get(Fields.PROPERTIES, {})
+                .get(Fields.REPORTED, {})
+                .get(Fields.THIEF, {})
+                .get(Fields.PAIRING, {})
             )
 
-            received_run_id = pairing.get(Fields.Reported.Pairing.RUN_ID, None)
-            requested_service_pool = pairing.get(
-                Fields.Reported.Pairing.REQUESTED_SERVICE_POOL, None
-            )
-            received_service_instance_id = pairing.get(
-                Fields.Reported.Pairing.SERVICE_INSTANCE_ID, None
-            )
+            received_run_id = pairing.get(Fields.RUN_ID, None)
+            requested_service_pool = pairing.get(Fields.REQUESTED_SERVICE_POOL, None)
+            received_service_instance_id = pairing.get(Fields.SERVICE_INSTANCE_ID, None)
 
             logger.info(
                 "Received pairing request for device {}: {}".format(device_id, pairing),
@@ -653,10 +642,10 @@ class ServiceApp(app_base.AppBase):
                     )
 
                     desired = {
-                        Fields.Desired.THIEF: {
-                            Fields.Desired.PAIRING: {
-                                Fields.Desired.Pairing.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.Desired.Pairing.RUN_ID: received_run_id,
+                        Fields.THIEF: {
+                            Fields.PAIRING: {
+                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                                Fields.RUN_ID: received_run_id,
                             }
                         }
                     }
@@ -686,14 +675,12 @@ class ServiceApp(app_base.AppBase):
 
         test_content = (
             event.body_as_json()
-            .get(Const.PROPERTIES, {})
-            .get(Const.REPORTED, {})
-            .get(Fields.Reported.THIEF, {})
-            .get(Fields.Reported.TEST_CONTENT, {})
+            .get(Fields.PROPERTIES, {})
+            .get(Fields.REPORTED, {})
+            .get(Fields.THIEF, {})
+            .get(Fields.TEST_CONTENT, {})
         )
-        reported_property_test = test_content.get(
-            Fields.Reported.TestContent.REPORTED_PROPERTY_TEST
-        )
+        reported_property_test = test_content.get(Fields.REPORTED_PROPERTY_TEST)
 
         for property_name in reported_property_test:
             if property_name.startswith("prop_"):
@@ -701,13 +688,11 @@ class ServiceApp(app_base.AppBase):
 
                 with device_data.reported_property_list_lock:
                     if property_value:
-                        service_ack_id = property_value[
-                            Fields.Reported.TestContent.ReportedPropertyTest.ADD_SERVICE_ACK_ID
-                        ]
+                        service_ack_id = property_value[Fields.ADD_SERVICE_ACK_ID]
                         device_data.reported_property_values[property_name] = property_value
                     else:
                         service_ack_id = device_data.reported_property_values[property_name][
-                            Fields.Reported.TestContent.ReportedPropertyTest.REMOVE_SERVICE_ACK_ID
+                            Fields.REMOVE_SERVICE_ACK_ID
                         ]
                         del device_data.reported_property_values[property_name]
 
@@ -727,19 +712,19 @@ class ServiceApp(app_base.AppBase):
 
         test_control = (
             event.body_as_json()
-            .get(Const.PROPERTIES, {})
-            .get(Const.REPORTED, {})
-            .get(Fields.Reported.THIEF, {})
-            .get(Fields.Reported.TEST_CONTROL, {})
+            .get(Fields.PROPERTIES, {})
+            .get(Fields.REPORTED, {})
+            .get(Fields.THIEF, {})
+            .get(Fields.TEST_CONTROL, {})
         )
 
-        c2d = test_control.get(Fields.Reported.TestControl.C2D)
+        c2d = test_control.get(Fields.C2D)
         if c2d:
-            send = c2d[Fields.Reported.TestControl.C2d.SEND]
+            send = c2d[Fields.SEND]
             if send is False:
                 self.stop_c2d_message_sending(device_id)
             elif send is True:
-                interval = c2d[Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS]
+                interval = c2d[Fields.MESSAGE_INTERVAL_IN_SECONDS]
                 self.start_c2d_message_sending(device_id, interval)
 
     def dispatch_twin_change_thread(self, worker_thread_info):
@@ -761,9 +746,9 @@ class ServiceApp(app_base.AppBase):
             device_id = get_device_id_from_event(event)
             thief = (
                 event.body_as_json()
-                .get(Const.PROPERTIES, {})
-                .get(Const.REPORTED, {})
-                .get(Fields.Reported.THIEF, {})
+                .get(Fields.PROPERTIES, {})
+                .get(Fields.REPORTED, {})
+                .get(Fields.THIEF, {})
             )
             if not thief:
                 thief = {}
@@ -774,21 +759,19 @@ class ServiceApp(app_base.AppBase):
                 else:
                     run_id = None
             if not run_id:
-                run_id = thief.get(Fields.Reported.PAIRING, {}).get(
-                    Fields.Reported.Pairing.RunId, None
-                )
+                run_id = thief.get(Fields.PAIRING, {}).get(Fields.RunId, None)
 
             logger.info(
                 "Twin change for {}: {}".format(device_id, event.body_as_json()),
                 extra=custom_props(device_id, run_id),
             )
 
-            if thief.get(Fields.Reported.TEST_CONTENT):
+            if thief.get(Fields.TEST_CONTENT):
                 self.respond_to_test_content_properties(event)
-            if thief.get(Fields.Reported.TEST_CONTROL):
+            if thief.get(Fields.TEST_CONTROL):
                 self.respond_to_test_control_properties(event)
 
-            run_state = thief.get(Fields.Reported.SESSION_METRICS, {}).get("runState")
+            run_state = thief.get(Fields.SESSION_METRICS, {}).get("runState")
             if run_state and run_state != app_base.RUNNING:
                 logger.info(
                     "Device {} no longer running.".format(device_id),

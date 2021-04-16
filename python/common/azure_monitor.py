@@ -4,7 +4,7 @@
 import os
 import logging
 import platform
-from thief_constants import CustomDimensionNames
+from thief_constants import CustomDimensions
 from opencensus.ext.azure.log_exporter import AzureEventHandler
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 
@@ -71,28 +71,28 @@ def telemetry_processor_callback(envelope):
         envelope.tags["ai.cloud.roleInstance"] = _service_instance_id
     else:
         envelope.tags["ai.cloud.roleInstance"] = _run_id
-    envelope.data.baseData.properties[CustomDimensionNames.OS_TYPE] = platform.system()
+    envelope.data.baseData.properties[CustomDimensions.OS_TYPE] = platform.system()
     if _device_id:
-        envelope.data.baseData.properties[CustomDimensionNames.DEVICE_ID] = _device_id
+        envelope.data.baseData.properties[CustomDimensions.DEVICE_ID] = _device_id
     if _hub:
-        envelope.data.baseData.properties[CustomDimensionNames.HUB] = _hub
+        envelope.data.baseData.properties[CustomDimensions.HUB] = _hub
     if _run_id:
-        envelope.data.baseData.properties[CustomDimensionNames.RUN_ID] = _run_id
+        envelope.data.baseData.properties[CustomDimensions.RUN_ID] = _run_id
     if _service_instance_id:
         envelope.data.baseData.properties[
-            CustomDimensionNames.SERVICE_INSTANCE_ID
+            CustomDimensions.SERVICE_INSTANCE_ID
         ] = _service_instance_id
-    envelope.data.baseData.properties[CustomDimensionNames.SDK_LANGUAGE] = "python"
+    envelope.data.baseData.properties[CustomDimensions.SDK_LANGUAGE] = "python"
 
     envelope.data.baseData.properties[
-        CustomDimensionNames.SDK_LANGUAGE_VERSION
+        CustomDimensions.SDK_LANGUAGE_VERSION
     ] = platform.python_version()
-    envelope.data.baseData.properties[CustomDimensionNames.SDK_VERSION] = _sdk_version
+    envelope.data.baseData.properties[CustomDimensions.SDK_VERSION] = _sdk_version
     if _transport:
-        envelope.data.baseData.properties[CustomDimensionNames.TRANSPORT] = _transport
+        envelope.data.baseData.properties[CustomDimensions.TRANSPORT] = _transport
 
     if _pool_id:
-        envelope.data.baseData.properties[CustomDimensionNames.POOL_ID] = _pool_id
+        envelope.data.baseData.properties[CustomDimensions.POOL_ID] = _pool_id
 
     # remove some properties that we don't want
     for name in ["level", "module", "process"]:

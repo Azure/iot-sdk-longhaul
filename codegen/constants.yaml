@@ -1,0 +1,410 @@
+# Copyright (c) Microsoft. All rights reserved.
+# Licensed under the MIT license. See LICENSE file in the project root for
+# full license information.
+
+groups:
+  - name: Const
+    desc: "Generic constants that don't have another home"
+    values:
+      - name: JSON_CONTENT_TYPE 
+        value: "application/json"
+      - name: JSON_CONTENT_ENCODING 
+        value: "utf-8"
+      - name: JSON_TYPE_AND_ENCODING
+        value:
+          contentType: "application/json"
+          contentEncoding: "utf-8"
+
+  - name: Fields
+    desc: "Names of fields inside telemetry messages and twins"
+    values:
+        - name: THIEF
+          value: "thief"
+        - name: PROPERTIES 
+          value: "properties"
+        - name: REPORTED 
+          value: "reported"
+        - name: DESIRED 
+          value: "desired"
+    subgroups:
+      - name: Telemetry
+        values:
+          - name: CMD 
+            value: "cmd"
+          - name: SERVICE_ACK_ID 
+            value: "serviceAckId"
+          - name: SERVICE_INSTANCE_ID 
+            value: "serviceInstanceId"
+          - name: RUN_ID 
+            value: "runId"
+          - name: DESIRED_PROPERTIES 
+            value: "desiredProperties"
+      - name: Reported
+        desc: "properties.reported.thief"
+        values:
+          - name: SYSTEM_PROPERTIES 
+            value: "systemProperties"
+          - name: SESSION_METRICS 
+            value: "sessionMetrics"
+          - name: TEST_METRICS 
+            value: "testMetrics"
+          - name: SYSTEM_HEALTH_METRICS 
+            value: "systemHealthMetrics"
+          - name: CONFIG 
+            value: "config"
+          - name: PAIRING 
+            value: "pairing"
+          - name: TEST_CONTROL 
+            value: "testControl"
+          - name: TEST_CONTENT 
+            value: "testContent"
+      - name: Pairing
+        desc: "properties.reported.thief.pairing"
+        values:
+          - name: REQUESTED_SERVICE_POOL 
+            value: "requestedServicePool"
+          - name: SERVICE_INSTANCE_ID 
+            value: "serviceInstanceId"
+          - name: RUN_ID 
+            value: "runId"
+      - name: TestContent
+        desc: "properties.reported.thief.testContent"
+        values:
+          - name: REPORTED_PROPERTY_TEST 
+            value: "reportedPropertyTest"
+      - name: ReportedPropertyTest
+        desc: "properties.reported.thief.testContent.reportedPropertytest"
+        values:
+          - name: ADD_SERVICE_ACK_ID 
+            value: "addServiceAckId"
+          - name: REMOVE_SERVICE_ACK_ID 
+            value: "removeServiceAckId"
+      - name: TestControl
+        desc: "properties.reported.thief.testControl"
+        values:
+          - name: C2D 
+            value: "c2d"
+      - name: "C2d"
+        desc: "properties.reported.thief.testControl.c2d"
+        values:
+          - name: SEND 
+            value: "send"
+          - name: MESSAGE_INTERVAL_IN_SECONDS 
+            value: "messageIntervalInSeconds"
+
+      - name: Desired
+        desc: "properties.desired.thief"
+        values:
+          - name: PAIRING 
+            value: "pairing"
+          - name: TEST_CONTENT 
+            value: "testContent"
+      - name: Pairing
+        desc: "propeties.desired.thief.pairing"
+        values:
+          - name: SERVICE_INSTANCE_ID 
+            value: "serviceInstanceId"
+          - name: RUN_ID 
+            value: "runId"
+      - name: TestContent
+        desc: "propeties.desired.thief.testContent"
+        values:
+          - name: TWIN_GUID 
+            value: "twinGuid"
+
+      - name: C2dFields
+        desc: "Names of fields inside c2d messages"
+        values:
+          - name: SERVICE_INSTANCE_ID 
+            value: "serviceInstanceId"
+          - name: RUN_ID 
+            value: "runId"
+          - name: SERVICE_ACKS 
+            value: "serviceAcks"
+          - name: CMD 
+            value: "cmd"
+          - name: TEST_C2D_MESSAGE_INDEX 
+            value: "testC2dMessageIndex"
+
+  - name: Commands
+    desc: "Names for different command/message types"
+    values:
+      - name: SERVICE_ACK_REQUEST 
+        value: "serviceAckRequest"
+      - name: SERVICE_ACK_RESPONSE 
+        value: "serviceAckResponse"
+      - name: TEST_C2D 
+        value: "testC2d"
+      - name: SET_DESIRED_PROPS 
+        value: "setDesiredProps"
+
+  - name: Events
+    desc: "Names of different Azure Monitor events"
+    values:
+      - name: STARTING_RUN 
+        value: "StartingRun"
+        desc: "The test run is starting"
+      - name: ENDING_RUN 
+        value: "EndingRun"
+        desc: "The test run is ending"
+      - name: SENDING_PAIRING_REQUEST 
+        value: "SendingPairingRequest"
+        desc: "The device app is sending a pairing request to the service app"
+      - name: RECEIVED_PAIRING_RESPONSE 
+        value: "ReceivedPairingResponse"
+        desc: "The device app has received a pairing response from the service app"
+      - name: PAIRING_COMPLETE 
+        value: "PairingComplete"
+        desc: "The pairing process is complete."
+
+
+  - name:  Metrics
+    desc: "Names of metrics which are pushed via reported properties, telemetry, and Azure Monitor"
+    sendToAzureMonitor: True
+    subgroups:
+
+      - desc: "System Health metrics"
+        values:
+          - name: PROCESS_CPU_PERCENT 
+            value: "processCpuPercent"
+            desc: "CPU use for the device app, as a percentage of all cores"
+            type: float
+            units: percentage
+          - name: PROCESS_WORKING_SET 
+            value: "processWorkingSet"
+            desc: "Working set for the device app, includes shared and private, read-only and writeable memory"
+            type: int
+            units: bytes
+          - name: PROCESS_BYTES_IN_ALL_HEAPS 
+            value: "processBytesInAllHeaps"
+            desc: "Size of all heaps for the device app, essentially 'all available memory'"
+            type: int
+            units: bytes
+          - name: PROCESS_PRIVATE_BYTES 
+            value: "processPrivateBytes"
+            desc: "Amount of private data used by the process"
+            type: int
+            units: bytes
+          - name: PROCESS_WORKING_SET_PRIVATE 
+            value: "processWorkingSetPrivate"
+            desc: "Amount of private data used by the process"
+            type: int
+            units: bytes
+
+      - desc: "test app metrics"
+        values:
+          - name: CLIENT_LIBRARY_COUNT_EXCEPTIONS 
+            value: "clientLibraryCountExceptions"
+            desc: "Number of exceptions raised by the client library or libraries"
+            type: int
+            units: exception count
+
+      - desc: "SendMesssage metrics"
+        values:
+          - name: SEND_MESSAGE_COUNT_SENT 
+            value: "sendMessageCountSent"
+            desc: "Number of telemetry messages sent"
+            type: int
+            units: mesages
+          - name: SEND_MESSAGE_COUNT_IN_BACKLOG 
+            value: "sendMessageCountInBacklog"
+            desc: "Number of telemetry messages queued, and waiting to be sent"
+            type: int
+            units: mesages
+          - name: SEND_MESSAGE_COUNT_UNACKED 
+            value: "sendMessageCountUnacked"
+            desc: "Number of telemetry messages sent, but not acknowledged (PUBACK'ed) by the transport"
+            type: int
+            units: mesages
+          - name: SEND_MESSAGE_COUNT_NOT_RECEIVED 
+            value: "sendMessageCountNotReceivedByServiceApp"
+            desc: "Number of telemetry messages that have not (yet) arrived at the hub"
+            type: int
+            units: mesages
+
+      - desc: "Receive c2d metrics"
+        values:
+          - name: RECEIVE_C2D_COUNT_RECEIVED 
+            value: "receiveC2dCountReceived"
+            desc: "Number of c2d messages received"
+            type: int
+            units: mesages
+          - name: RECEIVE_C2D_COUNT_MISSING 
+            value: "receiveC2dCountMissing"
+            desc: "Number of c2d messages not received"
+            type: int
+            units: mesages
+
+      - desc: "Reported property metrics"
+        values:
+          - name: REPORTED_PROPERTIES_COUNT_ADDED 
+            value: "reportedPropertiesCountAdded"
+            desc: "Number of reported properties which have been added"
+            type: int
+            units: patches
+          - name: REPORTED_PROPERTIES_COUNT_REMOVED 
+            value: "reportedPropertiesCountRemoved"
+            desc: "Number of reported properties which have been removed"
+            type: int
+            units: patches
+          - name: REPORTED_PROPERTIES_COUNT_TIMED_OUT 
+            value: "reportedPropertiesCountTimedOut"
+            desc: "Number of reported property add & remove operations that timed out"
+            type: int
+            units: patches
+
+      - desc: "Get-twin metrics"
+        values:
+          - name: GET_TWIN_COUNT_SUCCEEDED 
+            value: "getTwinCountSucceeded"
+            desc: "Number of times get_twin successfully verified a property update"
+            type: int
+            units: calls
+          - name: GET_TWIN_COUNT_TIMED_OUT 
+            value: "getTwinCountTimedOut"
+            desc: "Number of times get_twin was unable to verify a property update"
+            type: int
+            units: calls
+
+      - desc: "desired property patch metrics"
+        values:
+          - name: DESIRED_PROPERTY_PATCH_COUNT_RECEIVED 
+            value: "desiredPropertyPatchCountReceived"
+            desc: "Count of desired property patches that were successfully received"
+            type: int
+            units: patches
+          - name: DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT 
+            value: "desiredPropertyPatchCountTimedOut"
+            desc: "Count of desired property patches that were not received"
+            type: int
+            units: patches
+
+      - desc: "Latency metrics"
+        values:
+          - name: LATENCY_QUEUE_MESSAGE_TO_SEND 
+            value: "latencyQueueMessageToSendInMilliseconds"
+            desc: "Number of milliseconds between queueing a telemetry message and actually sending it"
+            type: float
+            units: milliseconds
+          - name: LATENCY_SEND_MESSAGE_TO_SERVICE_ACK 
+            value: "latencySendMessageToServiceAckInSeconds"
+            desc: "Number of seconds between sending a telemetry message and receiving the verification from the service app"
+            type: float
+            units: milliseconds
+          - name: LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK 
+            value: "latencyAddReportedPropertyToServiceAckInSeconds"
+            desc: "Number of seconds between adding a reported property and receiving verification of the add from the service app"
+            type: float
+            units: seconds
+          - name: LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK 
+            value: "latencyRemoveReportedPropertyToServiceAckInSeconds"
+            desc: "Number of seconds between removing a reported property and receiving verification of the removal from the service app"
+            type: float
+            units: seconds
+          - name: LATENCY_BETWEEN_C2D 
+            value: "latencyBetweenC2dInSeconds"
+            desc: "Number of seconds between consecutive c2d messages"
+            type: float
+            units: seconds
+
+  - name: Settings
+    desc: "Names of thief settings which are used to configure the device app for a test run"
+    values:
+      - name: THIEF_MAX_RUN_DURATION_IN_SECONDS 
+        value: "thiefMaxRunDurationInSeconds"
+        desc: "how long should the test run before finishing.  0 = forever"
+      - name: THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS 
+        value: "thiefPropertyUpdateIntervalInSeconds"
+        desc: "How often do we update thief reported properties (with metrics)"
+      - name: THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS 
+        value: "thiefWatchdogFailureIntervalInSeconds"
+        desc: "How long can a thread go without updating its watchdog before failing"
+      - name: THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT 
+        value: "thiefAllowedClientLibraryExceptionCount"
+        desc: "How many client exceptions do we allow before we fail the test?"
+    subgroups:
+      - desc: "timeout settings"
+        values:
+        - name: OPERATION_TIMEOUT_IN_SECONDS 
+          value: "operationTimeoutInSeconds"
+          desc: "Generic value for operation timeouts"
+        - name: OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT 
+          value: "operationTimeoutAllowedFailureCount"
+          desc: "How many timeouts are allowed before the test fails"
+
+      - desc: "pairing settings"
+        values:
+        - name: PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS 
+          value: "pairingRequestTimeoutIntervalInSeconds"
+          desc: "How long to keep trying to pair with a service instance before giving up"
+        - name: PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS 
+          value: "pairingRequestSendIntervalInSeconds"
+          desc: "How many seconds to wait while pairing before trying to pair again"
+
+      - desc: "send_message settings"
+        values:
+        - name: SEND_MESSAGE_OPERATIONS_PER_SECOND 
+          value: "sendMessageOperationsPerSecond"
+          desc: "How many times to call send_message per second"
+        - name: SEND_MESSAGE_THREAD_COUNT 
+          value: "sendMessageThreadCount"
+          desc: "How many threads do we spin up for overlapped send_message calls"
+
+      - desc: "receive_c2d settings"
+        values:
+        - name: RECEIVE_C2D_INTERVAL_IN_SECONDS 
+          value: "receiveC2dIntervalInSeconds"
+          desc: "How often do we want the service to send test C2D messages?"
+        - name: RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT 
+          value: "receiveC2dAllowedMissingMessageCount"
+          desc: "How many missing C2D messages will cause the test to fail?"
+
+      - desc: "twin update settings"
+        values:
+        - name: TWIN_UPDATE_INTERVAL_IN_SECONDS 
+          value: "twinUpdateIntervalInSeconds"
+          desc: "How many seconds between twin property updates"
+
+
+  - name: CustomDimensions
+    desc: "Names of customDimension fields pushed to Azure Monitor"
+    values:
+      - name: OS_TYPE 
+        value: "osType"
+        desc: "OS type, e.g. Linux, Windows"
+      - name: SDK_LANGUAGE 
+        value: "sdkLanguage"
+        desc: "Langauge being used.  e.g. Python, Node, dotnet"
+      - name: SDK_LANGUAGE_VERSION 
+        value: "sdkLanguageVersion"
+        desc: "Version of language being used.  e.g. 3.8.1"
+      - name: SDK_VERSION 
+        value: "sdkVersion"
+        desc: "Version of the SDK library being tested.  e.g. 2.4.2"
+
+      - name: SERVICE_INSTANCE_ID 
+        value: "serviceInstanceId"
+        desc: "ServiceInstanceId being used for this test run"
+      - name: RUN_ID 
+        value: "runId"
+        desc: "RunId for the run.  May be None for service app features that aren't tied to a specific run"
+      - name: POOL_ID 
+        value: "poolId"
+        desc: "Service app pool being used"
+
+      - name: HUB 
+        value: "hub"
+        desc: "Hub instance being used, without the .azuredevices.net suffix"
+      - name: DEVICE_ID 
+        value: "deviceId"
+        desc: "Device being tested"
+      - name: TRANSPORT 
+        value: "transport"
+        desc: "Transport being used by the device under test"
+
+      - name: RUN_REASON 
+        value: "runReason"
+        desc: "Reason the test is running"
+      - name: EXIT_REASON 
+        value: "exitReason"
+        desc: "Reason the test is exiting"

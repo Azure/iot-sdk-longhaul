@@ -21,15 +21,7 @@ from measurement import ThreadSafeCounter
 import azure_monitor
 from azure_monitor_metrics import MetricsReporter
 from out_of_order_message_tracker import OutOfOrderMessageTracker
-from thief_constants import (
-    Const,
-    Fields,
-    Types,
-    Events,
-    MetricNames,
-    DeviceSettings as Settings,
-    CustomDimensionNames,
-)
+from thief_constants import Const, Fields, Commands, Events, Metrics, Settings, CustomDimensions
 from running_operation_list import RunningOperationList
 
 faulthandler.enable()
@@ -177,24 +169,26 @@ class DeviceApp(app_base.AppBase):
         # System Health metrics
         # ---------------------
         self.reporter.add_float_measurement(
-            MetricNames.PROCESS_CPU_PERCENT, "Amount of CPU usage by the process", "percentage",
+            Metrics.PROCESS_CPU_PERCENT,
+            "CPU use for the device app, as a percentage of all cores",
+            "percentage",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.PROCESS_WORKING_SET, "All physical memory used by the process", "bytes",
-        )
-        self.reporter.add_integer_measurement(
-            MetricNames.PROCESS_BYTES_IN_ALL_HEAPS,
-            "All virtual memory used by the process",
+            Metrics.PROCESS_WORKING_SET,
+            "Working set for the device app, includes shared and private, read-only and writeable memory",
             "bytes",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.PROCESS_PRIVATE_BYTES,
-            "Amount of non-shared physical memory used by the process",
+            Metrics.PROCESS_BYTES_IN_ALL_HEAPS,
+            "Size of all heaps for the device app, essentially 'all available memory'",
             "bytes",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.PROCESS_WORKING_SET_PRIVATE,
-            "Amount of non-shared physical memory used by the process",
+            Metrics.PROCESS_PRIVATE_BYTES, "Amount of private data used by the process", "bytes",
+        )
+        self.reporter.add_integer_measurement(
+            Metrics.PROCESS_WORKING_SET_PRIVATE,
+            "Amount of private data used by the process",
             "bytes",
         )
 
@@ -202,122 +196,116 @@ class DeviceApp(app_base.AppBase):
         # test app metrics
         # ----------------
         self.reporter.add_integer_measurement(
-            MetricNames.CLIENT_LIBRARY_COUNT_EXCEPTIONS,
+            Metrics.CLIENT_LIBRARY_COUNT_EXCEPTIONS,
             "Number of exceptions raised by the client library or libraries",
-            "exception(s)",
+            "exception count",
         )
 
         # --------------------
         # SendMesssage metrics
         # --------------------
         self.reporter.add_integer_measurement(
-            MetricNames.SEND_MESSAGE_COUNT_SENT,
-            "Count of messages sent and ack'd by the transport",
-            "message(s)",
+            Metrics.SEND_MESSAGE_COUNT_SENT, "Number of telemetry messages sent", "mesages",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG,
-            "Count of messages waiting to be sent",
-            "message(s)",
+            Metrics.SEND_MESSAGE_COUNT_IN_BACKLOG,
+            "Number of telemetry messages queued, and waiting to be sent",
+            "mesages",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.SEND_MESSAGE_COUNT_UNACKED,
-            "Count of messages sent to iothub but not ack'd by the transport",
-            "message(s)",
+            Metrics.SEND_MESSAGE_COUNT_UNACKED,
+            "Number of telemetry messages sent, but not acknowledged (PUBACK'ed) by the transport",
+            "mesages",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED,
-            "Count of messages sent to iothub and acked by the transport, but receipt not (yet) verified via service sdk",
-            "message(s)",
+            Metrics.SEND_MESSAGE_COUNT_NOT_RECEIVED,
+            "Number of telemetry messages that have not (yet) arrived at the hub",
+            "mesages",
         )
 
         # -------------------
         # Receive c2d metrics
         # -------------------
         self.reporter.add_integer_measurement(
-            MetricNames.RECEIVE_C2D_COUNT_RECEIVED,
-            "Count of c2d messages received from the service",
-            "message(s)",
+            Metrics.RECEIVE_C2D_COUNT_RECEIVED, "Number of c2d messages received", "mesages",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.RECEIVE_C2D_COUNT_MISSING,
-            "Count of c2d messages sent my the service but not received",
-            "message(s)",
+            Metrics.RECEIVE_C2D_COUNT_MISSING, "Number of c2d messages not received", "mesages",
         )
 
         # -------------------------
         # Reported property metrics
         # -------------------------
         self.reporter.add_integer_measurement(
-            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED,
-            "Count of reported properties added",
-            "patches with add operation(s)",
+            Metrics.REPORTED_PROPERTIES_COUNT_ADDED,
+            "Number of reported properties which have been added",
+            "patches",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.REPORTED_PROPERTIES_COUNT_REMOVED,
-            "Count of reported properties removed",
-            "patches with remove operation(s)",
+            Metrics.REPORTED_PROPERTIES_COUNT_REMOVED,
+            "Number of reported properties which have been removed",
+            "patches",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.REPORTED_PROPERTIES_COUNT_TIMED_OUT,
-            "Count of reported property updates which timed out.",
-            "add or remove pathches",
+            Metrics.REPORTED_PROPERTIES_COUNT_TIMED_OUT,
+            "Number of reported property add & remove operations that timed out",
+            "patches",
         )
 
         # ----------------
         # Get-twin metrics
         # ----------------
         self.reporter.add_integer_measurement(
-            MetricNames.GET_TWIN_COUNT_SUCCEEDED,
+            Metrics.GET_TWIN_COUNT_SUCCEEDED,
             "Number of times get_twin successfully verified a property update",
-            "property updates that were verified",
+            "calls",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.GET_TWIN_COUNT_TIMED_OUT,
+            Metrics.GET_TWIN_COUNT_TIMED_OUT,
             "Number of times get_twin was unable to verify a property update",
-            "property updates that were not verified",
+            "calls",
         )
 
         # ------------------------------
         # desired property patch metrics
         # ------------------------------
         self.reporter.add_integer_measurement(
-            MetricNames.DESIRED_PROPERTY_PATCH_COUNT_RECEIVED,
+            Metrics.DESIRED_PROPERTY_PATCH_COUNT_RECEIVED,
             "Count of desired property patches that were successfully received",
-            "patch operations",
+            "patches",
         )
         self.reporter.add_integer_measurement(
-            MetricNames.DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT,
+            Metrics.DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT,
             "Count of desired property patches that were not received",
-            "patch operations",
+            "patches",
         )
 
         # ---------------
         # Latency metrics
         # ---------------
         self.reporter.add_float_measurement(
-            MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND,
-            "Number of milliseconds between queueing a message and actually sending it",
+            Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND,
+            "Number of milliseconds between queueing a telemetry message and actually sending it",
             "milliseconds",
         )
         self.reporter.add_float_measurement(
-            MetricNames.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK,
-            "Number of seconds between sending a message and receiving the serviceAck back from the service app",
+            Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK,
+            "Number of seconds between sending a telemetry message and receiving the verification from the service app",
+            "milliseconds",
+        )
+        self.reporter.add_float_measurement(
+            Metrics.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK,
+            "Number of seconds between adding a reported property and receiving verification of the add from the service app",
             "seconds",
         )
         self.reporter.add_float_measurement(
-            MetricNames.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK,
-            "Number of seconds between setting a reported property and receiving the serviceAck back from the service app",
+            Metrics.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK,
+            "Number of seconds between removing a reported property and receiving verification of the removal from the service app",
             "seconds",
         )
         self.reporter.add_float_measurement(
-            MetricNames.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK,
-            "Number of seconds between clearing a reported property and receiving the serviceAck back from the service app",
-            "seconds",
-        )
-        self.reporter.add_float_measurement(
-            MetricNames.LATENCY_BETWEEN_C2D,
-            "Number of seconds between test c2d messages from the service",
+            Metrics.LATENCY_BETWEEN_C2D,
+            "Number of seconds between consecutive c2d messages",
             "seconds",
         )
 
@@ -347,20 +335,20 @@ class DeviceApp(app_base.AppBase):
         )
 
         props = {
-            MetricNames.CLIENT_LIBRARY_COUNT_EXCEPTIONS: self.metrics.client_library_count_exceptions.get_count(),
-            MetricNames.SEND_MESSAGE_COUNT_SENT: sent,
-            MetricNames.SEND_MESSAGE_COUNT_IN_BACKLOG: self.outgoing_test_message_queue.qsize(),
-            MetricNames.SEND_MESSAGE_COUNT_UNACKED: self.metrics.send_message_count_unacked.get_count(),
-            MetricNames.SEND_MESSAGE_COUNT_NOT_RECEIVED: sent - received_by_service_app,
-            MetricNames.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
-            MetricNames.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
-            MetricNames.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
-            MetricNames.REPORTED_PROPERTIES_COUNT_REMOVED: self.metrics.reported_properties_count_removed.get_count(),
-            MetricNames.REPORTED_PROPERTIES_COUNT_TIMED_OUT: self.metrics.reported_properties_count_timed_out.get_count(),
-            MetricNames.GET_TWIN_COUNT_SUCCEEDED: self.metrics.get_twin_count_succeeded.get_count(),
-            MetricNames.GET_TWIN_COUNT_TIMED_OUT: self.metrics.get_twin_count_timed_out.get_count(),
-            MetricNames.DESIRED_PROPERTY_PATCH_COUNT_RECEIVED: self.metrics.desired_property_patch_count_received.get_count(),
-            MetricNames.DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT: self.metrics.desired_property_patch_count_timed_out.get_count(),
+            Metrics.CLIENT_LIBRARY_COUNT_EXCEPTIONS: self.metrics.client_library_count_exceptions.get_count(),
+            Metrics.SEND_MESSAGE_COUNT_SENT: sent,
+            Metrics.SEND_MESSAGE_COUNT_IN_BACKLOG: self.outgoing_test_message_queue.qsize(),
+            Metrics.SEND_MESSAGE_COUNT_UNACKED: self.metrics.send_message_count_unacked.get_count(),
+            Metrics.SEND_MESSAGE_COUNT_NOT_RECEIVED: sent - received_by_service_app,
+            Metrics.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
+            Metrics.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
+            Metrics.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
+            Metrics.REPORTED_PROPERTIES_COUNT_REMOVED: self.metrics.reported_properties_count_removed.get_count(),
+            Metrics.REPORTED_PROPERTIES_COUNT_TIMED_OUT: self.metrics.reported_properties_count_timed_out.get_count(),
+            Metrics.GET_TWIN_COUNT_SUCCEEDED: self.metrics.get_twin_count_succeeded.get_count(),
+            Metrics.GET_TWIN_COUNT_TIMED_OUT: self.metrics.get_twin_count_timed_out.get_count(),
+            Metrics.DESIRED_PROPERTY_PATCH_COUNT_RECEIVED: self.metrics.desired_property_patch_count_received.get_count(),
+            Metrics.DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT: self.metrics.desired_property_patch_count_timed_out.get_count(),
         }
         return props
 
@@ -401,17 +389,17 @@ class DeviceApp(app_base.AppBase):
         """
 
         # First remove all old props (in case of schema change).  Also clears out old results.
-        props = {Fields.Reported.THIEF: None}
+        props = {Fields.THIEF: None}
         self.client.patch_twin_reported_properties(props)
 
         props = {
-            Fields.Reported.THIEF: {
-                Fields.Reported.SYSTEM_PROPERTIES: self.get_system_properties(
+            Fields.THIEF: {
+                Fields.SYSTEM_PROPERTIES: self.get_system_properties(
                     azure.iot.device.constant.VERSION
                 ),
-                Fields.Reported.SESSION_METRICS: self.get_session_metrics(),
-                Fields.Reported.TEST_METRICS: self.get_test_metrics(),
-                Fields.Reported.CONFIG: self.config,
+                Fields.SESSION_METRICS: self.get_session_metrics(),
+                Fields.TEST_METRICS: self.get_test_metrics(),
+                Fields.CONFIG: self.config,
             }
         }
         self.client.patch_twin_reported_properties(props)
@@ -424,10 +412,8 @@ class DeviceApp(app_base.AppBase):
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
         if self.service_instance_id:
-            props[Fields.Telemetry.THIEF][
-                Fields.Telemetry.SERVICE_INSTANCE_ID
-            ] = self.service_instance_id
-        props[Fields.Telemetry.THIEF][Fields.Telemetry.RUN_ID] = run_id
+            props[Fields.THIEF][Fields.SERVICE_INSTANCE_ID] = self.service_instance_id
+        props[Fields.THIEF][Fields.RUN_ID] = run_id
 
         # This function only creates the message.  The caller needs to queue it up for sending.
         msg = Message(json.dumps(props))
@@ -454,8 +440,8 @@ class DeviceApp(app_base.AppBase):
 
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
-        assert props[Fields.Telemetry.THIEF].get(Fields.Telemetry.CMD, None) is None
-        props[Fields.Telemetry.THIEF][Fields.Telemetry.CMD] = Types.Message.SERVICE_ACK_REQUEST
+        assert props[Fields.THIEF].get(Fields.CMD, None) is None
+        props[Fields.THIEF][Fields.CMD] = Commands.SERVICE_ACK_REQUEST
         props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_ACK_ID] = running_op.id
 
         logger.info("Requesting service_ack for serviceAckId = {}".format(running_op.id))
@@ -523,11 +509,11 @@ class DeviceApp(app_base.AppBase):
                 logger.info("Starting pairing operation")
                 pairing_last_request_epochtime = time.time()
                 props = {
-                    Fields.Reported.THIEF: {
-                        Fields.Reported.PAIRING: {
-                            Fields.Reported.Pairing.REQUESTED_SERVICE_POOL: requested_service_pool,
-                            Fields.Reported.Pairing.SERVICE_INSTANCE_ID: None,
-                            Fields.Reported.Pairing.RUN_ID: run_id,
+                    Fields.THIEF: {
+                        Fields.PAIRING: {
+                            Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
+                            Fields.SERVICE_INSTANCE_ID: None,
+                            Fields.RUN_ID: run_id,
                         }
                     }
                 }
@@ -539,11 +525,9 @@ class DeviceApp(app_base.AppBase):
                 logger.info("Received pairing desired props: {}".format(pprint.pformat(msg)))
                 event_logger.info(Events.RECEIVED_PAIRING_RESPONSE)
 
-                pairing = msg.get(Fields.Desired.THIEF, {}).get(Fields.Desired.PAIRING, {})
-                received_run_id = pairing.get(Fields.Desired.Pairing.RUN_ID, None)
-                received_service_instance_id = pairing.get(
-                    Fields.Desired.Pairing.SERVICE_INSTANCE_ID, None
-                )
+                pairing = msg.get(Fields.THIEF, {}).get(Fields.PAIRING, {})
+                received_run_id = pairing.get(Fields.RUN_ID, None)
+                received_service_instance_id = pairing.get(Fields.SERVICE_INSTANCE_ID, None)
 
                 if self.service_instance_id:
                     # It's possible that a second service app tried to pair with us after we
@@ -582,10 +566,10 @@ class DeviceApp(app_base.AppBase):
                     pairing_last_request_epochtime = None
 
                     props = {
-                        Fields.Reported.THIEF: {
-                            Fields.Reported.PAIRING: {
-                                Fields.Reported.Pairing.SERVICE_INSTANCE_ID: self.service_instance_id,
-                                Fields.Reported.Pairing.RUN_ID: run_id,
+                        Fields.THIEF: {
+                            Fields.PAIRING: {
+                                Fields.SERVICE_INSTANCE_ID: self.service_instance_id,
+                                Fields.RUN_ID: run_id,
                             }
                         }
                     }
@@ -659,8 +643,8 @@ class DeviceApp(app_base.AppBase):
         # recording things like "start time" and "elapsed time" which are already available
         # in Azure Monitor in other forms.
         with self.reporter_lock:
-            self.reporter.set_metrics_from_dict(props[Fields.Reported.SYSTEM_HEALTH_METRICS])
-            self.reporter.set_metrics_from_dict(props[Fields.Reported.TEST_METRICS])
+            self.reporter.set_metrics_from_dict(props[Fields.SYSTEM_HEALTH_METRICS])
+            self.reporter.set_metrics_from_dict(props[Fields.TEST_METRICS])
             self.reporter.record()
 
     def test_send_message_thread(self, worker_thread_info):
@@ -679,15 +663,15 @@ class DeviceApp(app_base.AppBase):
 
             if self.is_pairing_complete():
                 props = {
-                    Fields.Reported.THIEF: {
-                        Fields.Reported.SESSION_METRICS: self.get_session_metrics(),
-                        Fields.Reported.TEST_METRICS: self.get_test_metrics(),
-                        Fields.Reported.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
+                    Fields.THIEF: {
+                        Fields.SESSION_METRICS: self.get_session_metrics(),
+                        Fields.TEST_METRICS: self.get_test_metrics(),
+                        Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
                     }
                 }
 
                 # push these same metrics to Azure Monitor
-                self.send_metrics_to_azure_monitor(props[Fields.Reported.THIEF])
+                self.send_metrics_to_azure_monitor(props[Fields.THIEF])
 
                 def on_service_ack_received(service_ack_id, user_data):
                     logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
@@ -698,11 +682,11 @@ class DeviceApp(app_base.AppBase):
                     with self.reporter_lock:
                         self.reporter.set_metrics_from_dict(
                             {
-                                MetricNames.LATENCY_QUEUE_MESSAGE_TO_SEND: (
+                                Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (
                                     running_op.send_epochtime - running_op.queue_epochtime
                                 )
                                 * 1000,
-                                MetricNames.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
+                                Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
                                 - running_op.send_epochtime,
                             }
                         )
@@ -741,9 +725,9 @@ class DeviceApp(app_base.AppBase):
                 done = True
 
             props = {
-                Fields.Reported.THIEF: {
-                    Fields.Reported.SESSION_METRICS: self.get_session_metrics(),
-                    Fields.Reported.TEST_METRICS: self.get_test_metrics(),
+                Fields.THIEF: {
+                    Fields.SESSION_METRICS: self.get_session_metrics(),
+                    Fields.TEST_METRICS: self.get_test_metrics(),
                     # systemHealthMetrics don't go into reported properties
                 }
             }
@@ -769,7 +753,7 @@ class DeviceApp(app_base.AppBase):
             props = self.client.receive_twin_desired_properties_patch(timeout=30)
             if props:
                 # props that have the pairing structure go to `incoming_pairing_message_queue`
-                if props.get(Fields.Desired.THIEF, {}).get(Fields.Desired.PAIRING, {}):
+                if props.get(Fields.THIEF, {}).get(Fields.PAIRING, {}):
                     self.incoming_pairing_message_queue.put(props)
 
                 # other props go into incoming_deisred_property_patch_queue
@@ -793,31 +777,29 @@ class DeviceApp(app_base.AppBase):
 
             if msg:
                 obj = json.loads(msg.data.decode())
-                thief = obj.get(Fields.Telemetry.THIEF)
+                thief = obj.get(Fields.THIEF)
 
                 if (
                     thief
-                    and thief[Fields.C2d.RUN_ID] == run_id
-                    and thief[Fields.C2d.SERVICE_INSTANCE_ID] == self.service_instance_id
+                    and thief[Fields.RUN_ID] == run_id
+                    and thief[Fields.SERVICE_INSTANCE_ID] == self.service_instance_id
                 ):
                     # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
-                    cmd = thief[Fields.C2d.CMD]
-                    if cmd == Types.Message.SERVICE_ACK_RESPONSE:
+                    cmd = thief[Fields.CMD]
+                    if cmd == Commands.SERVICE_ACK_RESPONSE:
                         # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
                         # for another thread to handle.
                         logger.info(
-                            "Received {} message with {}".format(
-                                cmd, thief[Fields.C2d.SERVICE_ACKS]
-                            )
+                            "Received {} message with {}".format(cmd, thief[Fields.SERVICE_ACKS])
                         )
                         self.incoming_service_ack_response_queue.put(msg)
 
-                    elif cmd == Types.Message.TEST_C2D:
+                    elif cmd == Commands.TEST_C2D:
                         # If this is a test C2D messages, we put it into `incoming_test_c2d_message_queue`
                         # for another thread to handle.
                         logger.info(
                             "Received {} message with index {}".format(
-                                cmd, thief[Fields.C2d.TEST_C2D_MESSAGE_INDEX]
+                                cmd, thief[Fields.TEST_C2D_MESSAGE_INDEX]
                             )
                         )
                         self.incoming_test_c2d_message_queue.put(msg)
@@ -847,9 +829,9 @@ class DeviceApp(app_base.AppBase):
                 msg = None
 
             if msg:
-                thief = json.loads(msg.data.decode())[Fields.Telemetry.THIEF]
+                thief = json.loads(msg.data.decode())[Fields.THIEF]
 
-                for service_ack_id in thief[Fields.C2d.SERVICE_ACKS]:
+                for service_ack_id in thief[Fields.SERVICE_ACKS]:
                     running_op = self.running_operation_list.get(service_ack_id)
                     if running_op:
                         running_op.complete()
@@ -863,11 +845,11 @@ class DeviceApp(app_base.AppBase):
         # TODO: add a timeout here, make sure the messages are correct, and make sure messages actually flow
 
         props = {
-            Fields.Reported.THIEF: {
-                Fields.Reported.TEST_CONTROL: {
-                    Fields.Reported.TestControl.C2D: {
-                        Fields.Reported.TestControl.C2d.SEND: True,
-                        Fields.Reported.TestControl.C2d.MESSAGE_INTERVAL_IN_SECONDS: self.config[
+            Fields.THIEF: {
+                Fields.TEST_CONTROL: {
+                    Fields.C2D: {
+                        Fields.SEND: True,
+                        Fields.MESSAGE_INTERVAL_IN_SECONDS: self.config[
                             Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS
                         ],
                     }
@@ -897,17 +879,17 @@ class DeviceApp(app_base.AppBase):
                 msg = None
 
             if msg:
-                thief = json.loads(msg.data.decode())[Fields.C2d.THIEF]
+                thief = json.loads(msg.data.decode())[Fields.THIEF]
                 self.metrics.receive_c2d_count_received.increment()
                 self.out_of_order_message_tracker.add_message(
-                    thief.get(Fields.C2d.TEST_C2D_MESSAGE_INDEX)
+                    thief.get(Fields.TEST_C2D_MESSAGE_INDEX)
                 )
 
                 now = time.time()
                 if last_message_epochtime:
                     with self.reporter_lock:
                         self.reporter.set_metrics_from_dict(
-                            {MetricNames.LATENCY_BETWEEN_C2D: now - last_message_epochtime}
+                            {Metrics.LATENCY_BETWEEN_C2D: now - last_message_epochtime}
                         )
                         self.reporter.record()
                 last_message_epochtime = now
@@ -959,10 +941,8 @@ class DeviceApp(app_base.AppBase):
 
         def make_reported_prop(property_name, val):
             return {
-                Fields.Reported.THIEF: {
-                    Fields.Reported.TEST_CONTENT: {
-                        Fields.Reported.TestContent.REPORTED_PROPERTY_TEST: {property_name: val}
-                    }
+                Fields.THIEF: {
+                    Fields.TEST_CONTENT: {Fields.REPORTED_PROPERTY_TEST: {property_name: val}}
                 }
             }
 
@@ -973,8 +953,8 @@ class DeviceApp(app_base.AppBase):
         self.reported_property_index += 1
 
         prop_value = {
-            Fields.Reported.TestContent.ReportedPropertyTest.ADD_SERVICE_ACK_ID: add_operation.id,
-            Fields.Reported.TestContent.ReportedPropertyTest.REMOVE_SERVICE_ACK_ID: remove_operation.id,
+            Fields.ADD_SERVICE_ACK_ID: add_operation.id,
+            Fields.REMOVE_SERVICE_ACK_ID: remove_operation.id,
         }
 
         logger.info("Adding test property {}".format(prop_name))
@@ -985,7 +965,7 @@ class DeviceApp(app_base.AppBase):
             logger.info("Add of reported property {} verified by service".format(prop_name))
             self.metrics.reported_properties_count_added.increment()
             self.reporter.set_metric(
-                MetricNames.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK, time.time() - start_time
+                Metrics.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK, time.time() - start_time
             )
             self.reporter.record()
         else:
@@ -1000,8 +980,7 @@ class DeviceApp(app_base.AppBase):
             logger.info("Remove of reported property {} verified by service".format(prop_name))
             self.metrics.reported_properties_count_removed.increment()
             self.reporter.set_metric(
-                MetricNames.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK,
-                time.time() - start_time,
+                Metrics.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK, time.time() - start_time,
             )
             self.reporter.record()
         else:
@@ -1016,14 +995,10 @@ class DeviceApp(app_base.AppBase):
         twin_guid = str(uuid.uuid4())
 
         payload_set_desired_props = {
-            Fields.Telemetry.THIEF: {
-                Fields.Telemetry.CMD: Types.Message.SET_DESIRED_PROPS,
-                Fields.Telemetry.DESIRED_PROPERTIES: {
-                    Fields.Desired.THIEF: {
-                        Fields.Desired.TEST_CONTENT: {
-                            Fields.Desired.TestContent.TWIN_GUID: twin_guid
-                        }
-                    }
+            Fields.THIEF: {
+                Fields.CMD: Commands.SET_DESIRED_PROPS,
+                Fields.DESIRED_PROPERTIES: {
+                    Fields.THIEF: {Fields.TEST_CONTENT: {Fields.TWIN_GUID: twin_guid}}
                 },
             }
         }
@@ -1048,9 +1023,9 @@ class DeviceApp(app_base.AppBase):
                 self.metrics.desired_property_patch_count_timed_out.increment()
                 break
             else:
-                thief = patch.get(Fields.Desired.THIEF, {})
-                test_content = thief.get(Fields.Desired.TEST_CONTENT, {})
-                actual_twin_guid = test_content.get(Fields.Desired.TestContent.TWIN_GUID)
+                thief = patch.get(Fields.THIEF, {})
+                test_content = thief.get(Fields.TEST_CONTENT, {})
+                actual_twin_guid = test_content.get(Fields.TWIN_GUID)
                 if actual_twin_guid == twin_guid:
                     logger.info("received expected patch: {} succeeded".format(twin_guid))
                     self.metrics.desired_property_patch_count_received.increment()
@@ -1067,10 +1042,10 @@ class DeviceApp(app_base.AppBase):
         twin = self.client.get_twin()
         logger.info("Got twin: {}".format(twin))
 
-        desired = twin.get(Const.DESIRED, {})
-        thief = desired.get(Fields.Desired.THIEF, {})
-        test_content = thief.get(Fields.Desired.TEST_CONTENT, {})
-        actual_twin_guid = test_content.get(Fields.Desired.TestContent.TWIN_GUID)
+        desired = twin.get(Fields.DESIRED, {})
+        thief = desired.get(Fields.THIEF, {})
+        test_content = thief.get(Fields.TEST_CONTENT, {})
+        actual_twin_guid = test_content.get(Fields.TWIN_GUID)
 
         if actual_twin_guid == twin_guid:
             logger.info("Got desired_twin: {} succeeded".format(twin_guid))
@@ -1101,7 +1076,7 @@ class DeviceApp(app_base.AppBase):
         self.update_initial_reported_properties()
 
         event_logger.info(
-            Events.STARTING_RUN, extra=custom_props({CustomDimensionNames.RUN_REASON: run_reason})
+            Events.STARTING_RUN, extra=custom_props({CustomDimensions.RUN_REASON: run_reason})
         )
 
         # pair with a service app instance
@@ -1157,8 +1132,7 @@ class DeviceApp(app_base.AppBase):
             if self.metrics.exit_reason:
                 exit_reason = self.metrics.exit_reason
             event_logger.info(
-                Events.ENDING_RUN,
-                extra=custom_props({CustomDimensionNames.EXIT_REASON: exit_reason}),
+                Events.ENDING_RUN, extra=custom_props({CustomDimensions.EXIT_REASON: exit_reason}),
             )
 
     def disconnect(self):
