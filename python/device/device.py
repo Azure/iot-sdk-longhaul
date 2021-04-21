@@ -904,14 +904,10 @@ class DeviceApp(app_base.AppBase):
                         )
                     )
 
-    def test_reported_properties_thread(self, worker_thread_info):
+    def test_twin_properties_thread(self, worker_thread_info):
         """
-        Thread to test reported properties.  It does this by setting properties inside
-        `properties/reported/thief/testContent/reportedPropertyTest`.  Each property has
-        a `addServiceAckId` value and a `removeServiceAckId` value.  When  the service sees the
-        property added, it sends the `addServiceAckId` to the device.  When the service sees the
-        property removed, it sends the `removeServiceAckid` to the device. This way the device
-        can add a property, verify that it was added, then remove it and verify that it was removed.
+        Thread to test twin properties. The twin property tests consists of two subtests: one for
+        reported properties and the other for desired properties.
         """
 
         while not self.done.isSet():
@@ -936,7 +932,12 @@ class DeviceApp(app_base.AppBase):
     def subtest_send_single_reported_prop(self):
         """
         test function to send a single reported property and then clear it after the
-        server verifies it.
+        server verifies it. It does this by setting properties inside
+        `properties/reported/thief/testContent/reportedPropertyTest`.  Each property has
+        a `addServiceAckId` value and a `removeServiceAckId` value.  When  the service sees the
+        property added, it sends the `addServiceAckId` to the device.  When the service sees the
+        property removed, it sends the `removeServiceAckid` to the device. This way the device
+        can add a property, verify that it was added, then remove it and verify that it was removed.
         """
 
         def make_reported_prop(property_name, val):
@@ -1009,18 +1010,13 @@ class DeviceApp(app_base.AppBase):
         start_time = time.time()
         end_time = start_time + self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
 
+        actual_twin_guid = None
         while time.time() <= end_time:
             try:
                 patch = self.incoming_desired_property_patch_queue.get(
                     max(0, end_time - time.time())
                 )
             except queue.Empty:
-                logger.warning(
-                    "wait_for_desired_property_patch did not retrieve exppected properties within expected time.  expected={}".format(
-                        twin_guid
-                    )
-                )
-                self.metrics.desired_property_patch_count_timed_out.increment()
                 break
             else:
                 thief = patch.get(Fields.THIEF, {})
@@ -1036,6 +1032,15 @@ class DeviceApp(app_base.AppBase):
                             actual_twin_guid, twin_guid
                         )
                     )
+
+        if (actual_twin_guid != twin_guid):
+            logger.warning(
+                "wait_for_desired_property_patch did not retrieve expected properties within expected time.  expected={}".format(
+                    twin_guid
+                )
+            )
+            self.metrics.desired_property_patch_count_timed_out.increment()
+
 
         # Now test the twin.  Since we already received the patch, our property should
         # be in the twin.
@@ -1103,7 +1108,7 @@ class DeviceApp(app_base.AppBase):
             ),
             app_base.WorkerThreadInfo(self.pairing_thread, "pairing_thread"),
             app_base.WorkerThreadInfo(
-                self.test_reported_properties_thread, "test_reported_properties_thread"
+                self.test_twin_properties_thread, "test_twin_properties_thread"
             ),
         ]
         for i in range(0, self.config[Settings.SEND_MESSAGE_THREAD_COUNT]):
