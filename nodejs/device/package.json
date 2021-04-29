@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "prettier": "npx prettier --write .",
-    "build": "npx prettier --write . && tsc -p .",
+    "build": "tsc -p . && npx prettier --write .",
     "start": "node build/index.js",
     "build:start": "npm run build && npm run start"
   },
