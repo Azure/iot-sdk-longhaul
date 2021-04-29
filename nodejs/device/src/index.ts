@@ -25,7 +25,7 @@ import { v4 as uuidv4 } from "uuid";
 import { promisify } from "util";
 import * as os from "os";
 import { msToDurationString } from "./duration";
-import { ServiceAckType, ServiceAckWaitList } from "./waitlist";
+import { OperationWaitlist, OperationType, OperationResult } from "./waitlist";
 
 const provisioningHost = process.env.THIEF_DEVICE_PROVISIONING_HOST;
 const idScope = process.env.THIEF_DEVICE_ID_SCOPE;
@@ -333,8 +333,10 @@ class DeviceApp {
         }
         this.client.complete(msg).catch(handleCompleteC2dError);
         obj.thief.serviceAcks.forEach((id: string) => {
-          if (!this.serviceAckWaitList.remove(id)) {
-            logger.warn(`Received unknown serviceAckId: ${id}`);
+          if (!this.operationWaitlist.completeOperation(id)) {
+            logger.warn(
+              `Received unknown operation ID ${id}. Perhaps the operation timed out or was already completed.`
+            );
           }
         });
       };
@@ -516,24 +518,24 @@ class DeviceApp {
         this.client
           .sendEvent(message)
           .then(() => {
-            this.serviceAckWaitList.add(
+            this.operationWaitlist.addCallbackBasedOperation(
               serviceAckId,
-              ServiceAckType.TELEMETRY_SERVICE_ACK,
-              (latency: number, userData: { [key: string]: any }) => {
+              OperationType.TELEMETRY,
+              {},
+              (result: OperationResult) => {
                 logger.info(
-                  `Received serviceAck with serviceAckId ${userData.serviceAckId}`
+                  `Received serviceAck with serviceAckId ${result.id}`
                 );
                 appInsights.defaultClient.trackMetric({
                   name: "SendMessageCountNotReceivedByServiceApp",
-                  value: this.serviceAckWaitList.getPendingTelemetryServiceAcks(),
+                  value: this.operationWaitlist.getPendingOperations(
+                    OperationType.TELEMETRY
+                  ),
                 });
                 appInsights.defaultClient.trackMetric({
                   name: "LatencySendMessageToServiceAckInSeconds",
-                  value: latency / 1000,
+                  value: result.latency / 1000,
                 });
-              },
-              {
-                serviceAckId: serviceAckId,
               }
             );
             appInsights.defaultClient.trackMetric({
@@ -542,11 +544,14 @@ class DeviceApp {
             });
             appInsights.defaultClient.trackMetric({
               name: "SendMessageCountNotReceivedByServiceApp",
-              value: this.serviceAckWaitList.getPendingTelemetryServiceAcks(),
+              value: this.operationWaitlist.getPendingOperations(
+                OperationType.TELEMETRY
+              ),
             });
             if (
-              this.serviceAckWaitList.getPendingTelemetryServiceAcks() >
-              settings.sendMessageAllowedFailureCount
+              this.operationWaitlist.getPendingOperations(
+                OperationType.TELEMETRY
+              ) > settings.sendMessageAllowedFailureCount
             ) {
               cleanUpAndReject(
                 new Error(
@@ -645,41 +650,35 @@ class DeviceApp {
         cleanUpAndReject(new Canceled());
       };
 
-      const onPropertyRemovedAck = (
-        latency: number,
-        userData: {
-          [key: string]: any;
-        }
-      ) => {
+      const onPropertyRemovedAck = (result: OperationResult) => {
         logger.info(
-          `Remove of reported property ${userData.propName} verified by service`
+          `Remove of reported property ${result.userData.propName} verified by service`
         );
         appInsights.defaultClient.trackMetric({
           name: "ReportedPropertiesCountRemovedButNotVerifiedByServiceApp",
-          value: (this.testMetrics.reportedPropertiesCountRemoved = this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks()),
+          value: (this.testMetrics.reportedPropertiesCountRemovedButNotVerifiedByServiceApp = this.operationWaitlist.getPendingOperations(
+            OperationType.REMOVE_REPORTED_PROPERTY
+          )),
         });
         appInsights.defaultClient.trackMetric({
           name: "LatencyRemoveReportedPropertyToServiceAckInSeconds",
-          value: latency / 1000,
+          value: result.latency / 1000,
         });
       };
 
-      const onPropertyAddedAck = (
-        latency: number,
-        userData: {
-          [key: string]: any;
-        }
-      ) => {
+      const onPropertyAddedAck = (result: OperationResult) => {
         logger.info(
-          `Add of reported property ${userData.propName} verified by service`
+          `Add of reported property ${result.userData.propName} verified by service`
         );
         appInsights.defaultClient.trackMetric({
           name: "ReportedPropertiesCountAddedButNotVerifiedByServiceApp",
-          value: (this.testMetrics.reportedPropertiesCountAdded = this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks()),
+          value: (this.testMetrics.reportedPropertiesCountAddedButNotVerifiedByServiceApp = this.operationWaitlist.getPendingOperations(
+            OperationType.ADD_REPORTED_PROPERTY
+          )),
         });
         appInsights.defaultClient.trackMetric({
           name: "LatencyAddReportedPropertyToServiceAckInSeconds",
-          value: latency / 1000,
+          value: result.latency / 1000,
         });
         const patch: TestReportedProperties = {
           thief: {
@@ -688,15 +687,17 @@ class DeviceApp {
             },
           },
         };
-        patch.thief.testContent.reportedPropertyTest[userData.propName] = null;
-        logger.info(`Removing test property ${userData.propName}`);
+        patch.thief.testContent.reportedPropertyTest[
+          result.userData.propName
+        ] = null;
+        logger.info(`Removing test property ${result.userData.propName}`);
         promisify(this.twin.properties.reported.update)(patch)
           .then(() => {
-            this.serviceAckWaitList.add(
-              userData.removeAckId,
-              ServiceAckType.REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
-              onPropertyRemovedAck,
-              { propName: userData.propName }
+            this.operationWaitlist.addCallbackBasedOperation(
+              result.userData.removeAckId,
+              OperationType.REMOVE_REPORTED_PROPERTY,
+              { propName: result.userData.propName },
+              onPropertyRemovedAck
             );
             appInsights.defaultClient.trackMetric({
               name: "ReportedPropertiesCountRemoved",
@@ -704,11 +705,17 @@ class DeviceApp {
             });
             appInsights.defaultClient.trackMetric({
               name: "ReportedPropertiesCountRemovedButNotVerifiedByServiceApp",
-              value: (this.testMetrics.reportedPropertiesCountRemoved = this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks()),
+              value: (this.testMetrics.reportedPropertiesCountRemovedButNotVerifiedByServiceApp = this.operationWaitlist.getPendingOperations(
+                OperationType.REMOVE_REPORTED_PROPERTY
+              )),
             });
             const pendingCount =
-              this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks() +
-              this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks();
+              this.operationWaitlist.getPendingOperations(
+                OperationType.ADD_REPORTED_PROPERTY
+              ) +
+              this.operationWaitlist.getPendingOperations(
+                OperationType.REMOVE_REPORTED_PROPERTY
+              );
             if (
               pendingCount >
               settings.reportedPropertiesUpdateAllowedFailureCount
@@ -721,7 +728,9 @@ class DeviceApp {
             }
           })
           .catch(() => {
-            logger.error(`Removing test property ${userData.propName} failed.`);
+            logger.error(
+              `Removing test property ${result.userData.propName} failed.`
+            );
             try {
               this.incrementClientErrors();
             } catch (err) {
@@ -749,14 +758,14 @@ class DeviceApp {
         logger.info(`Adding test property ${propertyName}`);
         promisify(this.twin.properties.reported.update)(patch)
           .then(() => {
-            this.serviceAckWaitList.add(
+            this.operationWaitlist.addCallbackBasedOperation(
               addServiceAckId,
-              ServiceAckType.ADD_REPORTED_PROPERTY_SERVICE_ACK,
-              onPropertyAddedAck,
+              OperationType.ADD_REPORTED_PROPERTY,
               {
                 propName: propertyName,
                 removeAckId: removeServiceAckId,
-              }
+              },
+              onPropertyAddedAck
             );
             appInsights.defaultClient.trackMetric({
               name: "ReportedPropertiesCountAdded",
@@ -764,11 +773,17 @@ class DeviceApp {
             });
             appInsights.defaultClient.trackMetric({
               name: "ReportedPropertiesCountAddedButNotVerifiedByServiceApp",
-              value: (this.testMetrics.reportedPropertiesCountAdded = this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks()),
+              value: (this.testMetrics.reportedPropertiesCountAddedButNotVerifiedByServiceApp = this.operationWaitlist.getPendingOperations(
+                OperationType.ADD_REPORTED_PROPERTY
+              )),
             });
             const pendingCount =
-              this.serviceAckWaitList.getPendingAddReportedPropertyServiceAcks() +
-              this.serviceAckWaitList.getPendingRemoveReportedPropertyServiceAcks();
+              this.operationWaitlist.getPendingOperations(
+                OperationType.ADD_REPORTED_PROPERTY
+              ) +
+              this.operationWaitlist.getPendingOperations(
+                OperationType.REMOVE_REPORTED_PROPERTY
+              );
             if (
               pendingCount >
               settings.reportedPropertiesUpdateAllowedFailureCount
@@ -943,7 +958,7 @@ class DeviceApp {
   private runStart: Date;
   private sessionMetrics: SessionMetrics;
   private testMetrics: TestMetrics;
-  private serviceAckWaitList: ServiceAckWaitList;
+  private operationWaitlist: OperationWaitlist;
   private maxReceivedIndex: number;
   private lastReceiveC2dTime: number;
   private serviceInstanceId: string;
@@ -958,7 +973,7 @@ class DeviceApp {
     return this.instance;
   }
   private constructor() {
-    this.serviceAckWaitList = new ServiceAckWaitList();
+    this.operationWaitlist = new OperationWaitlist();
     this.testMetrics = {
       receiveC2dCountMissing: 0,
       receiveC2dCountReceived: 0,

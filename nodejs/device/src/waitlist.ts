@@ -1,87 +1,143 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-export type ServiceAckWaitInfo = {
-  onRemove: (latency: number, userData?: { [key: string]: any }) => void;
-  addEpochTime: number;
-  serviceAckType: ServiceAckType;
-  userData?: any;
-};
+import { TimeoutError } from "./errors";
 
-export const enum ServiceAckType {
-  TELEMETRY_SERVICE_ACK = 0,
-  ADD_REPORTED_PROPERTY_SERVICE_ACK,
-  REMOVE_REPORTED_PROPERTY_SERVICE_ACK,
+export const enum OperationType {
+  TELEMETRY = 0,
+  ADD_REPORTED_PROPERTY,
+  REMOVE_REPORTED_PROPERTY,
 }
 
-export class ServiceAckWaitList {
+export type OperationResult = {
+  id: string;
+  latency: number;
+  userData: { [key: string]: any };
+};
+
+type OperationWaitlistInfo = {
+  onComplete:
+    | ((err: TimeoutError, result: OperationResult) => void)
+    | ((result: OperationResult) => void);
+  addEpochTime: number;
+  operationType: OperationType;
+  userData: { [key: string]: any };
+  timer?: NodeJS.Timeout;
+};
+
+export class OperationWaitlist {
   constructor() {
-    this.waitList = new Map<string, ServiceAckWaitInfo>();
+    this.waitlist = new Map<string, OperationWaitlistInfo>();
   }
 
-  add(
-    serviceAckId: string,
-    serviceAckType: ServiceAckType,
-    onRemove: (latency: number, userData?: { [key: string]: any }) => void,
-    userData?: { [key: string]: any }
+  addCallbackBasedOperation(
+    id: string,
+    operationType: OperationType,
+    userData: { [key: string]: any },
+    onComplete: (result: OperationResult) => void
+  ): void;
+  addCallbackBasedOperation(
+    id: string,
+    operationType: OperationType,
+    userData: { [key: string]: any },
+    timeoutMs: number,
+    onComplete: (err: TimeoutError, result: OperationResult) => void
+  ): void;
+  addCallbackBasedOperation(
+    id: string,
+    operationType: OperationType,
+    userData: { [key: string]: any },
+    callbackOrTimeout: ((result: OperationResult) => void) | number,
+    errorCallback?: (err: TimeoutError, result: OperationResult) => void
   ) {
-    this.waitList.set(serviceAckId, {
-      onRemove: onRemove,
+    const callback =
+      typeof callbackOrTimeout === "function"
+        ? callbackOrTimeout
+        : errorCallback;
+    this.waitlist.set(id, {
+      onComplete: callback,
       addEpochTime: Date.now(),
-      serviceAckType: serviceAckType,
+      operationType: operationType,
       userData: userData,
+      ...(typeof callbackOrTimeout === "number" && {
+        timer: setTimeout(() => {
+          if (this.waitlist.delete(id)) {
+            (callback as (err: TimeoutError, result: OperationResult) => void)(
+              new TimeoutError(`Operation ID ${id} timed out.`),
+              null
+            );
+          }
+        }, callbackOrTimeout),
+      }),
     });
-
-    switch (serviceAckType) {
-      case ServiceAckType.TELEMETRY_SERVICE_ACK:
-        ++this.pendingTelemetryServiceAcks;
-        break;
-      case ServiceAckType.ADD_REPORTED_PROPERTY_SERVICE_ACK:
-        ++this.pendingAddReportedPropertyServiceAcks;
-        break;
-      case ServiceAckType.REMOVE_REPORTED_PROPERTY_SERVICE_ACK:
-        ++this.pendingRemoveReportedPropertyServiceAck;
-        break;
-    }
+    ++this.pendingOperations[operationType];
   }
 
-  remove(serviceAckId: string) {
-    if (!this.waitList.has(serviceAckId)) {
+  addPromiseBasedOperation(
+    id: string,
+    operationType: OperationType,
+    userData: { [key: string]: any },
+    timeoutMs?: number
+  ) {
+    return new Promise<OperationResult>((resolve, reject) => {
+      const promiseCallback = (err: TimeoutError, result: OperationResult) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      };
+      if (timeoutMs) {
+        this.addCallbackBasedOperation(
+          id,
+          operationType,
+          userData,
+          timeoutMs,
+          promiseCallback
+        );
+      } else {
+        this.addCallbackBasedOperation(
+          id,
+          operationType,
+          userData,
+          promiseCallback.bind(null, null)
+        );
+      }
+    });
+  }
+
+  completeOperation(id: string) {
+    let operationInfo: OperationWaitlistInfo;
+    if (!(operationInfo = this.waitlist.get(id))) {
       return false;
     }
-    const info = this.waitList.get(serviceAckId);
-    switch (info.serviceAckType) {
-      case ServiceAckType.TELEMETRY_SERVICE_ACK:
-        --this.pendingTelemetryServiceAcks;
-        break;
-      case ServiceAckType.ADD_REPORTED_PROPERTY_SERVICE_ACK:
-        --this.pendingAddReportedPropertyServiceAcks;
-        break;
-      case ServiceAckType.REMOVE_REPORTED_PROPERTY_SERVICE_ACK:
-        --this.pendingRemoveReportedPropertyServiceAck;
-        break;
+    clearTimeout(operationInfo.timer);
+    const result = {
+      id: id,
+      latency: Date.now() - operationInfo.addEpochTime,
+      userData: operationInfo.userData,
+    };
+    if (operationInfo.timer) {
+      (operationInfo.onComplete as (
+        err: TimeoutError,
+        result: OperationResult
+      ) => void)(null, result);
+    } else {
+      (operationInfo.onComplete as (result: OperationResult) => void)(result);
     }
-    process.nextTick(
-      info.onRemove,
-      Date.now() - info.addEpochTime,
-      info.userData
-    );
-    this.waitList.delete(serviceAckId);
+    --this.pendingOperations[operationInfo.operationType];
+    this.waitlist.delete(id);
     return true;
   }
 
-  getPendingTelemetryServiceAcks() {
-    return this.pendingTelemetryServiceAcks;
-  }
-  getPendingAddReportedPropertyServiceAcks() {
-    return this.pendingAddReportedPropertyServiceAcks;
-  }
-  getPendingRemoveReportedPropertyServiceAcks() {
-    return this.pendingRemoveReportedPropertyServiceAck;
+  getPendingOperations(operationType: OperationType) {
+    return this.pendingOperations[operationType];
   }
 
-  private pendingTelemetryServiceAcks = 0;
-  private pendingAddReportedPropertyServiceAcks = 0;
-  private pendingRemoveReportedPropertyServiceAck = 0;
-  private waitList: Map<string, ServiceAckWaitInfo>;
+  private waitlist: Map<string, OperationWaitlistInfo>;
+  private pendingOperations = {
+    [OperationType.TELEMETRY]: 0,
+    [OperationType.ADD_REPORTED_PROPERTY]: 0,
+    [OperationType.REMOVE_REPORTED_PROPERTY]: 0,
+  };
 }
