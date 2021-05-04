@@ -16,9 +16,7 @@ export type OperationResult = {
 };
 
 type OperationWaitlistInfo = {
-  onComplete:
-    | ((err: TimeoutError, result: OperationResult) => void)
-    | ((result: OperationResult) => void);
+  onComplete: ((err: TimeoutError, result: OperationResult) => void) | ((result: OperationResult) => void);
   addEpochTime: number;
   operationType: OperationType;
   userData: { [key: string]: any };
@@ -50,10 +48,7 @@ export class OperationWaitlist {
     callbackOrTimeout: ((result: OperationResult) => void) | number,
     errorCallback?: (err: TimeoutError, result: OperationResult) => void
   ) {
-    const callback =
-      typeof callbackOrTimeout === "function"
-        ? callbackOrTimeout
-        : errorCallback;
+    const callback = typeof callbackOrTimeout === "function" ? callbackOrTimeout : errorCallback;
     this.waitlist.set(id, {
       onComplete: callback,
       addEpochTime: Date.now(),
@@ -88,20 +83,9 @@ export class OperationWaitlist {
         }
       };
       if (timeoutMs) {
-        this.addCallbackBasedOperation(
-          id,
-          operationType,
-          userData,
-          timeoutMs,
-          promiseCallback
-        );
+        this.addCallbackBasedOperation(id, operationType, userData, timeoutMs, promiseCallback);
       } else {
-        this.addCallbackBasedOperation(
-          id,
-          operationType,
-          userData,
-          promiseCallback.bind(null, null)
-        );
+        this.addCallbackBasedOperation(id, operationType, userData, promiseCallback.bind(null, null));
       }
     });
   }
@@ -118,10 +102,7 @@ export class OperationWaitlist {
       userData: operationInfo.userData,
     };
     if (operationInfo.timer) {
-      (operationInfo.onComplete as (
-        err: TimeoutError,
-        result: OperationResult
-      ) => void)(null, result);
+      (operationInfo.onComplete as (err: TimeoutError, result: OperationResult) => void)(null, result);
     } else {
       (operationInfo.onComplete as (result: OperationResult) => void)(result);
     }
