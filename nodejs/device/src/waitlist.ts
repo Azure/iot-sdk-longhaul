@@ -12,14 +12,12 @@ export const enum OperationType {
 export type OperationResult = {
   id: string;
   latency: number;
-  userData: { [key: string]: any };
 };
 
 type OperationWaitlistInfo = {
-  onComplete: ((err: TimeoutError, result: OperationResult) => void) | ((result: OperationResult) => void);
   addEpochTime: number;
   operationType: OperationType;
-  userData: { [key: string]: any };
+  resolve: (value: OperationResult | PromiseLike<OperationResult>) => void;
   timer?: NodeJS.Timeout;
 };
 
@@ -28,65 +26,21 @@ export class OperationWaitlist {
     this.waitlist = new Map<string, OperationWaitlistInfo>();
   }
 
-  addCallbackBasedOperation(
-    id: string,
-    operationType: OperationType,
-    userData: { [key: string]: any },
-    onComplete: (result: OperationResult) => void
-  ): void;
-  addCallbackBasedOperation(
-    id: string,
-    operationType: OperationType,
-    userData: { [key: string]: any },
-    timeoutMs: number,
-    onComplete: (err: TimeoutError, result: OperationResult) => void
-  ): void;
-  addCallbackBasedOperation(
-    id: string,
-    operationType: OperationType,
-    userData: { [key: string]: any },
-    callbackOrTimeout: ((result: OperationResult) => void) | number,
-    errorCallback?: (err: TimeoutError, result: OperationResult) => void
-  ) {
-    const callback = typeof callbackOrTimeout === "function" ? callbackOrTimeout : errorCallback;
-    this.waitlist.set(id, {
-      onComplete: callback,
-      addEpochTime: Date.now(),
-      operationType: operationType,
-      userData: userData,
-      ...(typeof callbackOrTimeout === "number" && {
-        timer: setTimeout(() => {
-          if (this.waitlist.delete(id)) {
-            (callback as (err: TimeoutError, result: OperationResult) => void)(
-              new TimeoutError(`Operation ID ${id} timed out.`),
-              null
-            );
-          }
-        }, callbackOrTimeout),
-      }),
-    });
-    ++this.pendingOperations[operationType];
-  }
-
-  addPromiseBasedOperation(
-    id: string,
-    operationType: OperationType,
-    userData: { [key: string]: any },
-    timeoutMs?: number
-  ) {
+  addOperation(id: string, operationType: OperationType, timeoutMs?: number) {
     return new Promise<OperationResult>((resolve, reject) => {
-      const promiseCallback = (err: TimeoutError, result: OperationResult) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
-        }
-      };
-      if (timeoutMs) {
-        this.addCallbackBasedOperation(id, operationType, userData, timeoutMs, promiseCallback);
-      } else {
-        this.addCallbackBasedOperation(id, operationType, userData, promiseCallback.bind(null, null));
-      }
+      this.waitlist.set(id, {
+        addEpochTime: Date.now(),
+        operationType: operationType,
+        resolve: resolve,
+        ...(timeoutMs && {
+          timer: setTimeout(() => {
+            if (this.waitlist.delete(id)) {
+              reject(new TimeoutError(`Operation ID ${id} timed out.`));
+            }
+          }, timeoutMs),
+        }),
+      });
+      ++this.pendingOperations[operationType];
     });
   }
 
@@ -99,15 +53,10 @@ export class OperationWaitlist {
     const result = {
       id: id,
       latency: Date.now() - operationInfo.addEpochTime,
-      userData: operationInfo.userData,
     };
-    if (operationInfo.timer) {
-      (operationInfo.onComplete as (err: TimeoutError, result: OperationResult) => void)(null, result);
-    } else {
-      (operationInfo.onComplete as (result: OperationResult) => void)(result);
-    }
     --this.pendingOperations[operationInfo.operationType];
     this.waitlist.delete(id);
+    operationInfo.resolve(result);
     return true;
   }
 

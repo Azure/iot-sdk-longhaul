@@ -6,14 +6,15 @@ export type ThiefSettings = {
   thiefPropertyUpdateIntervalInSeconds: number;
   thiefWatchdogFailureIntervalInSeconds: number;
   thiefAllowedClientLibraryExceptionCount: number;
+  operationTimeoutInSeconds: number;
+  operationTimeoutAllowedFailureCount: number;
   pairingRequestTimeoutIntervalInSeconds: number;
   pairingRequestSendIntervalInSeconds: number;
   sendMessageOperationsPerSecond: number;
   sendMessageAllowedFailureCount: number;
   receiveC2dIntervalInSeconds: number;
   receiveC2dAllowedMissingMessageCount: number;
-  reportedPropertiesUpdateIntervalInSeconds: number;
-  reportedPropertiesUpdateAllowedFailureCount: number;
+  twinUpdateIntervalInSeconds: number;
 };
 
 export type ThiefPairingProperties = {
