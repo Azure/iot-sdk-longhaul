@@ -20,11 +20,5 @@ export function msToDurationString(delta: number) {
   [delta, sec] = divmod(delta, 60);
   [delta, min] = divmod(delta, 60);
   [day, hr] = divmod(delta, 24);
-  return (
-    (day ? `${day}:` : "") +
-    hr +
-    `:${min}:` +
-    sec +
-    (ms ? "." + `${ms}`.padStart(3, "0") : "")
-  );
+  return (day ? `${day}:` : "") + hr + `:${min}:` + sec + (ms ? "." + `${ms}`.padStart(3, "0") : "");
 }

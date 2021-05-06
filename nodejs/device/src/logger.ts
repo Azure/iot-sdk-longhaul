@@ -23,9 +23,7 @@ export class Logger {
   constructor(settings: LoggerSettings) {
     if (settings.consoleEnabled) {
       if (!settings.consoleSeverityLevel) {
-        throw new Error(
-          "consoleSeverityLevel must be set if console logging is enabled."
-        );
+        throw new Error("consoleSeverityLevel must be set if console logging is enabled.");
       }
       this.consoleEnabled = true;
       this.consoleSeverityLevel = settings.consoleSeverityLevel;
@@ -48,8 +46,7 @@ export class Logger {
   critical = this.log.bind(this, LoggerSeverityLevel.CRITICAL);
 
   private log(severity: LoggerSeverityLevel, ...args: any[]) {
-    const message =
-      this.severityLevelToString(severity) + ": " + format(...args);
+    const message = this.severityLevelToString(severity) + ": " + format(...args);
     if (this.consoleEnabled && this.consoleSeverityLevel <= severity) {
       process.stderr.write(message + "\n");
     }
