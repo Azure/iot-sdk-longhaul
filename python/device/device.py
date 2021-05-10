@@ -442,7 +442,7 @@ class DeviceApp(app_base.AppBase):
         # This isn't the best idea, but it works and it saves us from deep copies
         assert props[Fields.THIEF].get(Fields.CMD, None) is None
         props[Fields.THIEF][Fields.CMD] = Commands.SERVICE_ACK_REQUEST
-        props[Fields.Telemetry.THIEF][Fields.Telemetry.SERVICE_ACK_ID] = running_op.id
+        props[Fields.THIEF][Fields.SERVICE_ACK_ID] = running_op.id
 
         logger.info("Requesting service_ack for serviceAckId = {}".format(running_op.id))
         msg = self.create_message_from_dict(props)
@@ -1033,14 +1033,13 @@ class DeviceApp(app_base.AppBase):
                         )
                     )
 
-        if (actual_twin_guid != twin_guid):
+        if actual_twin_guid != twin_guid:
             logger.warning(
                 "wait_for_desired_property_patch did not retrieve expected properties within expected time.  expected={}".format(
                     twin_guid
                 )
             )
             self.metrics.desired_property_patch_count_timed_out.increment()
-
 
         # Now test the twin.  Since we already received the patch, our property should
         # be in the twin.
