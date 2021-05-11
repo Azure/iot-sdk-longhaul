@@ -2,18 +2,16 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 export type ThiefSettings = {
-  thiefMaxRunDurationInSeconds: number;
-  thiefPropertyUpdateIntervalInSeconds: number;
-  thiefWatchdogFailureIntervalInSeconds: number;
   thiefAllowedClientLibraryExceptionCount: number;
+  operationTimeoutInSeconds: number;
+  operationTimeoutAllowedFailureCount: number;
   pairingRequestTimeoutIntervalInSeconds: number;
   pairingRequestSendIntervalInSeconds: number;
   sendMessageOperationsPerSecond: number;
-  sendMessageAllowedFailureCount: number;
   receiveC2dIntervalInSeconds: number;
   receiveC2dAllowedMissingMessageCount: number;
-  reportedPropertiesUpdateIntervalInSeconds: number;
-  reportedPropertiesUpdateAllowedFailureCount: number;
+  twinUpdateIntervalInSeconds: number;
+  metricsUpdateIntervalInSeconds: number;
 };
 
 export type ThiefPairingProperties = {
@@ -29,6 +27,8 @@ export type TestReportedProperties = {
         [key: string]: any;
       };
     };
+    sessionMetrics: SessionMetrics;
+    testMetrics: TestMetrics;
   };
 };
 
@@ -58,7 +58,7 @@ export type SessionMetrics = {
   exitReason?: string;
   lastUpdateTimeUtc: string;
   runStartUtc: string;
-  runState: "Waiting" | "Running" | "Failed" | "Complete" | "Interrupted"; //TODO: should this be uppercase or lowercase?
+  runState: "Waiting" | "Running" | "Failed" | "Complete" | "Interrupted";
   runTime: string;
 };
 
@@ -66,13 +66,15 @@ export type TestMetrics = {
   receiveC2dCountMissing: number;
   receiveC2dCountReceived: number;
   reportedPropertiesCountAdded: number;
-  reportedPropertiesCountAddedButNotVerifiedByServiceApp: number;
   reportedPropertiesCountRemoved: number;
-  reportedPropertiesCountRemovedButNotVerifiedByServiceApp: number;
-  clientLibraryCountExceptions: number;
-  sendMessageCountNotReceivedByServiceApp: number;
+  reportedPropertiesCountTimedOut: number;
   sendMessageCountSent: number;
-  sendMessageCountUnacked: number;
+  sendMessageCountNotReceivedByServiceApp: number;
+  clientLibraryCountExceptions: number;
+  getTwinCountSucceeded: number;
+  getTwinCountTimedOut: number;
+  desiredPropertyPatchCountReceived: number;
+  desiredPropertyPatchCountTimedOut: number;
 };
 
 export const enum Signal {
