@@ -99,16 +99,69 @@ class Fields(object):
     CMD = "cmd"
     TEST_C2D_MESSAGE_INDEX = "testC2dMessageIndex"
 
+    # ----------------------------------------------------
+    # Fields inside telemetry messages for testing methods
+    # ----------------------------------------------------
+
+    # Name of method to invoke
+    METHOD_NAME = "methodName"
+
+    # Payload to send with method invocation
+    METHOD_INVOKE_PAYLOAD = "methodInvokePayload"
+
+    # Guid used to tie method request with method response
+    METHOD_GUID = "methodGuid"
+
+    # timeout for receiving a response from a method invoke
+    METHOD_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS = "methodInvokeResponseTimeoutInSeconds"
+
+    # timeout for connecting a client based on a method invoke
+    METHOD_INVOKE_CONNECT_TIMEOUT_IN_SECONDS = "methodInvokeConnectTimeoutInSeconds"
+
+    # ---------------------------------------------------
+    # Fields inside C2D messages used for testing methods
+    # ---------------------------------------------------
+
+    # GUID used to tie method request with method response
+    METHOD_GUID = "methodGuid"
+
+    # Payload sent with method response
+    METHOD_RESPONSE_PAYLOAD = "methodResponsePayload"
+
+    # Status code sent with method response
+    METHOD_RESPONSE_STATUS_CODE = "methodResponseStatusCode"
+
 
 class Commands(object):
     """
     Names for different command/message types
     """
 
+    # ------------------------------------------------------
+    # Values for the command field inside telemetry messages
+    # ------------------------------------------------------
+
+    # Request a serviceAckResposne message from the service
     SERVICE_ACK_REQUEST = "serviceAckRequest"
-    SERVICE_ACK_RESPONSE = "serviceAckResponse"
-    TEST_C2D = "testC2d"
+
+    # Apply a the device twin desired properties patch
     SET_DESIRED_PROPS = "setDesiredProps"
+
+    # Invoke a direct method
+    INVOKE_METHOD = "invokeMethod"
+
+    # ------------------------------------------------
+    # Values for the command field inside c2d messages
+    # ------------------------------------------------
+
+    # Response from one or more serviceAckRequest messsages
+    SERVICE_ACK_RESPONSE = "serviceAckResponse"
+
+    # C2d test messaage
+    TEST_C2D = "testC2d"
+
+    # Result of a direct method invocation
+    METHOD_RESPONSE = "methodResponse"
 
 
 class Events(object):
@@ -260,6 +313,7 @@ class Settings(object):
 
     # How many client exceptions do we allow before we fail the test?
     THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT = "thiefAllowedClientLibraryExceptionCount"
+
     # ----------------
     # timeout settings
     # ----------------
@@ -348,3 +402,18 @@ class CustomDimensions(object):
 
     # Reason the test is exiting
     EXIT_REASON = "exitReason"
+
+
+class MethodNames(object):
+    """
+    Names of vaious methods used while testing direct methods
+    """
+
+    # Fail with status 404 and verify that it returns the error to the caller.
+    FAIL_WITH_404 = "failWith404"
+
+    # echo the request as the resopnse with a 200 return code
+    ECHO_REQUEST = "echoRequest"
+
+    # method name which is not handled by the device client.
+    UNDEFINED_METHOD_NAME = "undefinedMethodName"

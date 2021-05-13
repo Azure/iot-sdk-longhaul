@@ -38,6 +38,7 @@ class EventBasedOperation(OperationBase):
         self.owner_weakref = weakref.ref(owner)
         self.id = str(uuid.uuid4())
         self.event = threading.Event()
+        self.result_message = None
 
     def complete(self):
         """
@@ -62,6 +63,7 @@ class CallbackBasedOperation(OperationBase):
         self.id = str(uuid.uuid4())
         self.callback = callback
         self.user_data = user_data
+        self.result_message = None
 
     def complete(self):
         """

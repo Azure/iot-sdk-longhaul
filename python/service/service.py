@@ -14,7 +14,7 @@ import collections
 import faulthandler
 from concurrent.futures import ThreadPoolExecutor
 from azure.iot.hub import IoTHubRegistryManager, iothub_amqp_client
-from azure.iot.hub.protocol.models import Twin, TwinProperties
+from azure.iot.hub.protocol.models import Twin, TwinProperties, CloudToDeviceMethod
 import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
 import azure_monitor
@@ -188,6 +188,71 @@ class ServiceApp(app_base.AppBase):
                 )
                 del self.paired_devices[device_id]
 
+    def handle_method_invoke(self, device_data, event):
+        body = event.body_as_json()
+        thief = body.get(Fields.THIEF, {})
+        method_guid = thief.get(Fields.SERVICE_ACK_ID)
+        method_name = thief.get(Fields.METHOD_NAME)
+
+        logger.info("------------------------------------------------------------------")
+        logger.info("received method invoke method={}, guid={}".format(method_name, method_guid))
+
+        request = CloudToDeviceMethod(
+            method_name=method_name,
+            payload=thief.get(Fields.METHOD_INVOKE_PAYLOAD, None),
+            response_timeout_in_seconds=thief.get(
+                Fields.METHOD_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS, None
+            ),
+            connect_timeout_in_seconds=thief.get(
+                Fields.METHOD_INVOKE_CONNECT_TIMEOUT_IN_SECONDS, None
+            ),
+        )
+
+        # TODO: don't hold this lock while calling into registry manager
+        # TODO: wrap registry manager call in try/except to return result to device
+        logger.info("------------------------------------------------------------------")
+        logger.info("invoking {}".format(method_guid))
+        try:
+            with self.registry_manager_lock:
+                response = self.registry_manager.invoke_device_method(
+                    device_data.device_id, request
+                )
+        except Exception as e:
+            # TODO: remove this once future callback is added
+            logger.info("------------------------------------------------------------------")
+            logger.error("exception: {}".format(str(e) or type(e)))
+            raise
+        finally:
+            logger.info("------------------------------------------------------------------")
+            logger.info("invoke complete finally")
+        logger.info("------------------------------------------------------------------")
+        logger.info("invoke complete {}".format(method_guid))
+
+        response_message = json.dumps(
+            {
+                Fields.THIEF: {
+                    Fields.CMD: Commands.METHOD_RESPONSE,
+                    Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                    Fields.RUN_ID: device_data.run_id,
+                    Fields.SERVICE_ACK_ID: method_guid,
+                    Fields.METHOD_RESPONSE_PAYLOAD: response.payload,
+                    Fields.METHOD_RESPONSE_STATUS_CODE: response.status,
+                }
+            }
+        )
+
+        # TODO: remove METHOD_GUID
+        logger.info("------------------------------------------------------------------")
+        logger.info("queueing response {}".format(method_guid))
+
+        self.outgoing_c2d_queue.put(
+            OutgoingC2d(
+                device_id=device_data.device_id,
+                message=response_message,
+                props=Const.JSON_TYPE_AND_ENCODING,
+            )
+        )
+
     def dispatch_incoming_messages_thread(self, worker_thread_info):
         """
         Function to dispatch incoming EventHub messages.  A different thread receives the messages
@@ -253,6 +318,9 @@ class ServiceApp(app_base.AppBase):
                                 self.registry_manager.update_twin(
                                     device_id, Twin(properties=TwinProperties(desired=desired)), "*"
                                 )
+                    elif cmd == Commands.INVOKE_METHOD:
+                        self.executor.submit(self.handle_method_invoke, device_data, event)
+                        # TODO: add_done_callback
 
                     else:
                         logger.info(

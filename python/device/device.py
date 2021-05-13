@@ -10,18 +10,28 @@ import datetime
 import threading
 import pprint
 import sys
+import collections
 from concurrent.futures import ThreadPoolExecutor
 import dps
 import queue
 import app_base
 import faulthandler
-from azure.iot.device import Message
+from azure.iot.device import Message, MethodResponse
 import azure.iot.device.constant
 from measurement import ThreadSafeCounter
 import azure_monitor
 from azure_monitor_metrics import MetricsReporter
 from out_of_order_message_tracker import OutOfOrderMessageTracker
-from thief_constants import Const, Fields, Commands, Events, Metrics, Settings, CustomDimensions
+from thief_constants import (
+    Const,
+    Fields,
+    Commands,
+    Events,
+    Metrics,
+    Settings,
+    CustomDimensions,
+    MethodNames,
+)
 from running_operation_list import RunningOperationList
 
 faulthandler.enable()
@@ -63,6 +73,16 @@ azure_monitor.add_logging_properties(
 )
 event_logger = azure_monitor.get_event_logger()
 azure_monitor.log_to_azure_monitor("thief")
+
+
+TestMethod = collections.namedtuple(
+    "TestMethod", "method_name expected_status_code include_payload"
+)
+methods_to_test = [
+    TestMethod(MethodNames.FAIL_WITH_404, 404, False),
+    TestMethod(MethodNames.ECHO_REQUEST, 200, True),
+    TestMethod(MethodNames.UNDEFINED_METHOD_NAME, 500, False),
+]
 
 
 def custom_props(extra_props):
@@ -404,6 +424,7 @@ class DeviceApp(app_base.AppBase):
         }
         self.client.patch_twin_reported_properties(props)
 
+    # TODO: rename props to payload or dikt
     def create_message_from_dict(self, props):
         """
         helper function to create a message from a dict object
@@ -786,12 +807,21 @@ class DeviceApp(app_base.AppBase):
                 ):
                     # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
                     cmd = thief[Fields.CMD]
-                    if cmd == Commands.SERVICE_ACK_RESPONSE:
+                    if cmd in [Commands.SERVICE_ACK_RESPONSE, Commands.METHOD_RESPONSE]:
                         # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
                         # for another thread to handle.
-                        logger.info(
-                            "Received {} message with {}".format(cmd, thief[Fields.SERVICE_ACKS])
-                        )
+                        if Fields.SERVICE_ACK_ID in thief:
+                            logger.info(
+                                "Received {} message with {}".format(
+                                    cmd, thief[Fields.SERVICE_ACK_ID]
+                                )
+                            )
+                        else:
+                            logger.info(
+                                "Received {} message with {}".format(
+                                    cmd, thief[Fields.SERVICE_ACKS]
+                                )
+                            )
                         self.incoming_service_ack_response_queue.put(msg)
 
                     elif cmd == Commands.TEST_C2D:
@@ -831,9 +861,16 @@ class DeviceApp(app_base.AppBase):
             if msg:
                 thief = json.loads(msg.data.decode())[Fields.THIEF]
 
-                for service_ack_id in thief[Fields.SERVICE_ACKS]:
+                service_acks = thief.get(Fields.SERVICE_ACKS, [])
+                if not service_acks:
+                    service_acks = [
+                        thief.get(Fields.SERVICE_ACK_ID),
+                    ]
+
+                for service_ack_id in service_acks:
                     running_op = self.running_operation_list.get(service_ack_id)
                     if running_op:
+                        running_op.result_message = msg
                         running_op.complete()
                     else:
                         logger.warning("Received unknown serviceAckId: {}:".format(service_ack_id))
@@ -921,6 +958,10 @@ class DeviceApp(app_base.AppBase):
                 continue
 
             else:
+                self.subtest_method_invoke()
+                worker_thread_info.watchdog_epochtime = time.time()
+                time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
+
                 self.subtest_send_single_reported_prop()
                 worker_thread_info.watchdog_epochtime = time.time()
                 time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
@@ -1062,6 +1103,98 @@ class DeviceApp(app_base.AppBase):
             )
             self.metrics.get_twin_count_timed_out_out.increment()
 
+    def handle_method_thread(self, worker_thread_info):
+        while not self.done.isSet():
+            worker_thread_info.watchdog_epochtime = time.time()
+            if self.is_paused():
+                time.sleep(1)
+                continue
+
+            elif not self.is_pairing_complete():
+                time.sleep(1)
+                continue
+
+            # TODO: remove timeout or switch to handlers
+            logger.info("calling receive method function")
+            method_request = self.client.receive_method_request(timeout=10)
+            if method_request:
+                logger.info("Received method request {}".format(method_request.name))
+                if method_request.name == MethodNames.FAIL_WITH_404:
+                    logger.info("sending response to fail with 404")
+                    self.client.send_method_response(
+                        MethodResponse.create_from_method_request(method_request, 404)
+                    )
+                elif method_request.name == MethodNames.ECHO_REQUEST:
+                    self.client.send_method_response(
+                        MethodResponse.create_from_method_request(
+                            method_request, 200, method_request.payload,
+                        )
+                    )
+                else:
+                    logger.info("sending response to fail with 500")
+                    self.client.send_method_response(
+                        MethodResponse.create_from_method_request(method_request, 500)
+                    )
+
+    def subtest_method_invoke(self):
+        for method in methods_to_test:
+            running_op = self.running_operation_list.make_event_based_operation()
+
+            if method.include_payload:
+                payload = {"id": str(uuid.uuid4())}
+            else:
+                payload = None
+
+            command_payload = {
+                Fields.THIEF: {
+                    Fields.CMD: Commands.INVOKE_METHOD,
+                    Fields.SERVICE_ACK_ID: running_op.id,
+                    Fields.METHOD_NAME: method.method_name,
+                    Fields.METHOD_INVOKE_PAYLOAD: payload,
+                }
+            }
+            msg = self.create_message_from_dict(command_payload)
+            logger.info("sending method invoke with guid={}".format(running_op.id))
+            self.outgoing_test_message_queue.put(msg)
+
+            if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+                print(
+                    "method with guid {} returned {}".format(
+                        running_op.id, running_op.result_message
+                    )
+                )
+                thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
+                fail = False
+                if thief[Fields.METHOD_RESPONSE_STATUS_CODE] != method.expected_status_code:
+                    logger.error(
+                        "Unexpected method status: id={}, received {} expected {}".format(
+                            running_op.id,
+                            thief[Fields.METHOD_RESPONSE_STATUS_CODE],
+                            method.expected_status_code,
+                        )
+                    )
+                    fail = True
+                    if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
+                        logger.error(
+                            "Unexpected payload: id={}, received {} expected {}".format(
+                                running_op.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
+                            )
+                        )
+                        fail = True
+
+                logger.info(
+                    "---------------------------------------------------------------------------------"
+                )
+                if fail:
+                    logger.error("Method call check failed")
+                    # TODO: log failure and count
+                else:
+                    logger.error("Method call check succeeded")
+
+            else:
+                logger.error("method with guid {} never completed".format(running_op.id))
+                # TODO: timeout here
+
     def main(self):
 
         self.metrics.run_start_utc = datetime.datetime.now(datetime.timezone.utc)
@@ -1109,6 +1242,7 @@ class DeviceApp(app_base.AppBase):
             app_base.WorkerThreadInfo(
                 self.test_twin_properties_thread, "test_twin_properties_thread"
             ),
+            app_base.WorkerThreadInfo(self.handle_method_thread, "handle_method_thread"),
         ]
         for i in range(0, self.config[Settings.SEND_MESSAGE_THREAD_COUNT]):
             worker_thread_infos.append(
