@@ -39,7 +39,7 @@ groups:
             value: "runId"
           - name: DESIRED_PROPERTIES 
             value: "desiredProperties"
-      - name: Reported
+      - name: ReportedProperties
         desc: "properties.reported.thief"
         values:
           - name: SYSTEM_PROPERTIES 
@@ -111,7 +111,6 @@ groups:
         values:
           - name: TWIN_GUID 
             value: "twinGuid"
-
       - name: C2dFields
         desc: "Names of fields inside c2d messages"
         values:
@@ -126,17 +125,64 @@ groups:
           - name: TEST_C2D_MESSAGE_INDEX 
             value: "testC2dMessageIndex"
 
+      - name: MethodTestTelemetry
+        desc: "Fields inside telemetry messages for testing methods"
+        values:
+          - name: METHOD_NAME
+            value: "methodName"
+            desc: "Name of method to invoke"
+          - name: METHOD_INVOKE_PAYLOAD
+            value: "methodInvokePayload"
+            desc: "Payload to send with method invocation"
+          - name: METHOD_GUID
+            value: "methodGuid"
+            desc: "Guid used to tie method request with method response"
+          - name: METHOD_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS
+            value: "methodInvokeResponseTimeoutInSeconds"
+            desc: "timeout for receiving a response from a method invoke"
+          - name: METHOD_INVOKE_CONNECT_TIMEOUT_IN_SECONDS
+            value: "methodInvokeConnectTimeoutInSeconds"
+            desc: "timeout for connecting a client based on a method invoke"
+      - name: MethodTestC2d
+        desc: "Fields inside C2D messages used for testing methods"
+        values:
+          - name: METHOD_GUID
+            value: "methodGuid"
+            desc: "GUID used to tie method request with method response"
+          - name: METHOD_RESPONSE_PAYLOAD
+            value: "methodResponsePayload"
+            desc: "Payload sent with method response"
+          - name: METHOD_RESPONSE_STATUS_CODE
+            value: "methodResponseStatusCode"
+            desc: "Status code sent with method response"
+
   - name: Commands
     desc: "Names for different command/message types"
-    values:
-      - name: SERVICE_ACK_REQUEST 
-        value: "serviceAckRequest"
-      - name: SERVICE_ACK_RESPONSE 
-        value: "serviceAckResponse"
-      - name: TEST_C2D 
-        value: "testC2d"
-      - name: SET_DESIRED_PROPS 
-        value: "setDesiredProps"
+    subgroups:
+      - name: "TelemetryCommands"
+        desc: "Values for the command field inside telemetry messages"
+        values:
+          - name: SERVICE_ACK_REQUEST 
+            value: "serviceAckRequest"
+            desc: "Request a serviceAckResposne message from the service"
+          - name: SET_DESIRED_PROPS 
+            value: "setDesiredProps"
+            desc: "Apply a the device twin desired properties patch"
+          - name: INVOKE_METHOD
+            value: "invokeMethod"
+            desc: "Invoke a direct method"
+      - name: "C2dCommands"
+        desc: "Values for the command field inside c2d messages"
+        values:
+          - name: SERVICE_ACK_RESPONSE 
+            value: "serviceAckResponse"
+            desc: "Response from one or more serviceAckRequest messsages"
+          - name: TEST_C2D 
+            value: "testC2d"
+            desc: "C2d test messaage"
+          - name: METHOD_RESPONSE
+            value: "methodResponse"
+            desc: "Result of a direct method invocation"
 
   - name: Events
     desc: "Names of different Azure Monitor events"
@@ -408,3 +454,16 @@ groups:
       - name: EXIT_REASON 
         value: "exitReason"
         desc: "Reason the test is exiting"
+
+  - name: MethodNames
+    desc: "Names of vaious methods used while testing direct methods"
+    values:
+      - name: FAIL_WITH_404
+        value: "failWith404"
+        desc: "Fail with status 404 and verify that it returns the error to the caller."
+      - name: ECHO_REQUEST
+        value: "echoRequest"
+        desc: "echo the request as the resopnse with a 200 return code"
+      - name: UNDEFINED_METHOD_NAME
+        value: "undefinedMethodName"
+        desc: "method name which is not handled by the device client."
