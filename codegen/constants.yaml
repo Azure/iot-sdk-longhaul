@@ -58,6 +58,8 @@ groups:
             value: "testControl"
           - name: TEST_CONTENT 
             value: "testContent"
+          - name: EXIT_REASON
+            value: "exitReason"
       - name: Pairing
         desc: "properties.reported.thief.pairing"
         values:

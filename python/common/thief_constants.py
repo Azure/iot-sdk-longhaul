@@ -43,6 +43,7 @@ class Fields(object):
     PAIRING = "pairing"
     TEST_CONTROL = "testControl"
     TEST_CONTENT = "testContent"
+    EXIT_REASON = "exitReason"
 
     # ---------------------------------
     # properties.reported.thief.pairing
