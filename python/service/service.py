@@ -827,7 +827,7 @@ class ServiceApp(app_base.AppBase):
                 else:
                     run_id = None
             if not run_id:
-                run_id = thief.get(Fields.PAIRING, {}).get(Fields.RunId, None)
+                run_id = thief.get(Fields.PAIRING, {}).get(Fields.RUN_ID, None)
 
             logger.info(
                 "Twin change for {}: {}".format(device_id, event.body_as_json()),

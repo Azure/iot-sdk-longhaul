@@ -11,7 +11,7 @@ import threading
 import pprint
 import sys
 import collections
-from concurrent.futures import ThreadPoolExecutor
+from executor import BetterThreadPoolExecutor, reset_watchdog
 import dps
 import queue
 import app_base
@@ -132,7 +132,7 @@ Object we use internally to keep track of how the entire test is configured.
 Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
-    Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 0,
+    Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 38,
     Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS: 30,
     Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
     Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT: 10,
@@ -157,7 +157,7 @@ class DeviceApp(app_base.AppBase):
         global device_run_config
         super(DeviceApp, self).__init__()
 
-        self.executor = ThreadPoolExecutor(max_workers=128)
+        self.executor = BetterThreadPoolExecutor(max_workers=128)
         self.done = threading.Event()
         self.client = None
         self.hub = None
@@ -336,6 +336,7 @@ class DeviceApp(app_base.AppBase):
         now = datetime.datetime.now(datetime.timezone.utc)
         elapsed_time = now - self.metrics.run_start_utc
 
+        # TODO: add these to Fields object
         props = {
             "runStartUtc": self.metrics.run_start_utc.isoformat(),
             "latestUpdateTimeUtc": now.isoformat(),
@@ -470,7 +471,7 @@ class DeviceApp(app_base.AppBase):
         msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = running_op.id
         return msg
 
-    def pairing_thread(self, worker_thread_info):
+    def pairing_thread(self):
         """
         "pair" with a service app. This is necessary because we can have a single
         service app responsible for multiple device apps.  The pairing process works
@@ -491,7 +492,7 @@ class DeviceApp(app_base.AppBase):
         pairing_last_request_epochtime = 0
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -619,7 +620,7 @@ class DeviceApp(app_base.AppBase):
         logger.info("Pairing is complete.  Starting c2d")
         self.start_c2d_message_sending()
 
-    def send_message_thread(self, worker_thread_info):
+    def send_message_thread(self):
         """
         Thread which reads the telemetry queue and sends the telemetry.  Since send_message is
         blocking, and we want to overlap send_messsage calls, we create multiple
@@ -629,7 +630,7 @@ class DeviceApp(app_base.AppBase):
         we can have
         """
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -668,7 +669,7 @@ class DeviceApp(app_base.AppBase):
             self.reporter.set_metrics_from_dict(props[Fields.TEST_METRICS])
             self.reporter.record()
 
-    def test_send_message_thread(self, worker_thread_info):
+    def test_send_message_thread(self):
         """
         Thread to continuously send d2c messages throughout the longhaul run.  This thread doesn't
         actually send messages because send_message is blocking and we want to overlap our send
@@ -677,7 +678,7 @@ class DeviceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -727,7 +728,7 @@ class DeviceApp(app_base.AppBase):
                 # pairing is not complete
                 time.sleep(1)
 
-    def update_thief_properties_thread(self, worker_thread_info):
+    def update_thief_properties_thread(self):
         """
         Thread which occasionally sends reported properties with information about how the
         test is progressing
@@ -735,7 +736,7 @@ class DeviceApp(app_base.AppBase):
         done = False
 
         while not done:
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -760,13 +761,13 @@ class DeviceApp(app_base.AppBase):
 
             self.done.wait(self.config[Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS])
 
-    def wait_for_desired_properties_thread(self, worker_thread_info):
+    def wait_for_desired_properties_thread(self):
         """
         Thread which waits for desired property patches and puts them into
         queues for other threads to handle
         """
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -781,7 +782,7 @@ class DeviceApp(app_base.AppBase):
                 else:
                     self.incoming_desired_property_patch_queue.put(props)
 
-    def dispatch_incoming_message_thread(self, worker_thread_info):
+    def dispatch_incoming_message_thread(self):
         """
         Thread which continuously receives c2d messages throughout the test run.  This
         thread does minimal processing for each c2d.  If anything complex needs to happen as a
@@ -789,7 +790,7 @@ class DeviceApp(app_base.AppBase):
         to pick up.
         """
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -840,7 +841,7 @@ class DeviceApp(app_base.AppBase):
                 else:
                     logger.warning("C2D received, but it's not for us: {}".format(obj))
 
-    def handle_service_ack_response_thread(self, worker_thread_info):
+    def handle_service_ack_response_thread(self):
         """
         Thread which handles incoming service_ack responses.  This is where we go through the list
         of `serviceAckId` values that we received and call the appropriate callbacks to indicate that
@@ -848,7 +849,7 @@ class DeviceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -897,7 +898,7 @@ class DeviceApp(app_base.AppBase):
         logger.info("Enabling C2D message testing: {}".format(props))
         self.client.patch_twin_reported_properties(props)
 
-    def handle_incoming_test_c2d_messages_thread(self, worker_thread_info):
+    def handle_incoming_test_c2d_messages_thread(self):
         """
         Thread which handles c2d messages that were sent by the service app for the purpose of
         testing c2d
@@ -905,7 +906,7 @@ class DeviceApp(app_base.AppBase):
         last_message_epochtime = 0
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -941,14 +942,14 @@ class DeviceApp(app_base.AppBase):
                         )
                     )
 
-    def test_twin_properties_thread(self, worker_thread_info):
+    def test_twin_properties_thread(self):
         """
         Thread to test twin properties. The twin property tests consists of two subtests: one for
         reported properties and the other for desired properties.
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -959,15 +960,15 @@ class DeviceApp(app_base.AppBase):
 
             else:
                 self.subtest_method_invoke()
-                worker_thread_info.watchdog_epochtime = time.time()
+                reset_watchdog()
                 time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
                 self.subtest_send_single_reported_prop()
-                worker_thread_info.watchdog_epochtime = time.time()
+                reset_watchdog()
                 time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
                 self.subtest_desired_properties()
-                worker_thread_info.watchdog_epochtime = time.time()
+                reset_watchdog()
                 time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
     def subtest_send_single_reported_prop(self):
@@ -1103,9 +1104,9 @@ class DeviceApp(app_base.AppBase):
             )
             self.metrics.get_twin_count_timed_out_out.increment()
 
-    def handle_method_thread(self, worker_thread_info):
+    def handle_method_thread(self):
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -1219,61 +1220,62 @@ class DeviceApp(app_base.AppBase):
         # pair with a service app instance
         self.start_pairing()
 
-        # Make a list of threads to launch
-        worker_thread_infos = [
-            app_base.WorkerThreadInfo(
-                self.dispatch_incoming_message_thread, "dispatch_incoming_message_thread"
-            ),
-            app_base.WorkerThreadInfo(
-                self.update_thief_properties_thread, "update_thief_properties_thread"
-            ),
-            app_base.WorkerThreadInfo(
-                self.wait_for_desired_properties_thread, "wait_for_desired_properties_thread"
-            ),
-            app_base.WorkerThreadInfo(
-                self.handle_service_ack_response_thread, "handle_service_ack_response_thread"
-            ),
-            app_base.WorkerThreadInfo(self.test_send_message_thread, "test_send_message_thread"),
-            app_base.WorkerThreadInfo(
-                self.handle_incoming_test_c2d_messages_thread,
-                "handle_incoming_test_c2d_messages_thread",
-            ),
-            app_base.WorkerThreadInfo(self.pairing_thread, "pairing_thread"),
-            app_base.WorkerThreadInfo(
-                self.test_twin_properties_thread, "test_twin_properties_thread"
-            ),
-            app_base.WorkerThreadInfo(self.handle_method_thread, "handle_method_thread"),
-        ]
+        # Launch threads
+        self.executor.submit(self.dispatch_incoming_message_thread, critical=True)
+        self.executor.submit(self.update_thief_properties_thread, critical=True)
+        self.executor.submit(self.wait_for_desired_properties_thread, critical=True)
+        self.executor.submit(self.handle_service_ack_response_thread, critical=True)
+        self.executor.submit(self.test_send_message_thread, critical=True)
+        self.executor.submit(self.handle_incoming_test_c2d_messages_thread, critical=True)
+        self.executor.submit(self.pairing_thread, critical=True)
+        self.executor.submit(self.test_twin_properties_thread, critical=True)
+        self.executor.submit(self.handle_method_thread, critical=True)
         for i in range(0, self.config[Settings.SEND_MESSAGE_THREAD_COUNT]):
-            worker_thread_infos.append(
-                app_base.WorkerThreadInfo(
-                    self.send_message_thread, "send_message_thread #{}".format(i),
-                )
+            self.executor.submit(
+                self.send_message_thread,
+                thread_name="send_message_thread #{}".format(i),
+                critical=True,
             )
 
         # TODO: add virtual function that can be used to wait for all messages to arrive after test is done
 
-        exit_reason = "UNKNOWN EXIT REASON"
+        self.metrics.exit_reason = "UNKNOWN EXIT REASON"
+        start_time = time.time()
+        planned_end_time = start_time + self.config[Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS]
         try:
-            self.run_threads(
-                worker_thread_infos,
-                max_run_duration=self.config[Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS],
-                watchdog_failure_interval_in_seconds=self.config[
-                    Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS
-                ],
-            )
+            while time.time() < planned_end_time:
+                # TODO: this doesn't trigger a cleanup in any way, shape, or form
+                self.executor.wait_for_thread_death_event(planned_end_time - time.time())
+                self.metrics.run_state = app_base.COMPLETE
+                self.metrics.exit_reason = "Successful run"
+                # TODO: figure out where to put INTERRUPTED
+                self.executor.check_watchdogs()
+                self.executor.check_for_failures(None)
         except BaseException as e:
-            exit_reason = str(e) or type(e)
+            self.metrics.run_state = app_base.FAILED
+            self.metrics.exit_reason = str(e) or type(e)
             raise
         finally:
+            logger.info("---------------------------------------Setting done flag")
+            self.done.set()
+            done, not_done = self.executor.wait(timeout=60)
+            if not_done:
+                logger.error("{} threads not stopped after ending run".format(len(not_done)))
+
             logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
-            if self.metrics.exit_reason:
-                exit_reason = self.metrics.exit_reason
             event_logger.info(
-                Events.ENDING_RUN, extra=custom_props({CustomDimensions.EXIT_REASON: exit_reason}),
+                Events.ENDING_RUN,
+                extra=custom_props({CustomDimensions.EXIT_REASON: self.metrics.exit_reason}),
             )
 
+            # TODO: push elapsed time and exit reason here instead of relying on reported property thread
+
+            logger.info("Disconnecting")
+            self.client.disconnect()
+            logger.info("Done disconnecting")
+
     def disconnect(self):
+        # TODO: remove after removing abstract method from base
         self.client.disconnect()
 
 
