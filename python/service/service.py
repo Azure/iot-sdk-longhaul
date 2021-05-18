@@ -12,7 +12,7 @@ import app_base
 import uuid
 import collections
 import faulthandler
-from concurrent.futures import ThreadPoolExecutor
+from executor import BetterThreadPoolExecutor, reset_watchdog
 from azure.iot.hub import IoTHubRegistryManager, iothub_amqp_client
 from azure.iot.hub.protocol.models import Twin, TwinProperties, CloudToDeviceMethod
 import azure.iot.hub.constant
@@ -87,6 +87,7 @@ class PerDeviceData(object):
 
 
 class ServiceRunMetrics(object):
+    # TODO Remove this
     """
     Object we use internally to keep track of how a the entire test is performing.
     """
@@ -105,9 +106,6 @@ class ServiceRunConfig(object):
     """
 
     def __init__(self):
-        # How long does this app live?  0 == forever
-        self.max_run_duration = 0
-
         # How long do we allow a thread to be unresponsive for.
         self.watchdog_failure_interval_in_seconds = 300
 
@@ -143,7 +141,7 @@ class ServiceApp(app_base.AppBase):
     def __init__(self):
         super(ServiceApp, self).__init__()
 
-        self.executor = ThreadPoolExecutor(max_workers=128)
+        self.executor = BetterThreadPoolExecutor(max_workers=128)
         self.done = threading.Event()
         self.registry_manager_lock = threading.Lock()
         self.registry_manager = None
@@ -253,7 +251,7 @@ class ServiceApp(app_base.AppBase):
             )
         )
 
-    def dispatch_incoming_messages_thread(self, worker_thread_info):
+    def dispatch_incoming_messages_thread(self):
         """
         Function to dispatch incoming EventHub messages.  A different thread receives the messages
         and puts them into `incoming_eventhub_event_queue`.  This thread removes events from
@@ -262,7 +260,7 @@ class ServiceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -328,7 +326,7 @@ class ServiceApp(app_base.AppBase):
                             extra=custom_props(device_id, device_data.run_id),
                         )
 
-    def receive_incoming_messages_thread(self, worker_thread_info):
+    def receive_incoming_messages_thread(self):
         """
         Thread to listen on eventhub for events that we can handle.  This thread does minimal
         checking to see if an event is "interesting" before placing it into `incoming_eventhub_event_queue`.
@@ -349,7 +347,7 @@ class ServiceApp(app_base.AppBase):
             logger.warning("EventHub on_partition_close: {}".format(reason))
 
         def on_event(partition_context, event):
-            worker_thread_info.watchdog_epochtime = time.time()
+            # TODO: can't reset watchdog here.  Thread ain't right.
             if event:
                 # We put all received events into our queue.  The thread that handles
                 # incoming_eventhub_event_queue items will decide if the event needs to be handled
@@ -366,7 +364,7 @@ class ServiceApp(app_base.AppBase):
                 max_wait_time=30,
             )
 
-    def send_outgoing_c2d_messages_thread(self, worker_thread_info):
+    def send_outgoing_c2d_messages_thread(self):
         """
         Thread which is responsible for sending C2D messages.  This is separated into it's own
         thread in order to centralize error handling and also because sending is a synchronous
@@ -377,7 +375,7 @@ class ServiceApp(app_base.AppBase):
         refresh_registry_manager = False
 
         while not (self.done.isSet() and self.outgoing_c2d_queue.empty()):
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -454,7 +452,7 @@ class ServiceApp(app_base.AppBase):
                                 extra=custom_props(device_id, device_data.run_id),
                             )
 
-    def handle_service_ack_request_thread(self, worker_thread_info):
+    def handle_service_ack_request_thread(self):
         """
         Thread which is responsible for returning serviceAckResponse message to the
         device clients.  The various serviceAcks are collected in `outgoing_service_ack_response_queue`
@@ -465,7 +463,7 @@ class ServiceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -543,14 +541,14 @@ class ServiceApp(app_base.AppBase):
                 device_data.c2d_interval_in_seconds = interval
                 device_data.c2d_next_message_epochtime = 0
 
-    def test_c2d_thread(self, worker_thread_info):
+    def test_c2d_thread(self):
         """
         Thread to send test C2D messages to devices which have enabled C2D testing
         """
 
         while not self.done.isSet():
             now = time.time()
-            worker_thread_info.watchdog_epochtime = now
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -619,7 +617,7 @@ class ServiceApp(app_base.AppBase):
             if next_iteration_epochtime > now:
                 time.sleep(next_iteration_epochtime - now)
 
-    def pairing_thread(self, worker_thread_info):
+    def pairing_thread(self):
         """
         Thread which responds to pairing events on the hub.  It does this by watching for changes
         to all device twin reported propreties under /thief/pairing.  If the change is
@@ -631,7 +629,7 @@ class ServiceApp(app_base.AppBase):
         """
 
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -795,13 +793,13 @@ class ServiceApp(app_base.AppBase):
                 interval = c2d[Fields.MESSAGE_INTERVAL_IN_SECONDS]
                 self.start_c2d_message_sending(device_id, interval)
 
-    def dispatch_twin_change_thread(self, worker_thread_info):
+    def dispatch_twin_change_thread(self):
         """
         Thread which goes through the queue of twin changes messages which have arrived and
         acts on the content.
         """
         while not self.done.isSet():
-            worker_thread_info.watchdog_epochtime = time.time()
+            reset_watchdog()
             if self.is_paused():
                 time.sleep(1)
                 continue
@@ -860,42 +858,33 @@ class ServiceApp(app_base.AppBase):
             eventhub_connection_string, consumer_group=eventhub_consumer_group
         )
 
-        threads_to_launch = [
-            app_base.WorkerThreadInfo(
-                self.receive_incoming_messages_thread, "receive_incoming_messages_thread"
-            ),
-            app_base.WorkerThreadInfo(
-                self.dispatch_incoming_messages_thread, "dispatch_incoming_messages_thread"
-            ),
-            app_base.WorkerThreadInfo(self.pairing_thread, "pairing_thread"),
-            app_base.WorkerThreadInfo(
-                self.dispatch_twin_change_thread, "dispatch_twin_change_thread"
-            ),
-            app_base.WorkerThreadInfo(
-                self.send_outgoing_c2d_messages_thread, "send_outgoing_c2d_messages_thread"
-            ),
-            app_base.WorkerThreadInfo(
-                self.handle_service_ack_request_thread, "handle_service_ack_request_thread"
-            ),
-            app_base.WorkerThreadInfo(self.test_c2d_thread, "test_c2d_thread"),
-        ]
+        self.executor.submit(self.receive_incoming_messages_thread, critical=True)
+        self.executor.submit(self.dispatch_incoming_messages_thread, critical=True)
+        self.executor.submit(self.pairing_thread, critical=True)
+        self.executor.submit(self.dispatch_twin_change_thread, critical=True)
+        self.executor.submit(self.send_outgoing_c2d_messages_thread, critical=True)
+        self.executor.submit(self.handle_service_ack_request_thread, critical=True)
+        self.executor.submit(self.test_c2d_thread, critical=True)
 
-        self.run_threads(
-            threads_to_launch,
-            max_run_duration=self.config.max_run_duration,
-            watchdog_failure_interval_in_seconds=self.config.watchdog_failure_interval_in_seconds,
-        )
+        try:
+            while True:
+                self.executor.wait_for_thread_death_event()
+                self.executor.check_watchdogs()
+                self.executor.check_for_failures(None)
+        except Exception as e:
+            logger.error("Fatal exception: {}".format(str(e) or type(e), exc_info=True))
+        finally:
+            # close the eventhub consumer before shutting down threads.  This is necessary because
+            # the "receive" function that we use to receive EventHub events is blocking and doesn't
+            # have a timeout.
+            logger.info("closing eventhub listener")
+            self.eventhub_consumer_client.close()
+            self.done.set()
+            done, not_done = self.executor.wait(timeout=60)
+            if not_done:
+                logger.error("{} threads not stopped after ending run".format(len(not_done)))
 
-    def pre_shutdown(self):
-        # close the eventhub consumer before shutting down threads.  This is necessary because
-        # the "receive" function that we use to receive EventHub events is blocking and doesn't
-        # have a timeout.
-        logger.info("closing eventhub listener")
-        self.eventhub_consumer_client.close()
-
-    def disconnect(self):
-        # nothing to do
-        pass
+            logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
 
 
 if __name__ == "__main__":
