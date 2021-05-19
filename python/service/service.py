@@ -8,7 +8,6 @@ import queue
 import threading
 import json
 import datetime
-import app_base
 import uuid
 import collections
 import faulthandler
@@ -18,7 +17,7 @@ from azure.iot.hub.protocol.models import Twin, TwinProperties, CloudToDeviceMet
 import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
 import azure_monitor
-from thief_constants import Const, Fields, Commands
+from thief_constants import Const, Fields, Commands, RunStates
 
 faulthandler.enable()
 
@@ -86,20 +85,6 @@ class PerDeviceData(object):
         self.reported_property_values = {}
 
 
-class ServiceRunMetrics(object):
-    # TODO Remove this
-    """
-    Object we use internally to keep track of how a the entire test is performing.
-    """
-
-    def __init__(self):
-        self.run_start_utc = None
-        self.run_end_utc = None
-        self.run_time = None
-        self.run_state = app_base.WAITING
-        self.exit_reason = None
-
-
 class ServiceRunConfig(object):
     """
     Object we use internally to keep track of how the entire test is configured.
@@ -133,7 +118,7 @@ def get_message_source_from_event(event):
     return event.message.annotations["iothub-message-source".encode()].decode()
 
 
-class ServiceApp(app_base.AppBase):
+class ServiceApp(object):
     """
     Main application object
     """
@@ -146,7 +131,6 @@ class ServiceApp(app_base.AppBase):
         self.registry_manager_lock = threading.Lock()
         self.registry_manager = None
         self.eventhub_consumer_client = None
-        self.metrics = ServiceRunMetrics()
         self.config = ServiceRunConfig()
 
         # for any kind of c2d
@@ -239,7 +223,6 @@ class ServiceApp(app_base.AppBase):
             }
         )
 
-        # TODO: remove METHOD_GUID
         logger.info("------------------------------------------------------------------")
         logger.info("queueing response {}".format(method_guid))
 
@@ -261,9 +244,6 @@ class ServiceApp(app_base.AppBase):
 
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             try:
                 event = self.incoming_eventhub_event_queue.get(timeout=1)
@@ -347,7 +327,7 @@ class ServiceApp(app_base.AppBase):
             logger.warning("EventHub on_partition_close: {}".format(reason))
 
         def on_event(partition_context, event):
-            # TODO: can't reset watchdog here.  Thread ain't right.
+            reset_watchdog()
             if event:
                 # We put all received events into our queue.  The thread that handles
                 # incoming_eventhub_event_queue items will decide if the event needs to be handled
@@ -376,9 +356,6 @@ class ServiceApp(app_base.AppBase):
 
         while not (self.done.isSet() and self.outgoing_c2d_queue.empty()):
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             if (
                 time.time() - last_amqp_refresh_epochtime
@@ -464,9 +441,6 @@ class ServiceApp(app_base.AppBase):
 
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             service_acks = {}
             while True:
@@ -549,9 +523,6 @@ class ServiceApp(app_base.AppBase):
         while not self.done.isSet():
             now = time.time()
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             with self.pairing_list_lock:
                 devices = list(self.paired_devices.keys())
@@ -630,9 +601,6 @@ class ServiceApp(app_base.AppBase):
 
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             try:
                 event = self.incoming_pairing_request_queue.get(timeout=1)
@@ -800,9 +768,6 @@ class ServiceApp(app_base.AppBase):
         """
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             try:
                 event = self.incoming_twin_changes.get(timeout=1)
@@ -838,7 +803,7 @@ class ServiceApp(app_base.AppBase):
                 self.respond_to_test_control_properties(event)
 
             run_state = thief.get(Fields.SESSION_METRICS, {}).get("runState")
-            if run_state and run_state != app_base.RUNNING:
+            if run_state and run_state != RunStates.RUNNING:
                 logger.info(
                     "Device {} no longer running.".format(device_id),
                     extra=custom_props(device_id, run_id),
@@ -846,9 +811,6 @@ class ServiceApp(app_base.AppBase):
                 self.remove_device_from_pairing_list(device_id)
 
     def main(self):
-
-        self.metrics.run_start_utc = datetime.datetime.now(datetime.timezone.utc)
-        self.metrics.run_state = app_base.RUNNING
 
         with self.registry_manager_lock:
             logger.info("creating registry manager")

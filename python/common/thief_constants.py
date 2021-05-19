@@ -110,9 +110,6 @@ class Fields(object):
     # Payload to send with method invocation
     METHOD_INVOKE_PAYLOAD = "methodInvokePayload"
 
-    # Guid used to tie method request with method response
-    METHOD_GUID = "methodGuid"
-
     # timeout for receiving a response from a method invoke
     METHOD_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS = "methodInvokeResponseTimeoutInSeconds"
 
@@ -122,9 +119,6 @@ class Fields(object):
     # ---------------------------------------------------
     # Fields inside C2D messages used for testing methods
     # ---------------------------------------------------
-
-    # GUID used to tie method request with method response
-    METHOD_GUID = "methodGuid"
 
     # Payload sent with method response
     METHOD_RESPONSE_PAYLOAD = "methodResponsePayload"
@@ -298,6 +292,36 @@ class Metrics(object):
     LATENCY_BETWEEN_C2D = "latencyBetweenC2dInSeconds"
 
 
+class SystemProperties(object):
+    """
+    Properties for the system runnin the test
+    """
+
+    # Language of the app running the test (Python, Node, etc)
+    LANGUAGE = "language"
+
+    # Version of the language running the test (3.6, 3.7, etc)
+    LANGUAGE_VERSION = "languageVersion"
+
+    # Version of the SDK that the test is using
+    SDK_VERSION = "sdkVersion"
+
+    # Github repo with the SDK code that the test is using
+    SDK_GITHUB_REPO = "sdkGithubRepo"
+
+    # Branch in the github repo with the SDK code that the test is using
+    SDK_GITHUB_BRANCH = "sdkGithubBranch"
+
+    # Commit SHA for the commit in the github repo that the test is using
+    SDK_GITHUB_COMMIT = "sdkGithubCommit"
+
+    # Type of OS: Linux, Windows, etc
+    OS_TYPE = "osType"
+
+    # Specific OS release being used
+    OS_RELEASE = "osRelease"
+
+
 class Settings(object):
     """
     Names of thief settings which are used to configure the device app for a test run
@@ -371,7 +395,7 @@ class CustomDimensions(object):
     # OS type, e.g. Linux, Windows
     OS_TYPE = "osType"
 
-    # Langauge being used.  e.g. Python, Node, dotnet
+    # Language being used.  e.g. Python, Node, dotnet
     SDK_LANGUAGE = "sdkLanguage"
 
     # Version of language being used.  e.g. 3.8.1
@@ -418,3 +442,24 @@ class MethodNames(object):
 
     # method name which is not handled by the device client.
     UNDEFINED_METHOD_NAME = "undefinedMethodName"
+
+
+class RunStates(object):
+    """
+    Enum to report run states
+    """
+
+    # Test app has not started
+    WAITING = "Waiting"
+
+    # Test app is currently running
+    RUNNING = "Running"
+
+    # Test run has failed
+    FAILED = "Failed"
+
+    # Test run has completed successfully
+    COMPLETE = "Complete"
+
+    # Test run was interrupted
+    INTERRUPTED = "Interrupted"
