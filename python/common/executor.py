@@ -21,14 +21,14 @@ class FutureThreadInfo(object):
         self.thread = None
         self.started = threading.Event()
         self.start_time = None
-        self.watchdog_time = None
+        self.watchdog_reset_time = None
         self.long_run_warning_reported = False
         self.executor = None
         self.name_at_death = None
 
 
 # thread_local_storage is an object that looks like a global, but has a different
-# value inside each thread.  We use this so we can have a different watchdog_time
+# value inside each thread.  We use this so we can have a different watchdog_reset_time
 # value in each thread.
 thread_local_storage = threading.local()
 
@@ -37,7 +37,7 @@ DEFAULT_WATCHDOG_INTERVAL = 600
 
 
 def reset_watchdog():
-    # reset the watchdog_time value inside this thread's local storage
+    # reset the watchdog_reset_time value inside this thread's local storage
     thread_local_storage.future_thread_info.watchdog_reset_time = time.time()
 
 
@@ -146,7 +146,7 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
                         if info.critical:
                             logger.error("Thread {} watchdog failure".format(info.thread.name))
                             first_exception = first_exception or Exception(
-                                "Thread {} watchdog failure".format(info.name)
+                                "Thread {} watchdog failure".format(info.thread.name)
                             )
 
                 else:
@@ -167,7 +167,7 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
                             if info.critical:
                                 logger.error("Thread {} long-run failure".format(info.thread.name))
                                 first_exception = first_exception or Exception(
-                                    "Thread {} long-run failure".format(info.name)
+                                    "Thread {} long-run failure".format(info.thread.name)
                                 )
                             info.long_run_warning_reported = True
 

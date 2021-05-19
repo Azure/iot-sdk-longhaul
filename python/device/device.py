@@ -1244,13 +1244,16 @@ class DeviceApp(app_base.AppBase):
         planned_end_time = start_time + self.config[Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS]
         try:
             while time.time() < planned_end_time:
-                # TODO: this doesn't trigger a cleanup in any way, shape, or form
                 self.executor.wait_for_thread_death_event(planned_end_time - time.time())
-                self.metrics.run_state = app_base.COMPLETE
-                self.metrics.exit_reason = "Successful run"
-                # TODO: figure out where to put INTERRUPTED
                 self.executor.check_watchdogs()
                 self.executor.check_for_failures(None)
+            self.metrics.run_state = app_base.COMPLETE
+            self.metrics.exit_reason = "Successful run"
+        except KeyboardInterrupt:
+            # TODO: enum can move from app_base now
+            self.metrics.run_state = app_base.INTERRUPTED
+            self.metrics.exit_reason = "KeyboardInterrupt"
+            raise
         except BaseException as e:
             self.metrics.run_state = app_base.FAILED
             self.metrics.exit_reason = str(e) or type(e)
@@ -1273,10 +1276,6 @@ class DeviceApp(app_base.AppBase):
             logger.info("Disconnecting")
             self.client.disconnect()
             logger.info("Done disconnecting")
-
-    def disconnect(self):
-        # TODO: remove after removing abstract method from base
-        self.client.disconnect()
 
 
 if __name__ == "__main__":
