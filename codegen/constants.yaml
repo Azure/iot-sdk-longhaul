@@ -136,9 +136,6 @@ groups:
           - name: METHOD_INVOKE_PAYLOAD
             value: "methodInvokePayload"
             desc: "Payload to send with method invocation"
-          - name: METHOD_GUID
-            value: "methodGuid"
-            desc: "Guid used to tie method request with method response"
           - name: METHOD_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS
             value: "methodInvokeResponseTimeoutInSeconds"
             desc: "timeout for receiving a response from a method invoke"
@@ -148,9 +145,6 @@ groups:
       - name: MethodTestC2d
         desc: "Fields inside C2D messages used for testing methods"
         values:
-          - name: METHOD_GUID
-            value: "methodGuid"
-            desc: "GUID used to tie method request with method response"
           - name: METHOD_RESPONSE_PAYLOAD
             value: "methodResponsePayload"
             desc: "Payload sent with method response"
@@ -355,6 +349,34 @@ groups:
             type: float
             units: seconds
 
+  - name: SystemProperties
+    desc: "Properties for the system runnin the test"
+    values:
+      - name: LANGUAGE
+        value: "language"
+        desc: "Language of the app running the test (Python, Node, etc)"
+      - name: LANGUAGE_VERSION
+        value: "languageVersion"
+        desc: "Version of the language running the test (3.6, 3.7, etc)"
+      - name: SDK_VERSION
+        value: "sdkVersion"
+        desc: "Version of the SDK that the test is using"
+      - name: SDK_GITHUB_REPO
+        value: "sdkGithubRepo"
+        desc: "Github repo with the SDK code that the test is using"
+      - name: SDK_GITHUB_BRANCH
+        value: "sdkGithubBranch"
+        desc: "Branch in the github repo with the SDK code that the test is using"
+      - name: SDK_GITHUB_COMMIT
+        value: "sdkGithubCommit"
+        desc: "Commit SHA for the commit in the github repo that the test is using"
+      - name: OS_TYPE
+        value: "osType"
+        desc: "Type of OS: Linux, Windows, etc"
+      - name: OS_RELEASE
+        value: "osRelease"
+        desc: "Specific OS release being used"
+
   - name: Settings
     desc: "Names of thief settings which are used to configure the device app for a test run"
     values:
@@ -422,7 +444,7 @@ groups:
         desc: "OS type, e.g. Linux, Windows"
       - name: SDK_LANGUAGE 
         value: "sdkLanguage"
-        desc: "Langauge being used.  e.g. Python, Node, dotnet"
+        desc: "Language being used.  e.g. Python, Node, dotnet"
       - name: SDK_LANGUAGE_VERSION 
         value: "sdkLanguageVersion"
         desc: "Version of language being used.  e.g. 3.8.1"
@@ -469,3 +491,22 @@ groups:
       - name: UNDEFINED_METHOD_NAME
         value: "undefinedMethodName"
         desc: "method name which is not handled by the device client."
+
+  - name: RunStates
+    desc: "Enum to report run states"
+    values:
+      - name: WAITING
+        value: "Waiting"
+        desc: "Test app has not started"
+      - name: RUNNING
+        value: "Running"
+        desc: "Test app is currently running"
+      - name: FAILED
+        value: "Failed"
+        desc: "Test run has failed"
+      - name: COMPLETE
+        value: "Complete"
+        desc: "Test run has completed successfully"
+      - name: INTERRUPTED
+        value: "Interrupted"
+        desc: "Test run was interrupted"

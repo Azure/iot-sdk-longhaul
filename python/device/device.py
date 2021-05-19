@@ -11,14 +11,15 @@ import threading
 import pprint
 import sys
 import collections
+import platform
 from executor import BetterThreadPoolExecutor, reset_watchdog
 import dps
 import queue
-import app_base
 import faulthandler
 from azure.iot.device import Message, MethodResponse
 import azure.iot.device.constant
 from measurement import ThreadSafeCounter
+from system_health_telemetry import SystemHealthTelemetry
 import azure_monitor
 from azure_monitor_metrics import MetricsReporter
 from out_of_order_message_tracker import OutOfOrderMessageTracker
@@ -31,6 +32,8 @@ from thief_constants import (
     Settings,
     CustomDimensions,
     MethodNames,
+    RunStates,
+    SystemProperties,
 )
 from running_operation_list import RunningOperationList
 
@@ -85,6 +88,15 @@ methods_to_test = [
 ]
 
 
+def _get_os_release_based_on_user_agent_standard():
+    return "({python_runtime};{os_type} {os_release};{architecture})".format(
+        python_runtime=platform.python_version(),
+        os_type=platform.system(),
+        os_release=platform.version(),
+        architecture=platform.machine(),
+    )
+
+
 def custom_props(extra_props):
     """
     helper function for adding customDimensions to logger calls at execution time
@@ -104,7 +116,7 @@ class DeviceRunMetrics(object):
 
     def __init__(self):
         self.run_start_utc = None
-        self.run_state = app_base.WAITING
+        self.run_state = RunStates.WAITING
         self.exit_reason = None
 
         self.client_library_count_exceptions = ThreadSafeCounter()
@@ -132,7 +144,7 @@ Object we use internally to keep track of how the entire test is configured.
 Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
-    Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 38,
+    Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
     Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS: 30,
     Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
     Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT: 10,
@@ -148,7 +160,7 @@ device_run_config = {
 }
 
 
-class DeviceApp(app_base.AppBase):
+class DeviceApp(object):
     """
     Main application object
     """
@@ -165,6 +177,7 @@ class DeviceApp(app_base.AppBase):
         self.metrics = DeviceRunMetrics()
         self.config = device_run_config
         self.service_instance_id = None
+        self.system_health_telemetry = SystemHealthTelemetry()
         # for service_acks
         self.running_operation_list = RunningOperationList()
         self.incoming_service_ack_response_queue = queue.Queue()
@@ -415,9 +428,7 @@ class DeviceApp(app_base.AppBase):
 
         props = {
             Fields.THIEF: {
-                Fields.SYSTEM_PROPERTIES: self.get_system_properties(
-                    azure.iot.device.constant.VERSION
-                ),
+                Fields.SYSTEM_PROPERTIES: self.get_system_properties(),
                 Fields.SESSION_METRICS: self.get_session_metrics(),
                 Fields.TEST_METRICS: self.get_test_metrics(),
                 Fields.CONFIG: self.config,
@@ -425,8 +436,29 @@ class DeviceApp(app_base.AppBase):
         }
         self.client.patch_twin_reported_properties(props)
 
-    # TODO: rename props to payload or dikt
-    def create_message_from_dict(self, props):
+    def get_system_properties(self):
+        return {
+            SystemProperties.LANGUAGE: "python",
+            SystemProperties.LANGUAGE_VERSION: platform.python_version(),
+            SystemProperties.SDK_VERSION: azure.iot.device.constant.VERSION,
+            SystemProperties.SDK_GITHUB_REPO: os.getenv("THIEF_SDK_GIT_REPO"),
+            SystemProperties.SDK_GITHUB_BRANCH: os.getenv("THIEF_SDK_GIT_BRANCH"),
+            SystemProperties.SDK_GITHUB_COMMIT: os.getenv("THIEF_SDK_GIT_COMMIT"),
+            SystemProperties.OS_TYPE: platform.system(),
+            SystemProperties.OS_RELEASE: _get_os_release_based_on_user_agent_standard(),
+        }
+
+    def get_system_health_telemetry(self):
+        props = {
+            Metrics.PROCESS_CPU_PERCENT: self.system_health_telemetry.process_cpu_percent,
+            Metrics.PROCESS_WORKING_SET: self.system_health_telemetry.process_working_set,
+            Metrics.PROCESS_BYTES_IN_ALL_HEAPS: self.system_health_telemetry.process_bytes_in_all_heaps,
+            Metrics.PROCESS_PRIVATE_BYTES: self.system_health_telemetry.process_private_bytes,
+            Metrics.PROCESS_WORKING_SET_PRIVATE: self.system_health_telemetry.process_working_set_private,
+        }
+        return props
+
+    def create_message_from_dict(self, payload):
         """
         helper function to create a message from a dict object
         """
@@ -434,11 +466,11 @@ class DeviceApp(app_base.AppBase):
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
         if self.service_instance_id:
-            props[Fields.THIEF][Fields.SERVICE_INSTANCE_ID] = self.service_instance_id
-        props[Fields.THIEF][Fields.RUN_ID] = run_id
+            payload[Fields.THIEF][Fields.SERVICE_INSTANCE_ID] = self.service_instance_id
+        payload[Fields.THIEF][Fields.RUN_ID] = run_id
 
         # This function only creates the message.  The caller needs to queue it up for sending.
-        msg = Message(json.dumps(props))
+        msg = Message(json.dumps(payload))
         msg.content_type = Const.JSON_CONTENT_TYPE
         msg.content_encoding = Const.JSON_CONTENT_ENCODING
 
@@ -449,7 +481,7 @@ class DeviceApp(app_base.AppBase):
         return msg
 
     def create_message_from_dict_with_service_ack(
-        self, props, on_service_ack_received, user_data=None
+        self, payload, on_service_ack_received, user_data=None
     ):
         """
         helper function to create a message from a dict and add service_ack
@@ -462,12 +494,12 @@ class DeviceApp(app_base.AppBase):
 
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
-        assert props[Fields.THIEF].get(Fields.CMD, None) is None
-        props[Fields.THIEF][Fields.CMD] = Commands.SERVICE_ACK_REQUEST
-        props[Fields.THIEF][Fields.SERVICE_ACK_ID] = running_op.id
+        assert payload[Fields.THIEF].get(Fields.CMD, None) is None
+        payload[Fields.THIEF][Fields.CMD] = Commands.SERVICE_ACK_REQUEST
+        payload[Fields.THIEF][Fields.SERVICE_ACK_ID] = running_op.id
 
         logger.info("Requesting service_ack for serviceAckId = {}".format(running_op.id))
-        msg = self.create_message_from_dict(props)
+        msg = self.create_message_from_dict(payload)
         msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = running_op.id
         return msg
 
@@ -493,9 +525,6 @@ class DeviceApp(app_base.AppBase):
 
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             try:
                 msg = self.incoming_pairing_message_queue.get(timeout=1)
@@ -631,9 +660,6 @@ class DeviceApp(app_base.AppBase):
         """
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             try:
                 msg = self.outgoing_test_message_queue.get(timeout=1)
@@ -679,12 +705,9 @@ class DeviceApp(app_base.AppBase):
 
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             if self.is_pairing_complete():
-                props = {
+                payload = {
                     Fields.THIEF: {
                         Fields.SESSION_METRICS: self.get_session_metrics(),
                         Fields.TEST_METRICS: self.get_test_metrics(),
@@ -693,7 +716,7 @@ class DeviceApp(app_base.AppBase):
                 }
 
                 # push these same metrics to Azure Monitor
-                self.send_metrics_to_azure_monitor(props[Fields.THIEF])
+                self.send_metrics_to_azure_monitor(payload[Fields.THIEF])
 
                 def on_service_ack_received(service_ack_id, user_data):
                     logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
@@ -717,7 +740,7 @@ class DeviceApp(app_base.AppBase):
                 # This function only queues the message.  A send_message_thread instance will pick
                 # it up and send it.
                 msg = self.create_message_from_dict_with_service_ack(
-                    props=props, on_service_ack_received=on_service_ack_received
+                    payload=payload, on_service_ack_received=on_service_ack_received
                 )
                 self.outgoing_test_message_queue.put(msg)
 
@@ -737,9 +760,6 @@ class DeviceApp(app_base.AppBase):
 
         while not done:
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             # setting this at the begining and checking at the end guarantees one last update
             # before the thread dies
@@ -768,9 +788,6 @@ class DeviceApp(app_base.AppBase):
         """
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             props = self.client.receive_twin_desired_properties_patch(timeout=30)
             if props:
@@ -791,9 +808,6 @@ class DeviceApp(app_base.AppBase):
         """
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             msg = self.client.receive_message(timeout=30)
 
@@ -850,9 +864,6 @@ class DeviceApp(app_base.AppBase):
 
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             try:
                 msg = self.incoming_service_ack_response_queue.get(timeout=1)
@@ -907,9 +918,6 @@ class DeviceApp(app_base.AppBase):
 
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
             try:
                 msg = self.incoming_test_c2d_message_queue.get(timeout=1)
@@ -950,11 +958,8 @@ class DeviceApp(app_base.AppBase):
 
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
 
-            elif not self.is_pairing_complete():
+            if not self.is_pairing_complete():
                 time.sleep(1)
                 continue
 
@@ -1107,13 +1112,6 @@ class DeviceApp(app_base.AppBase):
     def handle_method_thread(self):
         while not self.done.isSet():
             reset_watchdog()
-            if self.is_paused():
-                time.sleep(1)
-                continue
-
-            elif not self.is_pairing_complete():
-                time.sleep(1)
-                continue
 
             # TODO: remove timeout or switch to handlers
             logger.info("calling receive method function")
@@ -1199,7 +1197,7 @@ class DeviceApp(app_base.AppBase):
     def main(self):
 
         self.metrics.run_start_utc = datetime.datetime.now(datetime.timezone.utc)
-        self.metrics.run_state = app_base.RUNNING
+        self.metrics.run_state = RunStates.RUNNING
         logger.info("Starting at {}".format(self.metrics.run_start_utc))
 
         # Create our client and push initial properties
@@ -1247,15 +1245,14 @@ class DeviceApp(app_base.AppBase):
                 self.executor.wait_for_thread_death_event(planned_end_time - time.time())
                 self.executor.check_watchdogs()
                 self.executor.check_for_failures(None)
-            self.metrics.run_state = app_base.COMPLETE
+            self.metrics.run_state = RunStates.COMPLETE
             self.metrics.exit_reason = "Successful run"
         except KeyboardInterrupt:
-            # TODO: enum can move from app_base now
-            self.metrics.run_state = app_base.INTERRUPTED
+            self.metrics.run_state = RunStates.INTERRUPTED
             self.metrics.exit_reason = "KeyboardInterrupt"
             raise
         except BaseException as e:
-            self.metrics.run_state = app_base.FAILED
+            self.metrics.run_state = RunStates.FAILED
             self.metrics.exit_reason = str(e) or type(e)
             raise
         finally:
