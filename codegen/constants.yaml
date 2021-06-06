@@ -383,9 +383,6 @@ groups:
       - name: THIEF_MAX_RUN_DURATION_IN_SECONDS 
         value: "thiefMaxRunDurationInSeconds"
         desc: "how long should the test run before finishing.  0 = forever"
-      - name: THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS 
-        value: "thiefPropertyUpdateIntervalInSeconds"
-        desc: "How often do we update thief reported properties (with metrics)"
       - name: THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS 
         value: "thiefWatchdogFailureIntervalInSeconds"
         desc: "How long can a thread go without updating its watchdog before failing"

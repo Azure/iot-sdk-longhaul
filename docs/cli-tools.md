@@ -78,7 +78,6 @@ If we look at the `nov12-03` test, we can see that the `exitReason` indicates a 
         "sendMessageThreadCount": 10,
         "thiefAllowedClientLibraryExceptionCount": 10,
         "thiefMaxRunDurationInSeconds": 0,
-        "thiefPropertyUpdateIntervalInSeconds": 30,
         "thiefWatchdogFailureIntervalInSeconds": 60
       },
       "pairing": {
