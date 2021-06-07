@@ -145,7 +145,6 @@ Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
     Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
-    Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS: 30,
     Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
     Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT: 10,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
@@ -751,36 +750,6 @@ class DeviceApp(object):
                 # pairing is not complete
                 time.sleep(1)
 
-    def update_thief_properties_thread(self):
-        """
-        Thread which occasionally sends reported properties with information about how the
-        test is progressing
-        """
-        done = False
-
-        while not done:
-            reset_watchdog()
-
-            # setting this at the begining and checking at the end guarantees one last update
-            # before the thread dies
-            if self.done.isSet():
-                done = True
-
-            props = {
-                Fields.THIEF: {
-                    Fields.SESSION_METRICS: self.get_session_metrics(),
-                    Fields.TEST_METRICS: self.get_test_metrics(),
-                    # systemHealthMetrics don't go into reported properties
-                }
-            }
-
-            logger.info("Updating thief props: {}".format(pprint.pformat(props)))
-            self.client.patch_twin_reported_properties(props)
-
-            self.check_failure_counts()
-
-            self.done.wait(self.config[Settings.THIEF_PROPERTY_UPDATE_INTERVAL_IN_SECONDS])
-
     def wait_for_desired_properties_thread(self):
         """
         Thread which waits for desired property patches and puts them into
@@ -964,19 +933,19 @@ class DeviceApp(object):
                 continue
 
             else:
-                self.subtest_method_invoke()
+                self.test_method_invoke()
                 reset_watchdog()
                 time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
-                self.subtest_send_single_reported_prop()
+                self.test_reported_properties()
                 reset_watchdog()
                 time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
-                self.subtest_desired_properties()
+                self.test_desired_properties()
                 reset_watchdog()
                 time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
-    def subtest_send_single_reported_prop(self):
+    def test_reported_properties(self):
         """
         test function to send a single reported property and then clear it after the
         server verifies it. It does this by setting properties inside
@@ -1007,7 +976,15 @@ class DeviceApp(object):
 
         logger.info("Adding test property {}".format(prop_name))
         start_time = time.time()
-        self.client.patch_twin_reported_properties(make_reported_prop(prop_name, prop_value))
+        props = make_reported_prop(prop_name, prop_value)
+        props[Fields.THIEF].update(
+            {
+                Fields.SESSION_METRICS: self.get_session_metrics(),
+                Fields.TEST_METRICS: self.get_test_metrics(),
+                # systemHealthMetrics don't go into reported properties
+            }
+        )
+        self.client.patch_twin_reported_properties(props)
 
         if add_operation.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
             logger.info("Add of reported property {} verified by service".format(prop_name))
@@ -1035,7 +1012,7 @@ class DeviceApp(object):
             logger.info("Remove of reported property {} verification timeout".format(prop_name))
             self.metrics.reported_properties_count_timed_out.increment()
 
-    def subtest_desired_properties(self):
+    def test_desired_properties(self):
         """
         Test function to set a desired property, wait for the patch to arrive at the client,
         then get the twin to verify that it shows up in the twin.
@@ -1135,7 +1112,7 @@ class DeviceApp(object):
                         MethodResponse.create_from_method_request(method_request, 500)
                     )
 
-    def subtest_method_invoke(self):
+    def test_method_invoke(self):
         for method in methods_to_test:
             running_op = self.running_operation_list.make_event_based_operation()
 
@@ -1220,7 +1197,6 @@ class DeviceApp(object):
 
         # Launch threads
         self.executor.submit(self.dispatch_incoming_message_thread, critical=True)
-        self.executor.submit(self.update_thief_properties_thread, critical=True)
         self.executor.submit(self.wait_for_desired_properties_thread, critical=True)
         self.executor.submit(self.handle_service_ack_response_thread, critical=True)
         self.executor.submit(self.test_send_message_thread, critical=True)
@@ -1235,16 +1211,16 @@ class DeviceApp(object):
                 critical=True,
             )
 
-        # TODO: add virtual function that can be used to wait for all messages to arrive after test is done
-
         self.metrics.exit_reason = "UNKNOWN EXIT REASON"
         start_time = time.time()
         planned_end_time = start_time + self.config[Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS]
         try:
             while time.time() < planned_end_time:
+                # TODO: limit sleep length to check failure counts more often
                 self.executor.wait_for_thread_death_event(planned_end_time - time.time())
                 self.executor.check_watchdogs()
                 self.executor.check_for_failures(None)
+                self.check_failure_counts()
             self.metrics.run_state = RunStates.COMPLETE
             self.metrics.exit_reason = "Successful run"
         except KeyboardInterrupt:
@@ -1268,7 +1244,15 @@ class DeviceApp(object):
                 extra=custom_props({CustomDimensions.EXIT_REASON: self.metrics.exit_reason}),
             )
 
-            # TODO: push elapsed time and exit reason here instead of relying on reported property thread
+            # Update one last time.  This is required because the service app relies
+            # on RUN_STATE to know when we're dead
+            props = {
+                Fields.THIEF: {
+                    Fields.SESSION_METRICS: self.get_session_metrics(),
+                    Fields.TEST_METRICS: self.get_test_metrics(),
+                }
+            }
+            self.client.patch_twin_reported_properties(props)
 
             logger.info("Disconnecting")
             self.client.disconnect()

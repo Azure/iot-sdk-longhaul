@@ -76,7 +76,6 @@ Test configuration is set one time at the beginning of the run and used to recor
             "sendMessageThreadCount": 10,
             "thiefAllowedClientLibraryExceptionCount": 10,
             "thiefMaxRunDurationInSeconds": 0,
-            "thiefPropertyUpdateIntervalInSeconds": 30,
             "thiefWatchdogFailureIntervalInSeconds": 300
         }
       }
@@ -100,7 +99,6 @@ These numbers define operational parameters for execution of the test harness.
 | field | format | meaning |
 | - | - | - |
 | `thiefMaxRunDurationInSeconds` | integer | Number of seconds to run the test for.  0 to run indefinitely. |
-| `thiefPropertyUpdateIntervalInSeconds` | integer | How often to update reported properties while running the tests.  This only applies to `sessionMetrics` and `testMetrics` properties |
 | `thiefWatchdogFailureIntervalInSeconds` | integer | How often to check thread watchdogs.  If an individual thread is inactive for this many seconds, the test fails.  Exact definition of "inactive" is arbitrary and may depend on implementation. |
 | `thiefAllowedClientLibraryExceptionCount` | integer | How many exceptions can be raised by the device client before the test fails? |
 
