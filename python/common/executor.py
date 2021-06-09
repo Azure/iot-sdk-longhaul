@@ -89,6 +89,9 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
             future_thread_info.started.set()
             try:
                 result = fn(*args, **kwargs)
+            except BaseException as e:
+                logger.error("Exception: {}".format(str(e) or type(e)), exc_info=True)
+                raise
             finally:
                 future_thread_info.name_at_death = future_thread_info.thread.name
                 if future_thread_info.long_run_warning_reported:
@@ -114,10 +117,8 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
         future_thread_info.future = future
         future_thread_info.started.wait()
 
-        if thread_name:
-            future_thread_info.thread.name = thread_name
-        else:
-            future_thread_info.thread.name = fn.__name__
+        if future_thread_info.thread:  # need to check because thread might already be done
+            future_thread_info.thread.name = thread_name or fn.__name__
 
         with self.outstanding_futures_lock:
             self.outstanding_futures.append(future_thread_info)

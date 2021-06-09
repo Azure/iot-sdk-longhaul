@@ -187,7 +187,6 @@ class DeviceApp(object):
         self.reporter = MetricsReporter()
         self._configure_azure_monitor_metrics()
         # for pairing
-        self.pairing_complete = False
         self.incoming_pairing_message_queue = queue.Queue()
         # for c2d
         self.out_of_order_message_tracker = OutOfOrderMessageTracker()
@@ -502,7 +501,7 @@ class DeviceApp(object):
         msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = running_op.id
         return msg
 
-    def pairing_thread(self):
+    def pair_with_service(self):
         """
         "pair" with a service app. This is necessary because we can have a single
         service app responsible for multiple device apps.  The pairing process works
@@ -519,59 +518,35 @@ class DeviceApp(object):
             `runId` value, the pairing is complete.
         """
 
-        pairing_start_epochtime = 0
-        pairing_last_request_epochtime = 0
+        pairing_start_time = time.time()
 
-        while not self.done.isSet():
-            reset_watchdog()
+        while (time.time() - pairing_start_time) < self.config[
+            Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS
+        ]:
+            props = {
+                Fields.THIEF: {
+                    Fields.PAIRING: {
+                        Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
+                        Fields.SERVICE_INSTANCE_ID: None,
+                        Fields.RUN_ID: run_id,
+                    }
+                }
+            }
+            logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
+            event_logger.info(Events.SENDING_PAIRING_REQUEST)
+            self.client.patch_twin_reported_properties(props)
 
             try:
-                msg = self.incoming_pairing_message_queue.get(timeout=1)
+                msg = self.incoming_pairing_message_queue.get(
+                    timeout=self.config[Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS]
+                )
             except queue.Empty:
                 msg = None
 
-            send_pairing_request = False
-            if not msg and not self.service_instance_id:
-                if not pairing_start_epochtime:
-                    self.pairing_complete = False
-                    pairing_start_epochtime = time.time()
-                    send_pairing_request = True
-                elif (time.time() - pairing_start_epochtime) > self.config[
-                    Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS
-                ]:
-                    # if we're trying to pair and we haven't seen a response yet, we may need to
-                    # re-send our request (by setting the desired property again), or it may be
-                    # time to fail the pairing operation
-                    raise Exception(
-                        "No response to pairing requests after trying for {} seconds".format(
-                            self.config[Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS]
-                        )
-                    )
-                elif (time.time() - pairing_last_request_epochtime) > self.config[
-                    Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS
-                ]:
-                    logger.info("Pairing response timeout.  Requesting again")
-                    send_pairing_request = True
+            if not msg:
+                logger.info("No pairing msg.  looping")
 
-            if send_pairing_request:
-                # Set our reported properties to start a pairing operation or to try again if no
-                # service has responded yet.
-                logger.info("Starting pairing operation")
-                pairing_last_request_epochtime = time.time()
-                props = {
-                    Fields.THIEF: {
-                        Fields.PAIRING: {
-                            Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
-                            Fields.SERVICE_INSTANCE_ID: None,
-                            Fields.RUN_ID: run_id,
-                        }
-                    }
-                }
-                logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
-                event_logger.info(Events.SENDING_PAIRING_REQUEST)
-                self.client.patch_twin_reported_properties(props)
-
-            elif msg:
+            if msg:
                 logger.info("Received pairing desired props: {}".format(pprint.pformat(msg)))
                 event_logger.info(Events.RECEIVED_PAIRING_RESPONSE)
 
@@ -579,30 +554,11 @@ class DeviceApp(object):
                 received_run_id = pairing.get(Fields.RUN_ID, None)
                 received_service_instance_id = pairing.get(Fields.SERVICE_INSTANCE_ID, None)
 
-                if self.service_instance_id:
-                    # It's possible that a second service app tried to pair with us after we
-                    # already chose someone else.  Ignore this
-                    logger.info("Already paired.  Ignoring.")
-
-                elif not received_run_id or not received_service_instance_id:
-                    # Or maybe something is wrong with the desired properties.  Probably a
-                    # service app that goes by different rules. Ignoring it is better than
-                    # crashing.
-                    logger.info("runId and/or serviceInstanceId missing.  Ignoring.")
-
-                elif received_run_id != run_id:
-                    # Another strange case.  A service app is trying to pair with our device_id,
-                    # but the `run_id` is wong.
-                    logger.info(
-                        "runId mismatch.  Ignoring. (received {}, expected {})".format(
-                            received_run_id, run_id
-                        )
-                    )
-
-                else:
+                if received_run_id == run_id and received_service_instance_id:
                     azure_monitor.add_logging_properties(
                         service_instance_id=received_service_instance_id
                     )
+
                     # It looks like a service app has decided to pair with us.  Set reported
                     # properties to "select" this service instance as our partner.
                     logger.info(
@@ -611,9 +567,6 @@ class DeviceApp(object):
                         )
                     )
                     self.service_instance_id = received_service_instance_id
-                    self.pairing_complete = True
-                    pairing_start_epochtime = None
-                    pairing_last_request_epochtime = None
 
                     props = {
                         Fields.THIEF: {
@@ -627,26 +580,9 @@ class DeviceApp(object):
                     event_logger.info(Events.PAIRING_COMPLETE)
                     self.client.patch_twin_reported_properties(props)
 
-                    self.on_pairing_complete()
+                    return
 
-    def start_pairing(self):
-        """
-        trigger the pairing process
-        """
-        self.service_instance_id = None
-
-    def is_pairing_complete(self):
-        """
-        return True if the pairing process is complete
-        """
-        return self.service_instance_id and self.pairing_complete
-
-    def on_pairing_complete(self):
-        """
-        Called when pairing is complete
-        """
-        logger.info("Pairing is complete.  Starting c2d")
-        self.start_c2d_message_sending()
+        raise Exception("Pairing timed out")
 
     def send_message_thread(self):
         """
@@ -705,50 +641,45 @@ class DeviceApp(object):
         while not self.done.isSet():
             reset_watchdog()
 
-            if self.is_pairing_complete():
-                payload = {
-                    Fields.THIEF: {
-                        Fields.SESSION_METRICS: self.get_session_metrics(),
-                        Fields.TEST_METRICS: self.get_test_metrics(),
-                        Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
-                    }
+            payload = {
+                Fields.THIEF: {
+                    Fields.SESSION_METRICS: self.get_session_metrics(),
+                    Fields.TEST_METRICS: self.get_test_metrics(),
+                    Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
                 }
+            }
 
-                # push these same metrics to Azure Monitor
-                self.send_metrics_to_azure_monitor(payload[Fields.THIEF])
+            # push these same metrics to Azure Monitor
+            self.send_metrics_to_azure_monitor(payload[Fields.THIEF])
 
-                def on_service_ack_received(service_ack_id, user_data):
-                    logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
-                    self.metrics.send_message_count_received_by_service_app.increment()
+            def on_service_ack_received(service_ack_id, user_data):
+                logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
+                self.metrics.send_message_count_received_by_service_app.increment()
 
-                    running_op = self.running_operation_list.get(service_ack_id)
+                running_op = self.running_operation_list.get(service_ack_id)
 
-                    with self.reporter_lock:
-                        self.reporter.set_metrics_from_dict(
-                            {
-                                Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (
-                                    running_op.send_epochtime - running_op.queue_epochtime
-                                )
-                                * 1000,
-                                Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
-                                - running_op.send_epochtime,
-                            }
-                        )
-                        self.reporter.record()
+                with self.reporter_lock:
+                    self.reporter.set_metrics_from_dict(
+                        {
+                            Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (
+                                running_op.send_epochtime - running_op.queue_epochtime
+                            )
+                            * 1000,
+                            Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
+                            - running_op.send_epochtime,
+                        }
+                    )
+                    self.reporter.record()
 
-                # This function only queues the message.  A send_message_thread instance will pick
-                # it up and send it.
-                msg = self.create_message_from_dict_with_service_ack(
-                    payload=payload, on_service_ack_received=on_service_ack_received
-                )
-                self.outgoing_test_message_queue.put(msg)
+            # This function only queues the message.  A send_message_thread instance will pick
+            # it up and send it.
+            msg = self.create_message_from_dict_with_service_ack(
+                payload=payload, on_service_ack_received=on_service_ack_received
+            )
+            self.outgoing_test_message_queue.put(msg)
 
-                # sleep until we need to send again
-                self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
-
-            else:
-                # pairing is not complete
-                time.sleep(1)
+            # sleep until we need to send again
+            self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
 
     def wait_for_desired_properties_thread(self):
         """
@@ -928,22 +859,17 @@ class DeviceApp(object):
         while not self.done.isSet():
             reset_watchdog()
 
-            if not self.is_pairing_complete():
-                time.sleep(1)
-                continue
+            self.test_method_invoke()
+            reset_watchdog()
+            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
-            else:
-                self.test_method_invoke()
-                reset_watchdog()
-                time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
+            self.test_reported_properties()
+            reset_watchdog()
+            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
-                self.test_reported_properties()
-                reset_watchdog()
-                time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
-
-                self.test_desired_properties()
-                reset_watchdog()
-                time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
+            self.test_desired_properties()
+            reset_watchdog()
+            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
 
     def test_reported_properties(self):
         """
@@ -1192,17 +1118,11 @@ class DeviceApp(object):
             Events.STARTING_RUN, extra=custom_props({CustomDimensions.RUN_REASON: run_reason})
         )
 
-        # pair with a service app instance
-        self.start_pairing()
-
-        # Launch threads
+        # Launch threads required to run
         self.executor.submit(self.dispatch_incoming_message_thread, critical=True)
         self.executor.submit(self.wait_for_desired_properties_thread, critical=True)
         self.executor.submit(self.handle_service_ack_response_thread, critical=True)
-        self.executor.submit(self.test_send_message_thread, critical=True)
         self.executor.submit(self.handle_incoming_test_c2d_messages_thread, critical=True)
-        self.executor.submit(self.pairing_thread, critical=True)
-        self.executor.submit(self.test_twin_properties_thread, critical=True)
         self.executor.submit(self.handle_method_thread, critical=True)
         for i in range(0, self.config[Settings.SEND_MESSAGE_THREAD_COUNT]):
             self.executor.submit(
@@ -1210,6 +1130,14 @@ class DeviceApp(object):
                 thread_name="send_message_thread #{}".format(i),
                 critical=True,
             )
+
+        # Pair
+        self.pair_with_service()
+
+        # Start testing threads
+        self.executor.submit(self.test_send_message_thread, critical=True)
+        self.executor.submit(self.test_twin_properties_thread, critical=True)
+        self.start_c2d_message_sending()
 
         self.metrics.exit_reason = "UNKNOWN EXIT REASON"
         start_time = time.time()
