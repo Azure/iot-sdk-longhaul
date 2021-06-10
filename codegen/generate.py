@@ -113,7 +113,7 @@ class PythonConfigureMetricsGenerator(PythonBaseGenerator):
         else:
             raise ValueError("Value {} is missing a type".format(value["name"]))
 
-        print("        Const.{},".format(value["name"]))
+        print("        Metrics.{},".format(value["name"]))
         print('        "{}",'.format(value["desc"]))
         print('        "{}",'.format(value["units"]))
         print("        )")

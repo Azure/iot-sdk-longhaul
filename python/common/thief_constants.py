@@ -208,21 +208,18 @@ class Metrics(object):
     # test app metrics
     # ----------------
 
-    # Number of exceptions raised by the client library or libraries
-    CLIENT_LIBRARY_COUNT_EXCEPTIONS = "clientLibraryCountExceptions"
+    # Number of (non-fatal) exceptions raised by the client library or test code
+    EXCEPTION_COUNT = "exceptionCount"
 
     # --------------------
     # SendMesssage metrics
     # --------------------
 
+    # Number of telemetry messages queued for sending
+    SEND_MESSAGE_COUNT_QUEUED = "sendMessageCountQueued"
+
     # Number of telemetry messages sent
     SEND_MESSAGE_COUNT_SENT = "sendMessageCountSent"
-
-    # Number of telemetry messages queued, and waiting to be sent
-    SEND_MESSAGE_COUNT_IN_BACKLOG = "sendMessageCountInBacklog"
-
-    # Number of telemetry messages sent, but not acknowledged (PUBACK'ed) by the transport
-    SEND_MESSAGE_COUNT_UNACKED = "sendMessageCountUnacked"
 
     # Number of telemetry messages that have not (yet) arrived at the hub
     SEND_MESSAGE_COUNT_NOT_RECEIVED = "sendMessageCountNotReceivedByServiceApp"
@@ -333,8 +330,8 @@ class Settings(object):
     # How long can a thread go without updating its watchdog before failing
     THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS = "thiefWatchdogFailureIntervalInSeconds"
 
-    # How many client exceptions do we allow before we fail the test?
-    THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT = "thiefAllowedClientLibraryExceptionCount"
+    # How many exceptions do we allow before we fail the test?
+    THIEF_ALLOWED_EXCEPTION_COUNT = "thiefAllowedExceptionCount"
 
     # ----------------
     # timeout settings
@@ -362,9 +359,6 @@ class Settings(object):
 
     # How many times to call send_message per second
     SEND_MESSAGE_OPERATIONS_PER_SECOND = "sendMessageOperationsPerSecond"
-
-    # How many threads do we spin up for overlapped send_message calls
-    SEND_MESSAGE_THREAD_COUNT = "sendMessageThreadCount"
 
     # --------------------
     # receive_c2d settings

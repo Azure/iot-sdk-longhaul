@@ -196,12 +196,16 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
             if e:
                 if info.critical:
                     logger.error(
-                        "Critical error: thread {} failed with {}".format(info.name_at_death, e)
+                        "Critical error: thread {} failed with {}".format(
+                            info.name_at_death, str(e) or type(e)
+                        )
                     )
                     first_exception = first_exception or e
                 else:
                     logger.error(
-                        "Non-critical error: thread {} failed with {}".format(info.name_at_death, e)
+                        "Non-critical error: thread {} failed with {}".format(
+                            info.name_at_death, str(e) or type(e)
+                        )
                     )
                     if non_critical_exception_callback:
                         non_critical_exception_callback(e)
