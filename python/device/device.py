@@ -555,8 +555,8 @@ class DeviceApp(object):
         """
         Thread to continuously send d2c messages throughout the longhaul run.  This thread doesn't
         actually send messages because send_message is blocking and we want to overlap our send
-        operations.  Instead, this thread adds the messsage to a queue, and relies on a
-        send_message_thread instance to actually send the message.
+        operations.  Instead, this thread creates new transient threads that actually send the
+        message.
         """
 
         def send_message():
