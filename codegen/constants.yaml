@@ -235,27 +235,22 @@ groups:
 
       - desc: "test app metrics"
         values:
-          - name: CLIENT_LIBRARY_COUNT_EXCEPTIONS 
-            value: "clientLibraryCountExceptions"
-            desc: "Number of exceptions raised by the client library or libraries"
+          - name: EXCEPTION_COUNT
+            value: "exceptionCount"
+            desc: "Number of (non-fatal) exceptions raised by the client library or test code"
             type: int
             units: exception count
 
       - desc: "SendMesssage metrics"
         values:
+          - name: SEND_MESSAGE_COUNT_QUEUED
+            value: "sendMessageCountQueued"
+            desc: "Number of telemetry messages queued for sending"
+            type: int
+            units: mesages
           - name: SEND_MESSAGE_COUNT_SENT 
             value: "sendMessageCountSent"
             desc: "Number of telemetry messages sent"
-            type: int
-            units: mesages
-          - name: SEND_MESSAGE_COUNT_IN_BACKLOG 
-            value: "sendMessageCountInBacklog"
-            desc: "Number of telemetry messages queued, and waiting to be sent"
-            type: int
-            units: mesages
-          - name: SEND_MESSAGE_COUNT_UNACKED 
-            value: "sendMessageCountUnacked"
-            desc: "Number of telemetry messages sent, but not acknowledged (PUBACK'ed) by the transport"
             type: int
             units: mesages
           - name: SEND_MESSAGE_COUNT_NOT_RECEIVED 
@@ -386,9 +381,9 @@ groups:
       - name: THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS 
         value: "thiefWatchdogFailureIntervalInSeconds"
         desc: "How long can a thread go without updating its watchdog before failing"
-      - name: THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT 
-        value: "thiefAllowedClientLibraryExceptionCount"
-        desc: "How many client exceptions do we allow before we fail the test?"
+      - name: THIEF_ALLOWED_EXCEPTION_COUNT 
+        value: "thiefAllowedExceptionCount"
+        desc: "How many exceptions do we allow before we fail the test?"
     subgroups:
       - desc: "timeout settings"
         values:
@@ -413,9 +408,6 @@ groups:
         - name: SEND_MESSAGE_OPERATIONS_PER_SECOND 
           value: "sendMessageOperationsPerSecond"
           desc: "How many times to call send_message per second"
-        - name: SEND_MESSAGE_THREAD_COUNT 
-          value: "sendMessageThreadCount"
-          desc: "How many threads do we spin up for overlapped send_message calls"
 
       - desc: "receive_c2d settings"
         values:

@@ -61,9 +61,9 @@ if not run_id:
 # set default logging which will only go to the console
 
 logging.basicConfig(level=logging.WARNING)
-logging.getLogger("paho").setLevel(level=logging.DEBUG)
+# logging.getLogger("paho").setLevel(level=logging.DEBUG)
 logging.getLogger("thief").setLevel(level=logging.INFO)
-logging.getLogger("azure.iot").setLevel(level=logging.INFO)
+# logging.getLogger("azure.iot").setLevel(level=logging.INFO)
 logger = logging.getLogger("thief.{}".format(__name__))
 
 # configure our traces and events to go to Azure Monitor
@@ -119,12 +119,11 @@ class DeviceRunMetrics(object):
         self.run_state = RunStates.WAITING
         self.exit_reason = None
 
-        self.client_library_count_exceptions = ThreadSafeCounter()
+        self.exception_count = ThreadSafeCounter()
 
-        self.send_message_count_unacked = ThreadSafeCounter()
+        self.send_message_count_queued = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
-        self.send_message_count_in_backlog = ThreadSafeCounter()
-        self.send_message_count_received_by_service_app = ThreadSafeCounter()
+        self.send_message_count_not_received_by_service_app = ThreadSafeCounter()
 
         self.receive_c2d_count_received = ThreadSafeCounter()
 
@@ -146,13 +145,12 @@ Currently hardcoded. Later, this will come from desired properties.
 device_run_config = {
     Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
     Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
-    Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT: 10,
+    Settings.THIEF_ALLOWED_EXCEPTION_COUNT: 10,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
     Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 1000,
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
     Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS: 30,
     Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
-    Settings.SEND_MESSAGE_THREAD_COUNT: 10,
     Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS: 20,
     Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT: 100,
     Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS: 5,
@@ -180,8 +178,6 @@ class DeviceApp(object):
         # for service_acks
         self.running_operation_list = RunningOperationList()
         self.incoming_service_ack_response_queue = queue.Queue()
-        # for telemetry
-        self.outgoing_test_message_queue = queue.Queue()
         # for metrics
         self.reporter_lock = threading.Lock()
         self.reporter = MetricsReporter()
@@ -227,8 +223,8 @@ class DeviceApp(object):
         # test app metrics
         # ----------------
         self.reporter.add_integer_measurement(
-            Metrics.CLIENT_LIBRARY_COUNT_EXCEPTIONS,
-            "Number of exceptions raised by the client library or libraries",
+            Metrics.EXCEPTION_COUNT,
+            "Number of (non-fatal) exceptions raised by the client library or test code",
             "exception count",
         )
 
@@ -236,17 +232,12 @@ class DeviceApp(object):
         # SendMesssage metrics
         # --------------------
         self.reporter.add_integer_measurement(
+            Metrics.SEND_MESSAGE_COUNT_QUEUED,
+            "Number of telemetry messages queued for sending",
+            "mesages",
+        )
+        self.reporter.add_integer_measurement(
             Metrics.SEND_MESSAGE_COUNT_SENT, "Number of telemetry messages sent", "mesages",
-        )
-        self.reporter.add_integer_measurement(
-            Metrics.SEND_MESSAGE_COUNT_IN_BACKLOG,
-            "Number of telemetry messages queued, and waiting to be sent",
-            "mesages",
-        )
-        self.reporter.add_integer_measurement(
-            Metrics.SEND_MESSAGE_COUNT_UNACKED,
-            "Number of telemetry messages sent, but not acknowledged (PUBACK'ed) by the transport",
-            "mesages",
         )
         self.reporter.add_integer_measurement(
             Metrics.SEND_MESSAGE_COUNT_NOT_RECEIVED,
@@ -361,17 +352,12 @@ class DeviceApp(object):
         """
         Return metrics which describe the progress of the  different features being tested
         """
-        sent = self.metrics.send_message_count_sent.get_count()
-        received_by_service_app = (
-            self.metrics.send_message_count_received_by_service_app.get_count()
-        )
 
         props = {
-            Metrics.CLIENT_LIBRARY_COUNT_EXCEPTIONS: self.metrics.client_library_count_exceptions.get_count(),
-            Metrics.SEND_MESSAGE_COUNT_SENT: sent,
-            Metrics.SEND_MESSAGE_COUNT_IN_BACKLOG: self.outgoing_test_message_queue.qsize(),
-            Metrics.SEND_MESSAGE_COUNT_UNACKED: self.metrics.send_message_count_unacked.get_count(),
-            Metrics.SEND_MESSAGE_COUNT_NOT_RECEIVED: sent - received_by_service_app,
+            Metrics.EXCEPTION_COUNT: self.metrics.exception_count.get_count(),
+            Metrics.SEND_MESSAGE_COUNT_QUEUED: self.metrics.send_message_count_queued.get_count(),
+            Metrics.SEND_MESSAGE_COUNT_SENT: self.metrics.send_message_count_sent.get_count(),
+            Metrics.SEND_MESSAGE_COUNT_NOT_RECEIVED: self.metrics.send_message_count_not_received_by_service_app.get_count(),
             Metrics.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
             Metrics.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
             Metrics.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
@@ -389,24 +375,15 @@ class DeviceApp(object):
         Check all failure counts and raise an exception if they exceeded the allowed count
         """
         if (
-            self.metrics.client_library_count_exceptions.get_count()
-            > self.config[Settings.THIEF_ALLOWED_CLIENT_LIBRARY_EXCEPTION_COUNT]
+            self.metrics.exception_count.get_count()
+            > self.config[Settings.THIEF_ALLOWED_EXCEPTION_COUNT]
         ):
             raise Exception(
-                "Client library exception count ({}) too high.".format(
-                    self.metrics.client_library_count_exceptions.get_count()
-                )
+                "Exception count ({}) too high.".format(self.metrics.exception_count.get_count())
             )
 
-        messages_not_received = (
-            self.metrics.send_message_count_sent.get_count()
-            - self.metrics.send_message_count_received_by_service_app.get_count()
-        )
-
         timeout_count = (
-            messages_not_received
-            + self.metrics.send_message_count_in_backlog.get_count()
-            + self.metrics.send_message_count_unacked.get_count()
+            self.metrics.send_message_count_not_received_by_service_app.get_count()
             + self.out_of_order_message_tracker.get_missing_count()
             + self.metrics.reported_properties_count_timed_out.get_count()
             + self.metrics.get_twin_count_timed_out.get_count()
@@ -476,29 +453,6 @@ class DeviceApp(object):
             datetime.timezone.utc
         ).isoformat()
 
-        return msg
-
-    def create_message_from_dict_with_service_ack(
-        self, payload, on_service_ack_received, user_data=None
-    ):
-        """
-        helper function to create a message from a dict and add service_ack
-        properties.
-        """
-        running_op = self.running_operation_list.make_callback_based_operation(
-            on_service_ack_received, user_data
-        )
-        running_op.queue_epochtime = time.time()
-
-        # Note: we're changing the dictionary that the user passed in.
-        # This isn't the best idea, but it works and it saves us from deep copies
-        assert payload[Fields.THIEF].get(Fields.CMD, None) is None
-        payload[Fields.THIEF][Fields.CMD] = Commands.SERVICE_ACK_REQUEST
-        payload[Fields.THIEF][Fields.SERVICE_ACK_ID] = running_op.id
-
-        logger.info("Requesting service_ack for serviceAckId = {}".format(running_op.id))
-        msg = self.create_message_from_dict(payload)
-        msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = running_op.id
         return msg
 
     def pair_with_service(self):
@@ -584,39 +538,6 @@ class DeviceApp(object):
 
         raise Exception("Pairing timed out")
 
-    def send_message_thread(self):
-        """
-        Thread which reads the telemetry queue and sends the telemetry.  Since send_message is
-        blocking, and we want to overlap send_messsage calls, we create multiple
-        send_message_thread instances so we can send multiple messages at the same time.
-
-        The number of send_message_thread instances is the number of overlapped sent operations
-        we can have
-        """
-        while not self.done.isSet():
-            reset_watchdog()
-
-            try:
-                msg = self.outgoing_test_message_queue.get(timeout=1)
-            except queue.Empty:
-                msg = None
-            if msg:
-                service_ack_id = msg.custom_properties.get(CustomPropertyNames.SERVICE_ACK_ID, "")
-                if service_ack_id:
-                    running_op = self.running_operation_list.get(service_ack_id)
-                    running_op.send_epochtime = time.time()
-
-                try:
-                    self.metrics.send_message_count_unacked.increment()
-                    self.client.send_message(msg)
-                except Exception as e:
-                    self.metrics.client_library_count_exceptions.increment()
-                    logger.error("send_message raised {}".format(str(e) or type(e)), exc_info=True)
-                else:
-                    self.metrics.send_message_count_sent.increment()
-                finally:
-                    self.metrics.send_message_count_unacked.decrement()
-
     def send_metrics_to_azure_monitor(self, props):
         """
         Send metrics to azure monitor, based on the reported properties that we probably just
@@ -638,46 +559,47 @@ class DeviceApp(object):
         send_message_thread instance to actually send the message.
         """
 
-        while not self.done.isSet():
-            reset_watchdog()
+        def send_message():
+            running_op = self.running_operation_list.make_event_based_operation()
 
             payload = {
                 Fields.THIEF: {
+                    Fields.CMD: Commands.SERVICE_ACK_REQUEST,
+                    Fields.SERVICE_ACK_ID: running_op.id,
                     Fields.SESSION_METRICS: self.get_session_metrics(),
                     Fields.TEST_METRICS: self.get_test_metrics(),
                     Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
                 }
             }
 
-            # push these same metrics to Azure Monitor
-            self.send_metrics_to_azure_monitor(payload[Fields.THIEF])
+            msg = self.create_message_from_dict(payload)
+            msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = running_op.id
 
-            def on_service_ack_received(service_ack_id, user_data):
-                logger.info("Received serviceAck with serviceAckId = {}".format(service_ack_id))
-                self.metrics.send_message_count_received_by_service_app.increment()
+            queue_time = time.time()
+            self.client.send_message(msg)
+            logger.info("Telemetry op {} sent to service".format(running_op.id))
 
-                running_op = self.running_operation_list.get(service_ack_id)
+            self.metrics.send_message_count_sent.increment()
+            self.metrics.send_message_count_not_received_by_service_app.increment()
 
-                with self.reporter_lock:
-                    self.reporter.set_metrics_from_dict(
-                        {
-                            Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (
-                                running_op.send_epochtime - running_op.queue_epochtime
-                            )
-                            * 1000,
-                            Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time()
-                            - running_op.send_epochtime,
-                        }
-                    )
-                    self.reporter.record()
+            send_time = time.time()
+            running_op.event.wait()
 
-            # This function only queues the message.  A send_message_thread instance will pick
-            # it up and send it.
-            msg = self.create_message_from_dict_with_service_ack(
-                payload=payload, on_service_ack_received=on_service_ack_received
-            )
-            self.outgoing_test_message_queue.put(msg)
+            logger.info("Telemetry op {} arrived at service".format(running_op.id))
+            self.metrics.send_message_count_not_received_by_service_app.decrement()
 
+            with self.reporter_lock:
+                self.reporter.set_metrics_from_dict(
+                    {
+                        Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000,
+                        Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time() - send_time,
+                    }
+                )
+                self.reporter.record()
+
+        while not self.done.isSet():
+            reset_watchdog()
+            self.executor.submit(send_message)
             # sleep until we need to send again
             self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
 
@@ -882,6 +804,17 @@ class DeviceApp(object):
         can add a property, verify that it was added, then remove it and verify that it was removed.
         """
 
+        # Get metrics.  We report them to Azure monitor and also push them as part of the twin
+        metrics = {
+            Fields.SESSION_METRICS: self.get_session_metrics(),
+            Fields.TEST_METRICS: self.get_test_metrics(),
+            Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
+        }
+        self.send_metrics_to_azure_monitor(metrics)
+
+        # systemHealthMetrics don't go into reported properties
+        del metrics[Fields.SYSTEM_HEALTH_METRICS]
+
         def make_reported_prop(property_name, val):
             return {
                 Fields.THIEF: {
@@ -903,13 +836,7 @@ class DeviceApp(object):
         logger.info("Adding test property {}".format(prop_name))
         start_time = time.time()
         props = make_reported_prop(prop_name, prop_value)
-        props[Fields.THIEF].update(
-            {
-                Fields.SESSION_METRICS: self.get_session_metrics(),
-                Fields.TEST_METRICS: self.get_test_metrics(),
-                # systemHealthMetrics don't go into reported properties
-            }
-        )
+        props[Fields.THIEF].update(metrics)
         self.client.patch_twin_reported_properties(props)
 
         if add_operation.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
@@ -955,7 +882,7 @@ class DeviceApp(object):
         }
         msg = self.create_message_from_dict(payload_set_desired_props)
         logger.info("Sending message to update desired getTwin property to {}".format(twin_guid))
-        self.outgoing_test_message_queue.put(msg)
+        self.client.send_message(msg)
 
         start_time = time.time()
         end_time = start_time + self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
@@ -1057,7 +984,7 @@ class DeviceApp(object):
             }
             msg = self.create_message_from_dict(command_payload)
             logger.info("sending method invoke with guid={}".format(running_op.id))
-            self.outgoing_test_message_queue.put(msg)
+            self.client.send_message(msg)
 
             if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
                 print(
@@ -1124,12 +1051,6 @@ class DeviceApp(object):
         self.executor.submit(self.handle_service_ack_response_thread, critical=True)
         self.executor.submit(self.handle_incoming_test_c2d_messages_thread, critical=True)
         self.executor.submit(self.handle_method_thread, critical=True)
-        for i in range(0, self.config[Settings.SEND_MESSAGE_THREAD_COUNT]):
-            self.executor.submit(
-                self.send_message_thread,
-                thread_name="send_message_thread #{}".format(i),
-                critical=True,
-            )
 
         # Pair
         self.pair_with_service()
@@ -1139,7 +1060,7 @@ class DeviceApp(object):
         self.executor.submit(self.test_twin_properties_thread, critical=True)
         self.start_c2d_message_sending()
 
-        self.metrics.exit_reason = "UNKNOWN EXIT REASON"
+        self.metrics.exit_reason = ""
         start_time = time.time()
         planned_end_time = start_time + self.config[Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS]
         try:
@@ -1147,7 +1068,18 @@ class DeviceApp(object):
                 # TODO: limit sleep length to check failure counts more often
                 self.executor.wait_for_thread_death_event(planned_end_time - time.time())
                 self.executor.check_watchdogs()
-                self.executor.check_for_failures(None)
+
+                non_critical_failures = 0
+
+                def count_failure(e):
+                    nonlocal non_critical_failures
+                    non_critical_failures += 1
+
+                self.executor.check_for_failures(count_failure)
+                if non_critical_failures:
+                    logger.info("Adding {} failures to count".format(non_critical_failures))
+                    self.metrics.exception_count.add(non_critical_failures)
+
                 self.check_failure_counts()
             self.metrics.run_state = RunStates.COMPLETE
             self.metrics.exit_reason = "Successful run"
@@ -1160,7 +1092,9 @@ class DeviceApp(object):
             self.metrics.exit_reason = str(e) or type(e)
             raise
         finally:
-            logger.info("---------------------------------------Setting done flag")
+            logger.info("-------------------------------------------------------------")
+            logger.info("Setting done flag: {}".format(self.metrics.exit_reason))
+            logger.info("-------------------------------------------------------------")
             self.done.set()
             done, not_done = self.executor.wait(timeout=60)
             if not_done:

@@ -68,11 +68,9 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
           "reportedPropertiesCountAddedButNotVerifiedByServiceApp": 0,
           "reportedPropertiesCountRemoved": 0,
           "reportedPropertiesCountRemovedButNotVerifiedByServiceApp": 0,
-          "sendMessageCountExceptions": 0,
-          "sendMessageCountInBacklog": 0,
           "sendMessageCountNotReceivedByServiceApp": 0,
           "sendMessageCountSent": 0,
-          "sendMessageCountUnacked": 0
+          "sendMessageCountQueued": 0
         }
       }
     }
@@ -87,9 +85,7 @@ Most or all of the test metrics overlap with metrics that are sent in telemetry 
 | `reportedPropertiesCountRemoved` | integer | Count of reported properties removed,  Only applies to `testContent` properties. |
 | `reportedPropertiesCountTimedOut` | integer | Count of reported property operations (add + remove) which timed out.  Only applies to `testContent` properties. |
 | `sendMessageCountSent` | integer | Count of test telemetry messages sent |
-| `sendMessageCountUnacked` | integer |  Count of test telemetry messages where send API did not complete and did not fail.  (most likely dropped in transit.) |
-| `sendMessageCountExceptions` | integer | Count of test telemetry operations which failed.  Failures could be caused by raised exceptions or by messages withoug a matching `serviceAck`. |
-| `sendMessageCountInBacklog` | integer | Count of test telemetry messages currently queued in the  acklock.  Queued messages are scheduled to be sent, but not yet in transit. Not all test implementations queue in the client, so this metric may be meaningless in cases where queueing happens inside the SDK. |
+| `sendMessageCountQueued` | integer |  Count of test telemetry messages queued for sending |
 | `sendMessageCountNotReceivedByServiceApp` | integer | Count of test telemetry messages which were sent, ack'ed by the transport (`PUBACK`), but not received by the service (no `serviceAck`) |
 | `getTwinCountSucceeded` | integer | Count of getTwin operations which succeeded and returned the expected property values. |
 | `getTwinCountTimedOut` | integer | Count of getTwin operations which did not return the expected property values within the timeout period. |

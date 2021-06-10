@@ -73,7 +73,6 @@ Test configuration is set one time at the beginning of the run and used to recor
             "reportedPropertiesUpdateIntervalInSeconds": 10,
             "sendMessageAllowedFailureCount": 1000,
             "sendMessageOperationsPerSecond": 1,
-            "sendMessageThreadCount": 10,
             "thiefAllowedClientLibraryExceptionCount": 10,
             "thiefMaxRunDurationInSeconds": 0,
             "thiefWatchdogFailureIntervalInSeconds": 300
@@ -127,5 +126,4 @@ These numbers define operational parameters for testing telemetry.  The name `se
 | field | format | meaning |
 | - | - | - |
 | `sendMessageOperationsPerSecond` | integer | How many `sendMessage` operations should be run per second |
-| `sendMessageThreadCount` | integer | How many threads can be running parallel `sendMessage` operations.  Some test implementations may not need multiple threads. |
 | `sendMessageAllowedFailureCount` | integer | How many incomplete `sendMessage` calls are allowed.  This includes calls that are queued, sent but not acked, and sent but not verified by the service. |
