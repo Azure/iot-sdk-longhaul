@@ -375,24 +375,21 @@ groups:
   - name: Settings
     desc: "Names of thief settings which are used to configure the device app for a test run"
     values:
-      - name: THIEF_MAX_RUN_DURATION_IN_SECONDS 
-        value: "thiefMaxRunDurationInSeconds"
+      - name: MAX_RUN_DURATION_IN_SECONDS 
+        value: "maxRunDurationInSeconds"
         desc: "how long should the test run before finishing.  0 = forever"
-      - name: THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS 
-        value: "thiefWatchdogFailureIntervalInSeconds"
-        desc: "How long can a thread go without updating its watchdog before failing"
-      - name: THIEF_ALLOWED_EXCEPTION_COUNT 
-        value: "thiefAllowedExceptionCount"
+      - name: ALLOWED_EXCEPTION_COUNT 
+        value: "AllowedExceptionCount"
         desc: "How many exceptions do we allow before we fail the test?"
-    subgroups:
-      - desc: "timeout settings"
-        values:
-        - name: OPERATION_TIMEOUT_IN_SECONDS 
-          value: "operationTimeoutInSeconds"
-          desc: "Generic value for operation timeouts"
-        - name: OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT 
-          value: "operationTimeoutAllowedFailureCount"
-          desc: "How many timeouts are allowed before the test fails"
+      - name: INTER_TEST_DELAY_INTERVAL_IN_SECONDS
+        value: "interTestDelayIntervalInSeconds"
+        desc: "How many seconds between tests"
+      - name: OPERATION_TIMEOUT_IN_SECONDS 
+        value: "operationTimeoutInSeconds"
+        desc: "Generic value for operation timeouts"
+      - name: OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT 
+        value: "operationTimeoutAllowedFailureCount"
+        desc: "How many timeouts are allowed before the test fails"
 
       - desc: "pairing settings"
         values:

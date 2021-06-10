@@ -12,7 +12,7 @@ import pprint
 import sys
 import collections
 import platform
-from executor import BetterThreadPoolExecutor, reset_watchdog
+from executor import BetterThreadPoolExecutor, reset_watchdog, dump_active_stacks
 import dps
 import queue
 import faulthandler
@@ -81,11 +81,7 @@ azure_monitor.log_to_azure_monitor("thief")
 TestMethod = collections.namedtuple(
     "TestMethod", "method_name expected_status_code include_payload"
 )
-methods_to_test = [
-    TestMethod(MethodNames.FAIL_WITH_404, 404, False),
-    TestMethod(MethodNames.ECHO_REQUEST, 200, True),
-    TestMethod(MethodNames.UNDEFINED_METHOD_NAME, 500, False),
-]
+methods_to_test = []
 
 
 def _get_os_release_based_on_user_agent_standard():
@@ -143,9 +139,9 @@ Object we use internally to keep track of how the entire test is configured.
 Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
-    Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
-    Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
-    Settings.THIEF_ALLOWED_EXCEPTION_COUNT: 10,
+    Settings.MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
+    Settings.ALLOWED_EXCEPTION_COUNT: 10,
+    Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
     Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 1000,
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
@@ -153,7 +149,6 @@ device_run_config = {
     Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
     Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS: 20,
     Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT: 100,
-    Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS: 5,
 }
 
 
@@ -374,10 +369,7 @@ class DeviceApp(object):
         """
         Check all failure counts and raise an exception if they exceeded the allowed count
         """
-        if (
-            self.metrics.exception_count.get_count()
-            > self.config[Settings.THIEF_ALLOWED_EXCEPTION_COUNT]
-        ):
+        if self.metrics.exception_count.get_count() > self.config[Settings.ALLOWED_EXCEPTION_COUNT]:
             raise Exception(
                 "Exception count ({}) too high.".format(self.metrics.exception_count.get_count())
             )
@@ -583,19 +575,20 @@ class DeviceApp(object):
             self.metrics.send_message_count_not_received_by_service_app.increment()
 
             send_time = time.time()
-            running_op.event.wait()
+            if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+                logger.info("Telemetry op {} arrived at service".format(running_op.id))
+                self.metrics.send_message_count_not_received_by_service_app.decrement()
 
-            logger.info("Telemetry op {} arrived at service".format(running_op.id))
-            self.metrics.send_message_count_not_received_by_service_app.decrement()
-
-            with self.reporter_lock:
-                self.reporter.set_metrics_from_dict(
-                    {
-                        Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000,
-                        Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time() - send_time,
-                    }
-                )
-                self.reporter.record()
+                with self.reporter_lock:
+                    self.reporter.set_metrics_from_dict(
+                        {
+                            Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000,
+                            Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time() - send_time,
+                        }
+                    )
+                    self.reporter.record()
+            else:
+                logger.warning("Telemetry op {} did not arrive at service".format(running_op.id))
 
         while not self.done.isSet():
             reset_watchdog()
@@ -772,26 +765,31 @@ class DeviceApp(object):
                         )
                     )
 
-    def test_twin_properties_thread(self):
+    def operation_test_thread(self):
         """
         Thread to test twin properties. The twin property tests consists of two subtests: one for
         reported properties and the other for desired properties.
         """
 
+        tests = [
+            (self.test_reported_properties, (), {}),
+            (self.test_desired_properties, (), {}),
+            (self.test_method_invoke, [TestMethod(MethodNames.FAIL_WITH_404, 404, False)], {}),
+            (self.test_method_invoke, [TestMethod(MethodNames.ECHO_REQUEST, 200, True)], {}),
+            (
+                self.test_method_invoke,
+                [TestMethod(MethodNames.UNDEFINED_METHOD_NAME, 500, False)],
+                {},
+            ),
+        ]
+
         while not self.done.isSet():
-            reset_watchdog()
-
-            self.test_method_invoke()
-            reset_watchdog()
-            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
-
-            self.test_reported_properties()
-            reset_watchdog()
-            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
-
-            self.test_desired_properties()
-            reset_watchdog()
-            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
+            for (function, args, kwargs) in tests:
+                reset_watchdog()
+                function(*args, **kwargs)
+                time.sleep(self.config[Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS])
+                if self.done.isSet():
+                    break
 
     def test_reported_properties(self):
         """
@@ -965,64 +963,61 @@ class DeviceApp(object):
                         MethodResponse.create_from_method_request(method_request, 500)
                     )
 
-    def test_method_invoke(self):
-        for method in methods_to_test:
-            running_op = self.running_operation_list.make_event_based_operation()
+    def test_method_invoke(self, method):
+        running_op = self.running_operation_list.make_event_based_operation()
 
-            if method.include_payload:
-                payload = {"id": str(uuid.uuid4())}
-            else:
-                payload = None
+        if method.include_payload:
+            payload = {"id": str(uuid.uuid4())}
+        else:
+            payload = None
 
-            command_payload = {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.INVOKE_METHOD,
-                    Fields.SERVICE_ACK_ID: running_op.id,
-                    Fields.METHOD_NAME: method.method_name,
-                    Fields.METHOD_INVOKE_PAYLOAD: payload,
-                }
+        command_payload = {
+            Fields.THIEF: {
+                Fields.CMD: Commands.INVOKE_METHOD,
+                Fields.SERVICE_ACK_ID: running_op.id,
+                Fields.METHOD_NAME: method.method_name,
+                Fields.METHOD_INVOKE_PAYLOAD: payload,
             }
-            msg = self.create_message_from_dict(command_payload)
-            logger.info("sending method invoke with guid={}".format(running_op.id))
-            self.client.send_message(msg)
+        }
+        msg = self.create_message_from_dict(command_payload)
+        logger.info("sending method invoke with guid={}".format(running_op.id))
+        self.client.send_message(msg)
 
-            if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
-                print(
-                    "method with guid {} returned {}".format(
-                        running_op.id, running_op.result_message
+        if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+            print(
+                "method with guid {} returned {}".format(running_op.id, running_op.result_message)
+            )
+            thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
+            fail = False
+            if thief[Fields.METHOD_RESPONSE_STATUS_CODE] != method.expected_status_code:
+                logger.error(
+                    "Unexpected method status: id={}, received {} expected {}".format(
+                        running_op.id,
+                        thief[Fields.METHOD_RESPONSE_STATUS_CODE],
+                        method.expected_status_code,
                     )
                 )
-                thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
-                fail = False
-                if thief[Fields.METHOD_RESPONSE_STATUS_CODE] != method.expected_status_code:
+                fail = True
+                if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
                     logger.error(
-                        "Unexpected method status: id={}, received {} expected {}".format(
-                            running_op.id,
-                            thief[Fields.METHOD_RESPONSE_STATUS_CODE],
-                            method.expected_status_code,
+                        "Unexpected payload: id={}, received {} expected {}".format(
+                            running_op.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
                         )
                     )
                     fail = True
-                    if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
-                        logger.error(
-                            "Unexpected payload: id={}, received {} expected {}".format(
-                                running_op.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
-                            )
-                        )
-                        fail = True
 
-                logger.info(
-                    "---------------------------------------------------------------------------------"
-                )
-                if fail:
-                    logger.error("Method call check failed")
-                    # TODO: log failure and count
-                else:
-                    logger.error("Method call check succeeded")
-
+            logger.info(
+                "---------------------------------------------------------------------------------"
+            )
+            if fail:
+                logger.error("Method call check failed")
+                # TODO: log failure and count
             else:
-                logger.error("method with guid {} never completed".format(running_op.id))
-                # TODO: timeout here
+                logger.error("Method call check succeeded")
+
+        else:
+            logger.error("method with guid {} never completed".format(running_op.id))
+            # TODO: timeout here
 
     def main(self):
 
@@ -1057,12 +1052,12 @@ class DeviceApp(object):
 
         # Start testing threads
         self.executor.submit(self.test_send_message_thread, critical=True)
-        self.executor.submit(self.test_twin_properties_thread, critical=True)
+        self.executor.submit(self.operation_test_thread, critical=True)
         self.start_c2d_message_sending()
 
         self.metrics.exit_reason = ""
         start_time = time.time()
-        planned_end_time = start_time + self.config[Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS]
+        planned_end_time = start_time + self.config[Settings.MAX_RUN_DURATION_IN_SECONDS]
         try:
             while time.time() < planned_end_time:
                 # TODO: limit sleep length to check failure counts more often
@@ -1096,9 +1091,12 @@ class DeviceApp(object):
             logger.info("Setting done flag: {}".format(self.metrics.exit_reason))
             logger.info("-------------------------------------------------------------")
             self.done.set()
-            done, not_done = self.executor.wait(timeout=60)
+            done, not_done = self.executor.wait(
+                timeout=2 * self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
+            )
             if not_done:
                 logger.error("{} threads not stopped after ending run".format(len(not_done)))
+                dump_active_stacks(self.executor)
 
             logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
             event_logger.info(
@@ -1114,6 +1112,7 @@ class DeviceApp(object):
                     Fields.TEST_METRICS: self.get_test_metrics(),
                 }
             }
+            logger.info("Results: {}".format(pprint.pformat(props)))
             self.client.patch_twin_reported_properties(props)
 
             logger.info("Disconnecting")
