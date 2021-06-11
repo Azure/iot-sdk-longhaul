@@ -325,17 +325,13 @@ class Settings(object):
     """
 
     # how long should the test run before finishing.  0 = forever
-    THIEF_MAX_RUN_DURATION_IN_SECONDS = "thiefMaxRunDurationInSeconds"
-
-    # How long can a thread go without updating its watchdog before failing
-    THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS = "thiefWatchdogFailureIntervalInSeconds"
+    MAX_RUN_DURATION_IN_SECONDS = "maxRunDurationInSeconds"
 
     # How many exceptions do we allow before we fail the test?
-    THIEF_ALLOWED_EXCEPTION_COUNT = "thiefAllowedExceptionCount"
+    ALLOWED_EXCEPTION_COUNT = "allowedExceptionCount"
 
-    # ----------------
-    # timeout settings
-    # ----------------
+    # How many seconds between tests
+    INTER_TEST_DELAY_INTERVAL_IN_SECONDS = "interTestDelayInSeconds"
 
     # Generic value for operation timeouts
     OPERATION_TIMEOUT_IN_SECONDS = "operationTimeoutInSeconds"
@@ -369,13 +365,6 @@ class Settings(object):
 
     # How many missing C2D messages will cause the test to fail?
     RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT = "receiveC2dAllowedMissingMessageCount"
-
-    # --------------------
-    # twin update settings
-    # --------------------
-
-    # How many seconds between twin property updates
-    TWIN_UPDATE_INTERVAL_IN_SECONDS = "twinUpdateIntervalInSeconds"
 
 
 class CustomDimensions(object):

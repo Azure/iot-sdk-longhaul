@@ -12,7 +12,7 @@ import pprint
 import sys
 import collections
 import platform
-from executor import BetterThreadPoolExecutor, reset_watchdog
+from executor import BetterThreadPoolExecutor, reset_watchdog, dump_active_stacks
 import dps
 import queue
 import faulthandler
@@ -81,11 +81,6 @@ azure_monitor.log_to_azure_monitor("thief")
 TestMethod = collections.namedtuple(
     "TestMethod", "method_name expected_status_code include_payload"
 )
-methods_to_test = [
-    TestMethod(MethodNames.FAIL_WITH_404, 404, False),
-    TestMethod(MethodNames.ECHO_REQUEST, 200, True),
-    TestMethod(MethodNames.UNDEFINED_METHOD_NAME, 500, False),
-]
 
 
 def _get_os_release_based_on_user_agent_standard():
@@ -143,9 +138,9 @@ Object we use internally to keep track of how the entire test is configured.
 Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
-    Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
-    Settings.THIEF_WATCHDOG_FAILURE_INTERVAL_IN_SECONDS: 300,
-    Settings.THIEF_ALLOWED_EXCEPTION_COUNT: 10,
+    Settings.MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
+    Settings.ALLOWED_EXCEPTION_COUNT: 10,
+    Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
     Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 1000,
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
@@ -153,7 +148,6 @@ device_run_config = {
     Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
     Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS: 20,
     Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT: 100,
-    Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS: 5,
 }
 
 
@@ -374,10 +368,7 @@ class DeviceApp(object):
         """
         Check all failure counts and raise an exception if they exceeded the allowed count
         """
-        if (
-            self.metrics.exception_count.get_count()
-            > self.config[Settings.THIEF_ALLOWED_EXCEPTION_COUNT]
-        ):
+        if self.metrics.exception_count.get_count() > self.config[Settings.ALLOWED_EXCEPTION_COUNT]:
             raise Exception(
                 "Exception count ({}) too high.".format(self.metrics.exception_count.get_count())
             )
@@ -583,19 +574,20 @@ class DeviceApp(object):
             self.metrics.send_message_count_not_received_by_service_app.increment()
 
             send_time = time.time()
-            running_op.event.wait()
+            if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+                logger.info("Telemetry op {} arrived at service".format(running_op.id))
+                self.metrics.send_message_count_not_received_by_service_app.decrement()
 
-            logger.info("Telemetry op {} arrived at service".format(running_op.id))
-            self.metrics.send_message_count_not_received_by_service_app.decrement()
-
-            with self.reporter_lock:
-                self.reporter.set_metrics_from_dict(
-                    {
-                        Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000,
-                        Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time() - send_time,
-                    }
-                )
-                self.reporter.record()
+                with self.reporter_lock:
+                    self.reporter.set_metrics_from_dict(
+                        {
+                            Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000,
+                            Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time() - send_time,
+                        }
+                    )
+                    self.reporter.record()
+            else:
+                logger.warning("Telemetry op {} did not arrive at service".format(running_op.id))
 
         while not self.done.isSet():
             reset_watchdog()
@@ -603,79 +595,60 @@ class DeviceApp(object):
             # sleep until we need to send again
             self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
 
-    def wait_for_desired_properties_thread(self):
+    def handle_desired_property_patch_received(self, patch):
         """
-        Thread which waits for desired property patches and puts them into
-        queues for other threads to handle
+        callback for desired property patch reception
         """
-        while not self.done.isSet():
-            reset_watchdog()
+        # props that have the pairing structure go to `incoming_pairing_message_queue`
+        if patch.get(Fields.THIEF, {}).get(Fields.PAIRING, {}):
+            self.incoming_pairing_message_queue.put(patch)
 
-            props = self.client.receive_twin_desired_properties_patch(timeout=30)
-            if props:
-                # props that have the pairing structure go to `incoming_pairing_message_queue`
-                if props.get(Fields.THIEF, {}).get(Fields.PAIRING, {}):
-                    self.incoming_pairing_message_queue.put(props)
+        # other props go into incoming_deisred_property_patch_queue
+        else:
+            self.incoming_desired_property_patch_queue.put(patch)
 
-                # other props go into incoming_deisred_property_patch_queue
+    def handle_message_received(self, msg):
+        """
+        Callback for receiving c2d messages.
+        """
+        obj = json.loads(msg.data.decode())
+        thief = obj.get(Fields.THIEF)
+
+        if (
+            thief
+            and thief[Fields.RUN_ID] == run_id
+            and thief[Fields.SERVICE_INSTANCE_ID] == self.service_instance_id
+        ):
+            # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
+            cmd = thief[Fields.CMD]
+            if cmd in [Commands.SERVICE_ACK_RESPONSE, Commands.METHOD_RESPONSE]:
+                # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
+                # for another thread to handle.
+                if Fields.SERVICE_ACK_ID in thief:
+                    logger.info(
+                        "Received {} message with {}".format(cmd, thief[Fields.SERVICE_ACK_ID])
+                    )
                 else:
-                    self.incoming_desired_property_patch_queue.put(props)
+                    logger.info(
+                        "Received {} message with {}".format(cmd, thief[Fields.SERVICE_ACKS])
+                    )
+                self.incoming_service_ack_response_queue.put(msg)
 
-    def dispatch_incoming_message_thread(self):
-        """
-        Thread which continuously receives c2d messages throughout the test run.  This
-        thread does minimal processing for each c2d.  If anything complex needs to happen as a
-        result of a c2d message, this thread puts the message into a queue for some other thread
-        to pick up.
-        """
-        while not self.done.isSet():
-            reset_watchdog()
+            elif cmd == Commands.TEST_C2D:
+                # If this is a test C2D messages, we put it into `incoming_test_c2d_message_queue`
+                # for another thread to handle.
+                logger.info(
+                    "Received {} message with index {}".format(
+                        cmd, thief[Fields.TEST_C2D_MESSAGE_INDEX]
+                    )
+                )
+                self.incoming_test_c2d_message_queue.put(msg)
 
-            msg = self.client.receive_message(timeout=30)
+            else:
+                logger.warning("Unknown command received: {}".format(obj))
 
-            if msg:
-                obj = json.loads(msg.data.decode())
-                thief = obj.get(Fields.THIEF)
-
-                if (
-                    thief
-                    and thief[Fields.RUN_ID] == run_id
-                    and thief[Fields.SERVICE_INSTANCE_ID] == self.service_instance_id
-                ):
-                    # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
-                    cmd = thief[Fields.CMD]
-                    if cmd in [Commands.SERVICE_ACK_RESPONSE, Commands.METHOD_RESPONSE]:
-                        # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
-                        # for another thread to handle.
-                        if Fields.SERVICE_ACK_ID in thief:
-                            logger.info(
-                                "Received {} message with {}".format(
-                                    cmd, thief[Fields.SERVICE_ACK_ID]
-                                )
-                            )
-                        else:
-                            logger.info(
-                                "Received {} message with {}".format(
-                                    cmd, thief[Fields.SERVICE_ACKS]
-                                )
-                            )
-                        self.incoming_service_ack_response_queue.put(msg)
-
-                    elif cmd == Commands.TEST_C2D:
-                        # If this is a test C2D messages, we put it into `incoming_test_c2d_message_queue`
-                        # for another thread to handle.
-                        logger.info(
-                            "Received {} message with index {}".format(
-                                cmd, thief[Fields.TEST_C2D_MESSAGE_INDEX]
-                            )
-                        )
-                        self.incoming_test_c2d_message_queue.put(msg)
-
-                    else:
-                        logger.warning("Unknown command received: {}".format(obj))
-
-                else:
-                    logger.warning("C2D received, but it's not for us: {}".format(obj))
+        else:
+            logger.warning("C2D received, but it's not for us: {}".format(obj))
 
     def handle_service_ack_response_thread(self):
         """
@@ -772,26 +745,30 @@ class DeviceApp(object):
                         )
                     )
 
-    def test_twin_properties_thread(self):
+    def operation_test_thread(self):
         """
-        Thread to test twin properties. The twin property tests consists of two subtests: one for
-        reported properties and the other for desired properties.
+        Thread which loops through various hub features and tests them one at a time.
         """
+
+        tests = [
+            (self.test_reported_properties, (), {}),
+            (self.test_desired_properties, (), {}),
+            (self.test_method_invoke, [TestMethod(MethodNames.FAIL_WITH_404, 404, False)], {}),
+            (self.test_method_invoke, [TestMethod(MethodNames.ECHO_REQUEST, 200, True)], {}),
+            (
+                self.test_method_invoke,
+                [TestMethod(MethodNames.UNDEFINED_METHOD_NAME, 500, False)],
+                {},
+            ),
+        ]
 
         while not self.done.isSet():
-            reset_watchdog()
-
-            self.test_method_invoke()
-            reset_watchdog()
-            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
-
-            self.test_reported_properties()
-            reset_watchdog()
-            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
-
-            self.test_desired_properties()
-            reset_watchdog()
-            time.sleep(self.config[Settings.TWIN_UPDATE_INTERVAL_IN_SECONDS])
+            for (function, args, kwargs) in tests:
+                reset_watchdog()
+                function(*args, **kwargs)
+                time.sleep(self.config[Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS])
+                if self.done.isSet():
+                    break
 
     def test_reported_properties(self):
         """
@@ -939,90 +916,83 @@ class DeviceApp(object):
             )
             self.metrics.get_twin_count_timed_out_out.increment()
 
-    def handle_method_thread(self):
-        while not self.done.isSet():
-            reset_watchdog()
-
-            # TODO: remove timeout or switch to handlers
-            logger.info("calling receive method function")
-            method_request = self.client.receive_method_request(timeout=10)
-            if method_request:
-                logger.info("Received method request {}".format(method_request.name))
-                if method_request.name == MethodNames.FAIL_WITH_404:
-                    logger.info("sending response to fail with 404")
-                    self.client.send_method_response(
-                        MethodResponse.create_from_method_request(method_request, 404)
-                    )
-                elif method_request.name == MethodNames.ECHO_REQUEST:
-                    self.client.send_method_response(
-                        MethodResponse.create_from_method_request(
-                            method_request, 200, method_request.payload,
-                        )
-                    )
-                else:
-                    logger.info("sending response to fail with 500")
-                    self.client.send_method_response(
-                        MethodResponse.create_from_method_request(method_request, 500)
-                    )
-
-    def test_method_invoke(self):
-        for method in methods_to_test:
-            running_op = self.running_operation_list.make_event_based_operation()
-
-            if method.include_payload:
-                payload = {"id": str(uuid.uuid4())}
-            else:
-                payload = None
-
-            command_payload = {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.INVOKE_METHOD,
-                    Fields.SERVICE_ACK_ID: running_op.id,
-                    Fields.METHOD_NAME: method.method_name,
-                    Fields.METHOD_INVOKE_PAYLOAD: payload,
-                }
-            }
-            msg = self.create_message_from_dict(command_payload)
-            logger.info("sending method invoke with guid={}".format(running_op.id))
-            self.client.send_message(msg)
-
-            if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
-                print(
-                    "method with guid {} returned {}".format(
-                        running_op.id, running_op.result_message
+    def handle_method_received(self, method_request):
+        def handle():
+            logger.info("Received method request {}".format(method_request.name))
+            if method_request.name == MethodNames.FAIL_WITH_404:
+                logger.info("sending response to fail with 404")
+                self.client.send_method_response(
+                    MethodResponse.create_from_method_request(method_request, 404)
+                )
+            elif method_request.name == MethodNames.ECHO_REQUEST:
+                self.client.send_method_response(
+                    MethodResponse.create_from_method_request(
+                        method_request, 200, method_request.payload,
                     )
                 )
-                thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
-                fail = False
-                if thief[Fields.METHOD_RESPONSE_STATUS_CODE] != method.expected_status_code:
+            else:
+                logger.info("sending response to fail with 500")
+                self.client.send_method_response(
+                    MethodResponse.create_from_method_request(method_request, 500)
+                )
+
+        self.executor.submit(handle)
+
+    def test_method_invoke(self, method):
+        running_op = self.running_operation_list.make_event_based_operation()
+
+        if method.include_payload:
+            payload = {"id": str(uuid.uuid4())}
+        else:
+            payload = None
+
+        command_payload = {
+            Fields.THIEF: {
+                Fields.CMD: Commands.INVOKE_METHOD,
+                Fields.SERVICE_ACK_ID: running_op.id,
+                Fields.METHOD_NAME: method.method_name,
+                Fields.METHOD_INVOKE_PAYLOAD: payload,
+            }
+        }
+        msg = self.create_message_from_dict(command_payload)
+        logger.info("sending method invoke with guid={}".format(running_op.id))
+        self.client.send_message(msg)
+
+        if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+            print(
+                "method with guid {} returned {}".format(running_op.id, running_op.result_message)
+            )
+            thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
+            fail = False
+            if thief[Fields.METHOD_RESPONSE_STATUS_CODE] != method.expected_status_code:
+                logger.error(
+                    "Unexpected method status: id={}, received {} expected {}".format(
+                        running_op.id,
+                        thief[Fields.METHOD_RESPONSE_STATUS_CODE],
+                        method.expected_status_code,
+                    )
+                )
+                fail = True
+                if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
                     logger.error(
-                        "Unexpected method status: id={}, received {} expected {}".format(
-                            running_op.id,
-                            thief[Fields.METHOD_RESPONSE_STATUS_CODE],
-                            method.expected_status_code,
+                        "Unexpected payload: id={}, received {} expected {}".format(
+                            running_op.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
                         )
                     )
                     fail = True
-                    if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
-                        logger.error(
-                            "Unexpected payload: id={}, received {} expected {}".format(
-                                running_op.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
-                            )
-                        )
-                        fail = True
 
-                logger.info(
-                    "---------------------------------------------------------------------------------"
-                )
-                if fail:
-                    logger.error("Method call check failed")
-                    # TODO: log failure and count
-                else:
-                    logger.error("Method call check succeeded")
-
+            logger.info(
+                "---------------------------------------------------------------------------------"
+            )
+            if fail:
+                logger.error("Method call check failed")
+                # TODO: log failure and count
             else:
-                logger.error("method with guid {} never completed".format(running_op.id))
-                # TODO: timeout here
+                logger.error("Method call check succeeded")
+
+        else:
+            logger.error("method with guid {} never completed".format(running_op.id))
+            # TODO: timeout here
 
     def main(self):
 
@@ -1046,23 +1016,25 @@ class DeviceApp(object):
         )
 
         # Launch threads required to run
-        self.executor.submit(self.dispatch_incoming_message_thread, critical=True)
-        self.executor.submit(self.wait_for_desired_properties_thread, critical=True)
+        self.client.on_message_received = self.handle_message_received
+        self.client.on_method_request_received = self.handle_method_received
+        self.client.on_twin_desired_properties_patch_received = (
+            self.handle_desired_property_patch_received
+        )
         self.executor.submit(self.handle_service_ack_response_thread, critical=True)
         self.executor.submit(self.handle_incoming_test_c2d_messages_thread, critical=True)
-        self.executor.submit(self.handle_method_thread, critical=True)
 
         # Pair
         self.pair_with_service()
 
         # Start testing threads
         self.executor.submit(self.test_send_message_thread, critical=True)
-        self.executor.submit(self.test_twin_properties_thread, critical=True)
+        self.executor.submit(self.operation_test_thread, critical=True)
         self.start_c2d_message_sending()
 
         self.metrics.exit_reason = ""
         start_time = time.time()
-        planned_end_time = start_time + self.config[Settings.THIEF_MAX_RUN_DURATION_IN_SECONDS]
+        planned_end_time = start_time + self.config[Settings.MAX_RUN_DURATION_IN_SECONDS]
         try:
             while time.time() < planned_end_time:
                 # TODO: limit sleep length to check failure counts more often
@@ -1096,9 +1068,12 @@ class DeviceApp(object):
             logger.info("Setting done flag: {}".format(self.metrics.exit_reason))
             logger.info("-------------------------------------------------------------")
             self.done.set()
-            done, not_done = self.executor.wait(timeout=60)
+            done, not_done = self.executor.wait(
+                timeout=2 * self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
+            )
             if not_done:
                 logger.error("{} threads not stopped after ending run".format(len(not_done)))
+                dump_active_stacks(self.executor)
 
             logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
             event_logger.info(
@@ -1114,6 +1089,7 @@ class DeviceApp(object):
                     Fields.TEST_METRICS: self.get_test_metrics(),
                 }
             }
+            logger.info("Results: {}".format(pprint.pformat(props)))
             self.client.patch_twin_reported_properties(props)
 
             logger.info("Disconnecting")

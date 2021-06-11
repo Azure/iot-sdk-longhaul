@@ -41,6 +41,22 @@ def reset_watchdog():
     thread_local_storage.future_thread_info.watchdog_reset_time = time.time()
 
 
+def dump_active_stacks(executor, printer=print):
+    """
+    Helper function to dump all non-idle stacks inside a ThreadPoolExecutor
+    """
+    pool_thread_ids = [t.ident for t in executor._threads]
+    for (thread_id, frame) in sys._current_frames().items():
+        if thread_id in pool_thread_ids:
+            stack = traceback.extract_stack(frame)
+            last_frame = stack[len(stack) - 1]
+            if not last_frame.filename.endswith("/concurrent/futures/thread.py"):
+                printer("------------")
+                printer("Stack for thread {}".format(thread_id))
+                for line in traceback.format_stack(frame):
+                    printer(line)
+
+
 class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
     """
     Class which improves on ThreadPoolExecutor by adding:
