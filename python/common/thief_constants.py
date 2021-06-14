@@ -221,8 +221,8 @@ class Metrics(object):
     # Number of telemetry messages sent
     SEND_MESSAGE_COUNT_SENT = "sendMessageCountSent"
 
-    # Number of telemetry messages that have not (yet) arrived at the hub
-    SEND_MESSAGE_COUNT_NOT_RECEIVED = "sendMessageCountNotReceivedByServiceApp"
+    # Number of telemetry messages that timed out with no response from the service
+    SEND_MESSAGE_COUNT_TIMED_OUT = "sendMessageCountTimedOut"
 
     # -------------------
     # Receive c2d metrics
@@ -285,9 +285,6 @@ class Metrics(object):
         "latencyRemoveReportedPropertyToServiceAckInSeconds"
     )
 
-    # Number of seconds between consecutive c2d messages
-    LATENCY_BETWEEN_C2D = "latencyBetweenC2dInSeconds"
-
 
 class SystemProperties(object):
     """
@@ -331,7 +328,7 @@ class Settings(object):
     ALLOWED_EXCEPTION_COUNT = "allowedExceptionCount"
 
     # How many seconds between tests
-    INTER_TEST_DELAY_INTERVAL_IN_SECONDS = "interTestDelayInSeconds"
+    INTER_TEST_DELAY_INTERVAL_IN_SECONDS = "interTestDelayIntervalInSeconds"
 
     # Generic value for operation timeouts
     OPERATION_TIMEOUT_IN_SECONDS = "operationTimeoutInSeconds"
