@@ -253,9 +253,9 @@ groups:
             desc: "Number of telemetry messages sent"
             type: int
             units: mesages
-          - name: SEND_MESSAGE_COUNT_NOT_RECEIVED 
-            value: "sendMessageCountNotReceivedByServiceApp"
-            desc: "Number of telemetry messages that have not (yet) arrived at the hub"
+          - name: SEND_MESSAGE_COUNT_TIMED_OUT 
+            value: "sendMessageCountTimedOut"
+            desc: "Number of telemetry messages that timed out with no response from the service"
             type: int
             units: mesages
 
@@ -338,11 +338,6 @@ groups:
             desc: "Number of seconds between removing a reported property and receiving verification of the removal from the service app"
             type: float
             units: seconds
-          - name: LATENCY_BETWEEN_C2D 
-            value: "latencyBetweenC2dInSeconds"
-            desc: "Number of seconds between consecutive c2d messages"
-            type: float
-            units: seconds
 
   - name: SystemProperties
     desc: "Properties for the system runnin the test"
@@ -379,7 +374,7 @@ groups:
         value: "maxRunDurationInSeconds"
         desc: "how long should the test run before finishing.  0 = forever"
       - name: ALLOWED_EXCEPTION_COUNT 
-        value: "AllowedExceptionCount"
+        value: "allowedExceptionCount"
         desc: "How many exceptions do we allow before we fail the test?"
       - name: INTER_TEST_DELAY_INTERVAL_IN_SECONDS
         value: "interTestDelayIntervalInSeconds"
@@ -391,6 +386,7 @@ groups:
         value: "operationTimeoutAllowedFailureCount"
         desc: "How many timeouts are allowed before the test fails"
 
+    subgroups:
       - desc: "pairing settings"
         values:
         - name: PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS 
@@ -414,12 +410,6 @@ groups:
         - name: RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT 
           value: "receiveC2dAllowedMissingMessageCount"
           desc: "How many missing C2D messages will cause the test to fail?"
-
-      - desc: "twin update settings"
-        values:
-        - name: TWIN_UPDATE_INTERVAL_IN_SECONDS 
-          value: "twinUpdateIntervalInSeconds"
-          desc: "How many seconds between twin property updates"
 
 
   - name: CustomDimensions

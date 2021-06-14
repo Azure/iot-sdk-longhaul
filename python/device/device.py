@@ -118,7 +118,7 @@ class DeviceRunMetrics(object):
 
         self.send_message_count_queued = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
-        self.send_message_count_not_received_by_service_app = ThreadSafeCounter()
+        self.send_message_count_timed_out = ThreadSafeCounter()
 
         self.receive_c2d_count_received = ThreadSafeCounter()
 
@@ -171,7 +171,6 @@ class DeviceApp(object):
         self.system_health_telemetry = SystemHealthTelemetry()
         # for service_acks
         self.running_operation_list = RunningOperationList()
-        self.incoming_service_ack_response_queue = queue.Queue()
         # for metrics
         self.reporter_lock = threading.Lock()
         self.reporter = MetricsReporter()
@@ -180,7 +179,6 @@ class DeviceApp(object):
         self.incoming_pairing_message_queue = queue.Queue()
         # for c2d
         self.out_of_order_message_tracker = OutOfOrderMessageTracker()
-        self.incoming_test_c2d_message_queue = queue.Queue()
         # for twin
         self.reported_property_index = 1
         self.incoming_desired_property_patch_queue = queue.Queue()
@@ -234,8 +232,8 @@ class DeviceApp(object):
             Metrics.SEND_MESSAGE_COUNT_SENT, "Number of telemetry messages sent", "mesages",
         )
         self.reporter.add_integer_measurement(
-            Metrics.SEND_MESSAGE_COUNT_NOT_RECEIVED,
-            "Number of telemetry messages that have not (yet) arrived at the hub",
+            Metrics.SEND_MESSAGE_COUNT_TIMED_OUT,
+            "Number of telemetry messages that timed out with no response from the service",
             "mesages",
         )
 
@@ -319,11 +317,6 @@ class DeviceApp(object):
             "Number of seconds between removing a reported property and receiving verification of the removal from the service app",
             "seconds",
         )
-        self.reporter.add_float_measurement(
-            Metrics.LATENCY_BETWEEN_C2D,
-            "Number of seconds between consecutive c2d messages",
-            "seconds",
-        )
 
     def get_session_metrics(self):
         """
@@ -351,7 +344,7 @@ class DeviceApp(object):
             Metrics.EXCEPTION_COUNT: self.metrics.exception_count.get_count(),
             Metrics.SEND_MESSAGE_COUNT_QUEUED: self.metrics.send_message_count_queued.get_count(),
             Metrics.SEND_MESSAGE_COUNT_SENT: self.metrics.send_message_count_sent.get_count(),
-            Metrics.SEND_MESSAGE_COUNT_NOT_RECEIVED: self.metrics.send_message_count_not_received_by_service_app.get_count(),
+            Metrics.SEND_MESSAGE_COUNT_TIMED_OUT: self.metrics.send_message_count_timed_out.get_count(),
             Metrics.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
             Metrics.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
             Metrics.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
@@ -374,7 +367,7 @@ class DeviceApp(object):
             )
 
         timeout_count = (
-            self.metrics.send_message_count_not_received_by_service_app.get_count()
+            self.metrics.send_message_count_timed_out.get_count()
             + self.out_of_order_message_tracker.get_missing_count()
             + self.metrics.reported_properties_count_timed_out.get_count()
             + self.metrics.get_twin_count_timed_out.get_count()
@@ -571,12 +564,10 @@ class DeviceApp(object):
             logger.info("Telemetry op {} sent to service".format(running_op.id))
 
             self.metrics.send_message_count_sent.increment()
-            self.metrics.send_message_count_not_received_by_service_app.increment()
 
             send_time = time.time()
             if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
                 logger.info("Telemetry op {} arrived at service".format(running_op.id))
-                self.metrics.send_message_count_not_received_by_service_app.decrement()
 
                 with self.reporter_lock:
                     self.reporter.set_metrics_from_dict(
@@ -588,6 +579,7 @@ class DeviceApp(object):
                     self.reporter.record()
             else:
                 logger.warning("Telemetry op {} did not arrive at service".format(running_op.id))
+                self.metrics.send_message_count_timed_out.increment()
 
         while not self.done.isSet():
             reset_watchdog()
@@ -595,111 +587,68 @@ class DeviceApp(object):
             # sleep until we need to send again
             self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
 
-    def wait_for_desired_properties_thread(self):
+    def handle_desired_property_patch_received(self, patch):
         """
-        Thread which waits for desired property patches and puts them into
-        queues for other threads to handle
+        callback for desired property patch reception
         """
-        while not self.done.isSet():
-            reset_watchdog()
+        # props that have the pairing structure go to `incoming_pairing_message_queue`
+        if patch.get(Fields.THIEF, {}).get(Fields.PAIRING, {}):
+            self.incoming_pairing_message_queue.put(patch)
 
-            props = self.client.receive_twin_desired_properties_patch(timeout=30)
-            if props:
-                # props that have the pairing structure go to `incoming_pairing_message_queue`
-                if props.get(Fields.THIEF, {}).get(Fields.PAIRING, {}):
-                    self.incoming_pairing_message_queue.put(props)
+        # other props go into incoming_deisred_property_patch_queue
+        else:
+            self.incoming_desired_property_patch_queue.put(patch)
 
-                # other props go into incoming_deisred_property_patch_queue
-                else:
-                    self.incoming_desired_property_patch_queue.put(props)
-
-    def dispatch_incoming_message_thread(self):
+    def handle_message_received(self, msg):
         """
-        Thread which continuously receives c2d messages throughout the test run.  This
-        thread does minimal processing for each c2d.  If anything complex needs to happen as a
-        result of a c2d message, this thread puts the message into a queue for some other thread
-        to pick up.
+        Callback for receiving c2d messages.
         """
-        while not self.done.isSet():
-            reset_watchdog()
+        obj = json.loads(msg.data.decode())
+        thief = obj.get(Fields.THIEF)
 
-            msg = self.client.receive_message(timeout=30)
+        if (
+            thief
+            and thief[Fields.RUN_ID] == run_id
+            and thief[Fields.SERVICE_INSTANCE_ID] == self.service_instance_id
+        ):
+            # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
+            cmd = thief[Fields.CMD]
+            if cmd in [Commands.SERVICE_ACK_RESPONSE, Commands.METHOD_RESPONSE]:
+                self.executor.submit(self.handle_service_ack_response, msg)
 
-            if msg:
-                obj = json.loads(msg.data.decode())
-                thief = obj.get(Fields.THIEF)
+            elif cmd == Commands.TEST_C2D:
+                self.executor.submit(self.handle_incoming_test_c2d_message, msg)
 
-                if (
-                    thief
-                    and thief[Fields.RUN_ID] == run_id
-                    and thief[Fields.SERVICE_INSTANCE_ID] == self.service_instance_id
-                ):
-                    # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
-                    cmd = thief[Fields.CMD]
-                    if cmd in [Commands.SERVICE_ACK_RESPONSE, Commands.METHOD_RESPONSE]:
-                        # If this is a service_ack response, we put it into `incoming_service_ack_response_queue`
-                        # for another thread to handle.
-                        if Fields.SERVICE_ACK_ID in thief:
-                            logger.info(
-                                "Received {} message with {}".format(
-                                    cmd, thief[Fields.SERVICE_ACK_ID]
-                                )
-                            )
-                        else:
-                            logger.info(
-                                "Received {} message with {}".format(
-                                    cmd, thief[Fields.SERVICE_ACKS]
-                                )
-                            )
-                        self.incoming_service_ack_response_queue.put(msg)
+            else:
+                logger.warning("Unknown command received: {}".format(obj))
 
-                    elif cmd == Commands.TEST_C2D:
-                        # If this is a test C2D messages, we put it into `incoming_test_c2d_message_queue`
-                        # for another thread to handle.
-                        logger.info(
-                            "Received {} message with index {}".format(
-                                cmd, thief[Fields.TEST_C2D_MESSAGE_INDEX]
-                            )
-                        )
-                        self.incoming_test_c2d_message_queue.put(msg)
+        else:
+            logger.warning("C2D received, but it's not for us: {}".format(obj))
 
-                    else:
-                        logger.warning("Unknown command received: {}".format(obj))
-
-                else:
-                    logger.warning("C2D received, but it's not for us: {}".format(obj))
-
-    def handle_service_ack_response_thread(self):
+    def handle_service_ack_response(self, msg):
         """
-        Thread which handles incoming service_ack responses.  This is where we go through the list
+        Code to handle incoming service_ack responses.  This is where we go through the list
         of `serviceAckId` values that we received and call the appropriate callbacks to indicate that
         the service has responded.
         """
 
-        while not self.done.isSet():
-            reset_watchdog()
+        thief = json.loads(msg.data.decode())[Fields.THIEF]
 
-            try:
-                msg = self.incoming_service_ack_response_queue.get(timeout=1)
-            except queue.Empty:
-                msg = None
+        service_acks = thief.get(Fields.SERVICE_ACKS, [])
+        if not service_acks:
+            service_acks = [
+                thief.get(Fields.SERVICE_ACK_ID),
+            ]
 
-            if msg:
-                thief = json.loads(msg.data.decode())[Fields.THIEF]
+        logger.info("Received {} message with {}".format(thief[Fields.CMD], service_acks))
 
-                service_acks = thief.get(Fields.SERVICE_ACKS, [])
-                if not service_acks:
-                    service_acks = [
-                        thief.get(Fields.SERVICE_ACK_ID),
-                    ]
-
-                for service_ack_id in service_acks:
-                    running_op = self.running_operation_list.get(service_ack_id)
-                    if running_op:
-                        running_op.result_message = msg
-                        running_op.complete()
-                    else:
-                        logger.warning("Received unknown serviceAckId: {}:".format(service_ack_id))
+        for service_ack_id in service_acks:
+            running_op = self.running_operation_list.get(service_ack_id)
+            if running_op:
+                running_op.result_message = msg
+                running_op.complete()
+            else:
+                logger.warning("Received unknown serviceAckId: {}:".format(service_ack_id))
 
     def start_c2d_message_sending(self):
         """
@@ -723,46 +672,31 @@ class DeviceApp(object):
         logger.info("Enabling C2D message testing: {}".format(props))
         self.client.patch_twin_reported_properties(props)
 
-    def handle_incoming_test_c2d_messages_thread(self):
+    def handle_incoming_test_c2d_message(self, msg):
         """
-        Thread which handles c2d messages that were sent by the service app for the purpose of
+        Code to handle c2d messages that were sent by the service app for the purpose of
         testing c2d
         """
-        last_message_epochtime = 0
+        thief = json.loads(msg.data.decode())[Fields.THIEF]
 
-        while not self.done.isSet():
-            reset_watchdog()
+        logger.info(
+            "Received {} message with index {}".format(
+                thief[Fields.CMD], thief[Fields.TEST_C2D_MESSAGE_INDEX]
+            )
+        )
 
-            try:
-                msg = self.incoming_test_c2d_message_queue.get(timeout=1)
-            except queue.Empty:
-                msg = None
+        self.metrics.receive_c2d_count_received.increment()
+        self.out_of_order_message_tracker.add_message(thief.get(Fields.TEST_C2D_MESSAGE_INDEX))
 
-            if msg:
-                thief = json.loads(msg.data.decode())[Fields.THIEF]
-                self.metrics.receive_c2d_count_received.increment()
-                self.out_of_order_message_tracker.add_message(
-                    thief.get(Fields.TEST_C2D_MESSAGE_INDEX)
-                )
-
-                now = time.time()
-                if last_message_epochtime:
-                    with self.reporter_lock:
-                        self.reporter.set_metrics_from_dict(
-                            {Metrics.LATENCY_BETWEEN_C2D: now - last_message_epochtime}
-                        )
-                        self.reporter.record()
-                last_message_epochtime = now
-
-                if (
+        if (
+            self.out_of_order_message_tracker.get_missing_count()
+            > self.config[Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT]
+        ):
+            raise Exception(
+                "Missing message count ({}) is too high".format(
                     self.out_of_order_message_tracker.get_missing_count()
-                    > self.config[Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT]
-                ):
-                    raise Exception(
-                        "Missing message count ({}) is too high".format(
-                            self.out_of_order_message_tracker.get_missing_count()
-                        )
-                    )
+                )
+            )
 
     def operation_test_thread(self):
         """
@@ -935,31 +869,27 @@ class DeviceApp(object):
             )
             self.metrics.get_twin_count_timed_out_out.increment()
 
-    def handle_method_thread(self):
-        while not self.done.isSet():
-            reset_watchdog()
+    def handle_method_received(self, method_request):
+        def handle():
+            logger.info("Received method request {}".format(method_request.name))
+            if method_request.name == MethodNames.FAIL_WITH_404:
+                logger.info("sending response to fail with 404")
+                self.client.send_method_response(
+                    MethodResponse.create_from_method_request(method_request, 404)
+                )
+            elif method_request.name == MethodNames.ECHO_REQUEST:
+                self.client.send_method_response(
+                    MethodResponse.create_from_method_request(
+                        method_request, 200, method_request.payload,
+                    )
+                )
+            else:
+                logger.info("sending response to fail with 500")
+                self.client.send_method_response(
+                    MethodResponse.create_from_method_request(method_request, 500)
+                )
 
-            # TODO: remove timeout or switch to handlers
-            logger.info("calling receive method function")
-            method_request = self.client.receive_method_request(timeout=10)
-            if method_request:
-                logger.info("Received method request {}".format(method_request.name))
-                if method_request.name == MethodNames.FAIL_WITH_404:
-                    logger.info("sending response to fail with 404")
-                    self.client.send_method_response(
-                        MethodResponse.create_from_method_request(method_request, 404)
-                    )
-                elif method_request.name == MethodNames.ECHO_REQUEST:
-                    self.client.send_method_response(
-                        MethodResponse.create_from_method_request(
-                            method_request, 200, method_request.payload,
-                        )
-                    )
-                else:
-                    logger.info("sending response to fail with 500")
-                    self.client.send_method_response(
-                        MethodResponse.create_from_method_request(method_request, 500)
-                    )
+        self.executor.submit(handle)
 
     def test_method_invoke(self, method):
         running_op = self.running_operation_list.make_event_based_operation()
@@ -1038,12 +968,12 @@ class DeviceApp(object):
             Events.STARTING_RUN, extra=custom_props({CustomDimensions.RUN_REASON: run_reason})
         )
 
-        # Launch threads required to run
-        self.executor.submit(self.dispatch_incoming_message_thread, critical=True)
-        self.executor.submit(self.wait_for_desired_properties_thread, critical=True)
-        self.executor.submit(self.handle_service_ack_response_thread, critical=True)
-        self.executor.submit(self.handle_incoming_test_c2d_messages_thread, critical=True)
-        self.executor.submit(self.handle_method_thread, critical=True)
+        # Set handlers for incoming hub messages
+        self.client.on_message_received = self.handle_message_received
+        self.client.on_method_request_received = self.handle_method_received
+        self.client.on_twin_desired_properties_patch_received = (
+            self.handle_desired_property_patch_received
+        )
 
         # Pair
         self.pair_with_service()
