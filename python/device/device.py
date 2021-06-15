@@ -224,30 +224,30 @@ class DeviceApp(object):
         self.reporter.add_integer_measurement(
             Metrics.SEND_MESSAGE_COUNT_QUEUED,
             "Number of telemetry messages queued for sending",
-            "mesages",
+            "messages",
         )
         self.reporter.add_integer_measurement(
-            Metrics.SEND_MESSAGE_COUNT_SENT, "Number of telemetry messages sent", "mesages",
+            Metrics.SEND_MESSAGE_COUNT_SENT, "Number of telemetry messages sent", "messages",
         )
         self.reporter.add_integer_measurement(
             Metrics.SEND_MESSAGE_COUNT_TIMED_OUT,
             "Number of telemetry messages that timed out with no response from the service",
-            "mesages",
+            "messages",
         )
 
         # -------------------
         # Receive c2d metrics
         # -------------------
         self.reporter.add_integer_measurement(
-            Metrics.RECEIVE_C2D_COUNT_SENT, "Number of c2d messages sent", "mesages",
+            Metrics.RECEIVE_C2D_COUNT_SENT, "Number of c2d messages sent", "messages",
         )
         self.reporter.add_integer_measurement(
-            Metrics.RECEIVE_C2D_COUNT_RECEIVED, "Number of c2d messages received", "mesages",
+            Metrics.RECEIVE_C2D_COUNT_RECEIVED, "Number of c2d messages received", "messages",
         )
         self.reporter.add_integer_measurement(
             Metrics.RECEIVE_C2D_COUNT_TIMED_OUT,
             "Number of c2d messages not received in time",
-            "mesages",
+            "messages",
         )
 
         # -------------------------

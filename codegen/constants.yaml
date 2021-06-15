@@ -238,17 +238,17 @@ groups:
             value: "sendMessageCountQueued"
             desc: "Number of telemetry messages queued for sending"
             type: int
-            units: mesages
+            units: messages
           - name: SEND_MESSAGE_COUNT_SENT 
             value: "sendMessageCountSent"
             desc: "Number of telemetry messages sent"
             type: int
-            units: mesages
+            units: messages
           - name: SEND_MESSAGE_COUNT_TIMED_OUT 
             value: "sendMessageCountTimedOut"
             desc: "Number of telemetry messages that timed out with no response from the service"
             type: int
-            units: mesages
+            units: messages
 
       - desc: "Receive c2d metrics"
         values:
@@ -256,17 +256,17 @@ groups:
             value: "receiveC2dCountSent"
             desc: "Number of c2d messages sent"
             type: int
-            units: mesages
+            units: messages
           - name: RECEIVE_C2D_COUNT_RECEIVED 
             value: "receiveC2dCountReceived"
             desc: "Number of c2d messages received"
             type: int
-            units: mesages
+            units: messages
           - name: RECEIVE_C2D_COUNT_TIMED_OUT 
             value: "receiveC2dCountTimedOut"
             desc: "Number of c2d messages not received in time"
             type: int
-            units: mesages
+            units: messages
 
       - desc: "Reported property metrics"
         values:
