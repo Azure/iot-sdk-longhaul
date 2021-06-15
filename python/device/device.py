@@ -12,6 +12,7 @@ import pprint
 import sys
 import collections
 import platform
+import random
 from executor import BetterThreadPoolExecutor, reset_watchdog, dump_active_stacks
 import dps
 import queue
@@ -22,7 +23,6 @@ from measurement import ThreadSafeCounter
 from system_health_telemetry import SystemHealthTelemetry
 import azure_monitor
 from azure_monitor_metrics import MetricsReporter
-from out_of_order_message_tracker import OutOfOrderMessageTracker
 from thief_constants import (
     Const,
     Fields,
@@ -120,7 +120,9 @@ class DeviceRunMetrics(object):
         self.send_message_count_sent = ThreadSafeCounter()
         self.send_message_count_timed_out = ThreadSafeCounter()
 
+        self.receive_c2d_count_sent = ThreadSafeCounter()
         self.receive_c2d_count_received = ThreadSafeCounter()
+        self.receive_c2d_count_timed_out = ThreadSafeCounter()
 
         self.reported_properties_count_added = ThreadSafeCounter()
         self.reported_properties_count_removed = ThreadSafeCounter()
@@ -146,8 +148,6 @@ device_run_config = {
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
     Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS: 30,
     Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
-    Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS: 20,
-    Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT: 100,
 }
 
 
@@ -177,8 +177,6 @@ class DeviceApp(object):
         self._configure_azure_monitor_metrics()
         # for pairing
         self.incoming_pairing_message_queue = queue.Queue()
-        # for c2d
-        self.out_of_order_message_tracker = OutOfOrderMessageTracker()
         # for twin
         self.reported_property_index = 1
         self.incoming_desired_property_patch_queue = queue.Queue()
@@ -241,10 +239,15 @@ class DeviceApp(object):
         # Receive c2d metrics
         # -------------------
         self.reporter.add_integer_measurement(
+            Metrics.RECEIVE_C2D_COUNT_SENT, "Number of c2d messages sent", "mesages",
+        )
+        self.reporter.add_integer_measurement(
             Metrics.RECEIVE_C2D_COUNT_RECEIVED, "Number of c2d messages received", "mesages",
         )
         self.reporter.add_integer_measurement(
-            Metrics.RECEIVE_C2D_COUNT_MISSING, "Number of c2d messages not received", "mesages",
+            Metrics.RECEIVE_C2D_COUNT_TIMED_OUT,
+            "Number of c2d messages not received in time",
+            "mesages",
         )
 
         # -------------------------
@@ -345,8 +348,9 @@ class DeviceApp(object):
             Metrics.SEND_MESSAGE_COUNT_QUEUED: self.metrics.send_message_count_queued.get_count(),
             Metrics.SEND_MESSAGE_COUNT_SENT: self.metrics.send_message_count_sent.get_count(),
             Metrics.SEND_MESSAGE_COUNT_TIMED_OUT: self.metrics.send_message_count_timed_out.get_count(),
+            Metrics.RECEIVE_C2D_COUNT_SENT: self.metrics.receive_c2d_count_sent.get_count(),
             Metrics.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
-            Metrics.RECEIVE_C2D_COUNT_MISSING: self.out_of_order_message_tracker.get_missing_count(),
+            Metrics.RECEIVE_C2D_COUNT_TIMED_OUT: self.metrics.receive_c2d_count_timed_out.get_count(),
             Metrics.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
             Metrics.REPORTED_PROPERTIES_COUNT_REMOVED: self.metrics.reported_properties_count_removed.get_count(),
             Metrics.REPORTED_PROPERTIES_COUNT_TIMED_OUT: self.metrics.reported_properties_count_timed_out.get_count(),
@@ -368,7 +372,7 @@ class DeviceApp(object):
 
         timeout_count = (
             self.metrics.send_message_count_timed_out.get_count()
-            + self.out_of_order_message_tracker.get_missing_count()
+            + self.metrics.receive_c2d_count_timed_out.get_count()
             + self.metrics.reported_properties_count_timed_out.get_count()
             + self.metrics.get_twin_count_timed_out.get_count()
             + self.metrics.desired_property_patch_count_timed_out.get_count()
@@ -559,6 +563,7 @@ class DeviceApp(object):
             msg = self.create_message_from_dict(payload)
             msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = running_op.id
 
+            self.metrics.send_message_count_queued.increment()
             queue_time = time.time()
             self.client.send_message(msg)
             logger.info("Telemetry op {} sent to service".format(running_op.id))
@@ -613,11 +618,12 @@ class DeviceApp(object):
         ):
             # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
             cmd = thief[Fields.CMD]
-            if cmd in [Commands.SERVICE_ACK_RESPONSE, Commands.METHOD_RESPONSE]:
+            if cmd in [
+                Commands.SERVICE_ACK_RESPONSE,
+                Commands.METHOD_RESPONSE,
+                Commands.C2D_RESPONSE,
+            ]:
                 self.executor.submit(self.handle_service_ack_response, msg)
-
-            elif cmd == Commands.TEST_C2D:
-                self.executor.submit(self.handle_incoming_test_c2d_message, msg)
 
             else:
                 logger.warning("Unknown command received: {}".format(obj))
@@ -650,54 +656,6 @@ class DeviceApp(object):
             else:
                 logger.warning("Received unknown serviceAckId: {}:".format(service_ack_id))
 
-    def start_c2d_message_sending(self):
-        """
-        set a reported property to start c2d messages flowing
-        """
-        # TODO: add a timeout here, make sure the messages are correct, and make sure messages actually flow
-
-        props = {
-            Fields.THIEF: {
-                Fields.TEST_CONTROL: {
-                    Fields.C2D: {
-                        Fields.SEND: True,
-                        Fields.MESSAGE_INTERVAL_IN_SECONDS: self.config[
-                            Settings.RECEIVE_C2D_INTERVAL_IN_SECONDS
-                        ],
-                    }
-                }
-            }
-        }
-
-        logger.info("Enabling C2D message testing: {}".format(props))
-        self.client.patch_twin_reported_properties(props)
-
-    def handle_incoming_test_c2d_message(self, msg):
-        """
-        Code to handle c2d messages that were sent by the service app for the purpose of
-        testing c2d
-        """
-        thief = json.loads(msg.data.decode())[Fields.THIEF]
-
-        logger.info(
-            "Received {} message with index {}".format(
-                thief[Fields.CMD], thief[Fields.TEST_C2D_MESSAGE_INDEX]
-            )
-        )
-
-        self.metrics.receive_c2d_count_received.increment()
-        self.out_of_order_message_tracker.add_message(thief.get(Fields.TEST_C2D_MESSAGE_INDEX))
-
-        if (
-            self.out_of_order_message_tracker.get_missing_count()
-            > self.config[Settings.RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT]
-        ):
-            raise Exception(
-                "Missing message count ({}) is too high".format(
-                    self.out_of_order_message_tracker.get_missing_count()
-                )
-            )
-
     def operation_test_thread(self):
         """
         Thread which loops through various hub features and tests them one at a time.
@@ -713,12 +671,23 @@ class DeviceApp(object):
                 [TestMethod(MethodNames.UNDEFINED_METHOD_NAME, 500, False)],
                 {},
             ),
+            (self.test_c2d, (), {}),
         ]
 
         while not self.done.isSet():
             for (function, args, kwargs) in tests:
                 reset_watchdog()
-                function(*args, **kwargs)
+
+                try:
+                    function(*args, **kwargs)
+                except Exception as e:
+                    logger.error(
+                        "Test function {} raised {}".format(
+                            function.__name__, str(e) or type(e), exc_info=True
+                        )
+                    )
+                    self.metrics.exception_count.increment()
+
                 time.sleep(self.config[Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS])
                 if self.done.isSet():
                     break
@@ -947,6 +916,64 @@ class DeviceApp(object):
             logger.error("method with guid {} never completed".format(running_op.id))
             # TODO: timeout here
 
+    def test_c2d(self):
+
+        running_op = self.running_operation_list.make_event_based_operation()
+
+        sent_test_payload = {
+            "random_guid": str(uuid.uuid4()),
+            "sub_object": {
+                "string_value": str(uuid.uuid4()),
+                "bool_value": True,
+                "int_value": random.randint(1, 65535),
+                "float_value": random.random() * 65535,
+            },
+        }
+
+        command_payload = {
+            Fields.THIEF: {
+                Fields.CMD: Commands.SEND_C2D,
+                Fields.SERVICE_ACK_ID: running_op.id,
+                Fields.TEST_C2D_PAYLOAD: sent_test_payload,
+            }
+        }
+
+        logger.info("Requesting C2D for serviceAckId {}".format(running_op.id))
+        self.client.send_message(self.create_message_from_dict(command_payload))
+        self.metrics.receive_c2d_count_sent.increment()
+
+        if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+            logger.info("C2D received for serviceAckId {}".format(running_op.id))
+            self.metrics.receive_c2d_count_received.increment()
+
+            thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
+            if thief[Fields.TEST_C2D_PAYLOAD] != sent_test_payload:
+                logger.warning(
+                    "C2D payload for serviceAckId {}  does not match.  Expected={}, Received={}".format(
+                        running_op.id, sent_test_payload, thief[Fields.TEST_C2D_PAYLOAD]
+                    )
+                )
+                raise Exception("C2D payload mismatch")
+        else:
+            logger.info("C2D timed out for serviceAckId {}".format(running_op.id))
+            self.metrics.receive_c2d_count_timed_out.increment()
+
+    def wrap_handler(self, func):
+        """
+        Function to take a handler function and wrap it inside a try/catch block
+        which increments exception count.  This is done because iothub callbacks
+        will catch and swallow any exceptions that get raised in handlers.
+        """
+
+        def newfunc(*args, **kwargs):
+            try:
+                func(*args, **kwargs)
+            except Exception as e:
+                logger.error("exception nin handler: {}".format(str(e) or type(e)), exc_info=True)
+                self.metrics.exception_count.increment()
+
+        return newfunc
+
     def main(self):
 
         self.metrics.run_start_utc = datetime.datetime.now(datetime.timezone.utc)
@@ -969,9 +996,9 @@ class DeviceApp(object):
         )
 
         # Set handlers for incoming hub messages
-        self.client.on_message_received = self.handle_message_received
-        self.client.on_method_request_received = self.handle_method_received
-        self.client.on_twin_desired_properties_patch_received = (
+        self.client.on_message_received = self.wrap_handler(self.handle_message_received)
+        self.client.on_method_request_received = self.wrap_handler(self.handle_method_received)
+        self.client.on_twin_desired_properties_patch_received = self.wrap_handler(
             self.handle_desired_property_patch_received
         )
 
@@ -981,7 +1008,6 @@ class DeviceApp(object):
         # Start testing threads
         self.executor.submit(self.test_send_message_thread, critical=True)
         self.executor.submit(self.operation_test_thread, critical=True)
-        self.start_c2d_message_sending()
 
         self.metrics.exit_reason = ""
         start_time = time.time()

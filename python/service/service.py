@@ -78,12 +78,6 @@ class PerDeviceData(object):
         self.device_id = device_id
         self.run_id = run_id
 
-        # For testing C2D
-        self.test_c2d_enabled = False
-        self.next_c2d_message_index = 0
-        self.c2d_interval_in_seconds = 0
-        self.c2d_next_message_epochtime = 0
-
         # for verifying reported property changes
         self.reported_property_list_lock = threading.Lock()
         self.reported_property_values = {}
@@ -188,9 +182,6 @@ class ServiceApp(object):
         # for reported property tracking
         self.incoming_twin_changes = queue.Queue()
 
-        # for incoming eventHub events
-        self.incoming_eventhub_event_queue = queue.Queue()
-
         # change the default SAS expiry
         iothub_amqp_client.default_sas_expiry = self.config.amqp_sas_expiry_in_seconds
 
@@ -258,83 +249,95 @@ class ServiceApp(object):
             )
         )
 
-    def dispatch_incoming_messages_thread(self):
+    def dispatch_incoming_message(self, event):
         """
         Function to dispatch incoming EventHub messages.  A different thread receives the messages
-        and puts them into `incoming_eventhub_event_queue`.  This thread removes events from
-        that queue and decides what to do with them, either by acting immediately or by putting
-        the events into a different thread
+        and spins up a temporary thread to call this function.
         """
 
-        while not self.done.isSet():
-            reset_watchdog()
+        device_id = get_device_id_from_event(event)
 
-            try:
-                event = self.incoming_eventhub_event_queue.get(timeout=1)
-            except queue.Empty:
-                continue
+        body = event.body_as_json()
+        thief = body.get(Fields.THIEF, {})
+        received_service_instance_id = thief.get(Fields.SERVICE_INSTANCE_ID, None)
+        received_run_id = thief.get(Fields.RUN_ID, None)
 
-            device_id = get_device_id_from_event(event)
+        device_data = self.device_list.try_get(device_id)
 
-            body = event.body_as_json()
-            thief = body.get(Fields.THIEF, {})
-            received_service_instance_id = thief.get(Fields.SERVICE_INSTANCE_ID, None)
-            received_run_id = thief.get(Fields.RUN_ID, None)
+        if get_message_source_from_event(event) == "twinChangeEvents":
+            thief = body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {}).get(Fields.THIEF, {})
+            if thief and thief.get(Fields.PAIRING, {}):
+                self.executor.submit(self.handle_pairing_request, event)
+            if device_data:
+                self.incoming_twin_changes.put(event)
 
-            device_data = self.device_list.try_get(device_id)
+        elif received_run_id and received_service_instance_id:
+            cmd = thief.get(Fields.CMD, None)
 
-            if get_message_source_from_event(event) == "twinChangeEvents":
-                thief = (
-                    body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {}).get(Fields.THIEF, {})
-                )
-                if thief and thief.get(Fields.PAIRING, {}):
-                    self.executor.submit(self.handle_pairing_request, event)
-                if device_data:
-                    self.incoming_twin_changes.put(event)
-
-            elif received_run_id and received_service_instance_id:
-                cmd = thief.get(Fields.CMD, None)
-
-                if device_data:
-                    if cmd == Commands.SERVICE_ACK_REQUEST:
-                        logger.info(
-                            "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
-                                device_id, thief[Fields.SERVICE_ACK_ID]
-                            ),
-                            extra=custom_props(device_id, device_data.run_id),
+            if device_data:
+                if cmd == Commands.SERVICE_ACK_REQUEST:
+                    logger.info(
+                        "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
+                            device_id, thief[Fields.SERVICE_ACK_ID]
+                        ),
+                        extra=custom_props(device_id, device_data.run_id),
+                    )
+                    self.outgoing_service_ack_response_queue.put(
+                        ServiceAck(
+                            device_id=device_id, service_ack_id=thief[Fields.SERVICE_ACK_ID],
                         )
-                        self.outgoing_service_ack_response_queue.put(
-                            ServiceAck(
-                                device_id=device_id, service_ack_id=thief[Fields.SERVICE_ACK_ID],
+                    )
+                elif cmd == Commands.SET_DESIRED_PROPS:
+                    desired = thief.get(Fields.DESIRED_PROPERTIES, {})
+                    if desired:
+                        logger.info("Updating desired props: {}".format(desired))
+                        with self.registry_manager_lock:
+                            self.registry_manager.update_twin(
+                                device_id, Twin(properties=TwinProperties(desired=desired)), "*"
                             )
-                        )
-                    elif cmd == Commands.SET_DESIRED_PROPS:
-                        desired = thief.get(Fields.DESIRED_PROPERTIES, {})
-                        if desired:
-                            logger.info("Updating desired props: {}".format(desired))
-                            with self.registry_manager_lock:
-                                self.registry_manager.update_twin(
-                                    device_id, Twin(properties=TwinProperties(desired=desired)), "*"
-                                )
-                    elif cmd == Commands.INVOKE_METHOD:
-                        self.executor.submit(self.handle_method_invoke, device_data, event)
-                        # TODO: add_done_callback
+                elif cmd == Commands.INVOKE_METHOD:
+                    self.executor.submit(self.handle_method_invoke, device_data, event)
+                    # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too
 
-                    else:
-                        logger.info(
-                            "Unknown command received from {}: {}".format(device_id, body),
-                            extra=custom_props(device_id, device_data.run_id),
+                elif cmd == Commands.SEND_C2D:
+                    logger.info(
+                        "Sending C2D to {} with serviceAckId {}".format(
+                            device_id, thief[Fields.SERVICE_ACK_ID]
+                        ),
+                        extra=custom_props(device_id, device_data.run_id),
+                    )
+                    message = json.dumps(
+                        {
+                            Fields.THIEF: {
+                                Fields.CMD: Commands.C2D_RESPONSE,
+                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                                Fields.RUN_ID: device_data.run_id,
+                                Fields.SERVICE_ACK_ID: thief[Fields.SERVICE_ACK_ID],
+                                Fields.TEST_C2D_PAYLOAD: thief[Fields.TEST_C2D_PAYLOAD],
+                            }
+                        }
+                    )
+
+                    self.outgoing_c2d_queue.put(
+                        OutgoingC2d(
+                            device_id=device_id,
+                            message=message,
+                            props=Const.JSON_TYPE_AND_ENCODING,
                         )
+                    )
+
+                else:
+                    logger.info(
+                        "Unknown command received from {}: {}".format(device_id, body),
+                        extra=custom_props(device_id, device_data.run_id),
+                    )
 
     def receive_incoming_messages_thread(self):
         """
         Thread to listen on eventhub for events that we can handle.  This thread does minimal
-        checking to see if an event is "interesting" before placing it into `incoming_eventhub_event_queue`.
-        Any additional processing necessary to handle the events is done in different threads which
-        process events from that queue.
-
-        Right now, we service events on all partitions, but we could restrict this and have one
-        (or more) service app(s) per partition.
+        checking to see if an event is "interesting" before starting up a temporary thread to
+        handle it.  Any additional processing necessary to handle the events is done in that
+        temporary thread.
         """
 
         def on_error(partition_context, error):
@@ -349,10 +352,7 @@ class ServiceApp(object):
         def on_event(partition_context, event):
             reset_watchdog()
             if event:
-                # We put all received events into our queue.  The thread that handles
-                # incoming_eventhub_event_queue items will decide if the event needs to be handled
-                # or not.
-                self.incoming_eventhub_event_queue.put(event)
+                self.executor.submit(self.dispatch_incoming_message, event)
 
         logger.info("Starting EventHub receive")
         with self.eventhub_consumer_client:
@@ -509,92 +509,6 @@ class ServiceApp(object):
             # Too small and this causes C2D throttling
             time.sleep(15)
 
-    def stop_c2d_message_sending(self, device_id):
-        """
-        Stop sending c2d messages for a specific device.
-        """
-        device_data = self.device_list.try_get(device_id)
-        if device_data:
-            device_data.test_c2d_enabled = False
-
-    def start_c2d_message_sending(self, device_id, interval):
-        """
-        Start sending c2d messages for a specific device.
-        """
-
-        device_data = self.device_list.try_get(device_id)
-        if device_data:
-            device_data.test_c2d_enabled = True
-            device_data.c2d_interval_in_seconds = interval
-            device_data.c2d_next_message_epochtime = 0
-
-    def test_c2d_thread(self):
-        """
-        Thread to send test C2D messages to devices which have enabled C2D testing
-        """
-
-        while not self.done.isSet():
-            now = time.time()
-            reset_watchdog()
-
-            for device_id in self.device_list.get_keys():
-                device_data = self.device_list.try_get(device_id)
-
-                if device_data:
-                    # make sure c2d is enabled and make sure it's time to send the next c2d
-                    if (
-                        not device_data.test_c2d_enabled
-                        or device_data.c2d_next_message_epochtime > time.time()
-                    ):
-                        device_data = None
-
-                if device_data:
-                    message = json.dumps(
-                        {
-                            Fields.THIEF: {
-                                Fields.CMD: Commands.TEST_C2D,
-                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.RUN_ID: device_data.run_id,
-                                Fields.TEST_C2D_MESSAGE_INDEX: device_data.next_c2d_message_index,
-                            }
-                        }
-                    )
-
-                    logger.info(
-                        "Sending test c2d to {} with index {}".format(
-                            device_id, device_data.next_c2d_message_index
-                        ),
-                        extra=custom_props(device_id, device_data.run_id),
-                    )
-
-                    device_data.next_c2d_message_index += 1
-                    device_data.c2d_next_message_epochtime = (
-                        now + device_data.c2d_interval_in_seconds
-                    )
-
-                    self.outgoing_c2d_queue.put(
-                        OutgoingC2d(
-                            device_id=device_id,
-                            message=message,
-                            props=Const.JSON_TYPE_AND_ENCODING,
-                        )
-                    )
-
-            # loop through devices and see when our next outgoing c2d message is due to be sent.
-            next_iteration_epochtime = now + 10
-            for device_id in self.device_list.get_keys():
-                device_data = self.device_list.try_get(device_id)
-                if (
-                    device_data
-                    and device_data.test_c2d_enabled
-                    and device_data.c2d_next_message_epochtime
-                    and device_data.c2d_next_message_epochtime < next_iteration_epochtime
-                ):
-                    next_iteration_epochtime = device_data.c2d_next_message_epochtime
-
-            if next_iteration_epochtime > now:
-                time.sleep(next_iteration_epochtime - now)
-
     def handle_pairing_request(self, event):
         """
         Handle all device twin reported propreties under /thief/pairing.  If the change is
@@ -703,33 +617,6 @@ class ServiceApp(object):
                     ServiceAck(device_id=device_id, service_ack_id=service_ack_id)
                 )
 
-    def respond_to_test_control_properties(self, event):
-        """
-        Function to respond to changes to `testControl` reported properties.  `testControl`
-        properties are used to control the operation of the test, such as enabling c2d testing.
-
-        For `c2d` properties, this function can enable and disable c2d testing, and it can set
-        various properties of the c2d messages that the device expects to receive.
-        """
-        device_id = get_device_id_from_event(event)
-
-        test_control = (
-            event.body_as_json()
-            .get(Fields.PROPERTIES, {})
-            .get(Fields.REPORTED, {})
-            .get(Fields.THIEF, {})
-            .get(Fields.TEST_CONTROL, {})
-        )
-
-        c2d = test_control.get(Fields.C2D)
-        if c2d:
-            send = c2d[Fields.SEND]
-            if send is False:
-                self.stop_c2d_message_sending(device_id)
-            elif send is True:
-                interval = c2d[Fields.MESSAGE_INTERVAL_IN_SECONDS]
-                self.start_c2d_message_sending(device_id, interval)
-
     def dispatch_twin_change_thread(self):
         """
         Thread which goes through the queue of twin changes messages which have arrived and
@@ -766,8 +653,6 @@ class ServiceApp(object):
 
             if thief.get(Fields.TEST_CONTENT):
                 self.respond_to_test_content_properties(event)
-            if thief.get(Fields.TEST_CONTROL):
-                self.respond_to_test_control_properties(event)
 
             run_state = thief.get(Fields.SESSION_METRICS, {}).get("runState")
             if run_state and run_state != RunStates.RUNNING:
@@ -788,11 +673,9 @@ class ServiceApp(object):
         )
 
         self.executor.submit(self.receive_incoming_messages_thread, critical=True)
-        self.executor.submit(self.dispatch_incoming_messages_thread, critical=True)
         self.executor.submit(self.dispatch_twin_change_thread, critical=True)
         self.executor.submit(self.send_outgoing_c2d_messages_thread, critical=True)
         self.executor.submit(self.handle_service_ack_request_thread, critical=True)
-        self.executor.submit(self.test_c2d_thread, critical=True)
 
         try:
             while True:
