@@ -63,17 +63,6 @@ class Fields(object):
     ADD_SERVICE_ACK_ID = "addServiceAckId"
     REMOVE_SERVICE_ACK_ID = "removeServiceAckId"
 
-    # -------------------------------------
-    # properties.reported.thief.testControl
-    # -------------------------------------
-    C2D = "c2d"
-
-    # -----------------------------------------
-    # properties.reported.thief.testControl.c2d
-    # -----------------------------------------
-    SEND = "send"
-    MESSAGE_INTERVAL_IN_SECONDS = "messageIntervalInSeconds"
-
     # ------------------------
     # properties.desired.thief
     # ------------------------
@@ -98,7 +87,9 @@ class Fields(object):
     RUN_ID = "runId"
     SERVICE_ACKS = "serviceAcks"
     CMD = "cmd"
-    TEST_C2D_MESSAGE_INDEX = "testC2dMessageIndex"
+
+    # payload used for testing C2d Messages
+    TEST_C2D_PAYLOAD = "testC2dPayload"
 
     # ----------------------------------------------------
     # Fields inside telemetry messages for testing methods
@@ -145,6 +136,9 @@ class Commands(object):
     # Invoke a direct method
     INVOKE_METHOD = "invokeMethod"
 
+    # Send C2d Message
+    SEND_C2D = "sendC2d"
+
     # ------------------------------------------------
     # Values for the command field inside c2d messages
     # ------------------------------------------------
@@ -152,8 +146,8 @@ class Commands(object):
     # Response from one or more serviceAckRequest messsages
     SERVICE_ACK_RESPONSE = "serviceAckResponse"
 
-    # C2d test messaage
-    TEST_C2D = "testC2d"
+    # C2d test messaage - a respnse to a SEND_C2D request
+    C2D_RESPONSE = "c2dResponse"
 
     # Result of a direct method invocation
     METHOD_RESPONSE = "methodResponse"
@@ -228,11 +222,14 @@ class Metrics(object):
     # Receive c2d metrics
     # -------------------
 
+    # Number of c2d messages sent
+    RECEIVE_C2D_COUNT_SENT = "receiveC2dCountSent"
+
     # Number of c2d messages received
     RECEIVE_C2D_COUNT_RECEIVED = "receiveC2dCountReceived"
 
-    # Number of c2d messages not received
-    RECEIVE_C2D_COUNT_MISSING = "receiveC2dCountMissing"
+    # Number of c2d messages not received in time
+    RECEIVE_C2D_COUNT_TIMED_OUT = "receiveC2dCountTimedOut"
 
     # -------------------------
     # Reported property metrics
@@ -352,16 +349,6 @@ class Settings(object):
 
     # How many times to call send_message per second
     SEND_MESSAGE_OPERATIONS_PER_SECOND = "sendMessageOperationsPerSecond"
-
-    # --------------------
-    # receive_c2d settings
-    # --------------------
-
-    # How often do we want the service to send test C2D messages?
-    RECEIVE_C2D_INTERVAL_IN_SECONDS = "receiveC2dIntervalInSeconds"
-
-    # How many missing C2D messages will cause the test to fail?
-    RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT = "receiveC2dAllowedMissingMessageCount"
 
 
 class CustomDimensions(object):

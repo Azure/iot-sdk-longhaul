@@ -81,18 +81,6 @@ groups:
             value: "addServiceAckId"
           - name: REMOVE_SERVICE_ACK_ID 
             value: "removeServiceAckId"
-      - name: TestControl
-        desc: "properties.reported.thief.testControl"
-        values:
-          - name: C2D 
-            value: "c2d"
-      - name: "C2d"
-        desc: "properties.reported.thief.testControl.c2d"
-        values:
-          - name: SEND 
-            value: "send"
-          - name: MESSAGE_INTERVAL_IN_SECONDS 
-            value: "messageIntervalInSeconds"
 
       - name: Desired
         desc: "properties.desired.thief"
@@ -124,9 +112,9 @@ groups:
             value: "serviceAcks"
           - name: CMD 
             value: "cmd"
-          - name: TEST_C2D_MESSAGE_INDEX 
-            value: "testC2dMessageIndex"
-
+          - name: TEST_C2D_PAYLOAD
+            value: "testC2dPayload"
+            desc: "payload used for testing C2d Messages"
       - name: MethodTestTelemetry
         desc: "Fields inside telemetry messages for testing methods"
         values:
@@ -167,15 +155,18 @@ groups:
           - name: INVOKE_METHOD
             value: "invokeMethod"
             desc: "Invoke a direct method"
+          - name: SEND_C2D
+            value: "sendC2d"
+            desc: "Send C2d Message"
       - name: "C2dCommands"
         desc: "Values for the command field inside c2d messages"
         values:
           - name: SERVICE_ACK_RESPONSE 
             value: "serviceAckResponse"
             desc: "Response from one or more serviceAckRequest messsages"
-          - name: TEST_C2D 
-            value: "testC2d"
-            desc: "C2d test messaage"
+          - name: C2D_RESPONSE 
+            value: "c2dResponse"
+            desc: "C2d test messaage - a respnse to a SEND_C2D request"
           - name: METHOD_RESPONSE
             value: "methodResponse"
             desc: "Result of a direct method invocation"
@@ -247,30 +238,35 @@ groups:
             value: "sendMessageCountQueued"
             desc: "Number of telemetry messages queued for sending"
             type: int
-            units: mesages
+            units: messages
           - name: SEND_MESSAGE_COUNT_SENT 
             value: "sendMessageCountSent"
             desc: "Number of telemetry messages sent"
             type: int
-            units: mesages
+            units: messages
           - name: SEND_MESSAGE_COUNT_TIMED_OUT 
             value: "sendMessageCountTimedOut"
             desc: "Number of telemetry messages that timed out with no response from the service"
             type: int
-            units: mesages
+            units: messages
 
       - desc: "Receive c2d metrics"
         values:
+          - name: RECEIVE_C2D_COUNT_SENT 
+            value: "receiveC2dCountSent"
+            desc: "Number of c2d messages sent"
+            type: int
+            units: messages
           - name: RECEIVE_C2D_COUNT_RECEIVED 
             value: "receiveC2dCountReceived"
             desc: "Number of c2d messages received"
             type: int
-            units: mesages
-          - name: RECEIVE_C2D_COUNT_MISSING 
-            value: "receiveC2dCountMissing"
-            desc: "Number of c2d messages not received"
+            units: messages
+          - name: RECEIVE_C2D_COUNT_TIMED_OUT 
+            value: "receiveC2dCountTimedOut"
+            desc: "Number of c2d messages not received in time"
             type: int
-            units: mesages
+            units: messages
 
       - desc: "Reported property metrics"
         values:
@@ -401,15 +397,6 @@ groups:
         - name: SEND_MESSAGE_OPERATIONS_PER_SECOND 
           value: "sendMessageOperationsPerSecond"
           desc: "How many times to call send_message per second"
-
-      - desc: "receive_c2d settings"
-        values:
-        - name: RECEIVE_C2D_INTERVAL_IN_SECONDS 
-          value: "receiveC2dIntervalInSeconds"
-          desc: "How often do we want the service to send test C2D messages?"
-        - name: RECEIVE_C2D_ALLOWED_MISSING_MESSAGE_COUNT 
-          value: "receiveC2dAllowedMissingMessageCount"
-          desc: "How many missing C2D messages will cause the test to fail?"
 
 
   - name: CustomDimensions
