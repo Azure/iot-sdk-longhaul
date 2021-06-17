@@ -228,11 +228,11 @@ class Metrics(object):
     # SendMesssage metrics
     # --------------------
 
-    # Number of telemetry messages queued for sending
-    SEND_MESSAGE_COUNT_QUEUED = "sendMessageCountQueued"
-
     # Number of telemetry messages sent
     SEND_MESSAGE_COUNT_SENT = "sendMessageCountSent"
+
+    # Number of telemetry messages sent and verified by the service
+    SEND_MESSAGE_COUNT_VERIFIED = "sendMessageCountVerified"
 
     # Number of telemetry messages that timed out with no response from the service
     SEND_MESSAGE_COUNT_TIMED_OUT = "sendMessageCountTimedOut"
@@ -240,9 +240,6 @@ class Metrics(object):
     # -------------------
     # Receive c2d metrics
     # -------------------
-
-    # Number of c2d messages sent
-    RECEIVE_C2D_COUNT_SENT = "receiveC2dCountSent"
 
     # Number of c2d messages received
     RECEIVE_C2D_COUNT_RECEIVED = "receiveC2dCountReceived"
@@ -282,6 +279,16 @@ class Metrics(object):
 
     # Count of desired property patches that were not received
     DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT = "desiredPropertyPatchCountTimedOut"
+
+    # ---------------------
+    # method invoke metrics
+    # ---------------------
+
+    # Number of method invoke requests received
+    METHOD_INVOKE_COUNT_REQUEST_RECEIVED = "methodInvokeCountRequestReceived"
+
+    # Number of method invoke requests timed out
+    METHOD_INVOKE_COUNT_REQUEST_TIMED_OUT = "methodInvokeCountRequestTimedOut"
 
     # ---------------
     # Latency metrics

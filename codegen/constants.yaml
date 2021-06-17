@@ -252,14 +252,14 @@ groups:
 
       - desc: "SendMesssage metrics"
         values:
-          - name: SEND_MESSAGE_COUNT_QUEUED
-            value: "sendMessageCountQueued"
-            desc: "Number of telemetry messages queued for sending"
-            type: int
-            units: messages
           - name: SEND_MESSAGE_COUNT_SENT 
             value: "sendMessageCountSent"
             desc: "Number of telemetry messages sent"
+            type: int
+            units: messages
+          - name: SEND_MESSAGE_COUNT_VERIFIED 
+            value: "sendMessageCountVerified"
+            desc: "Number of telemetry messages sent and verified by the service"
             type: int
             units: messages
           - name: SEND_MESSAGE_COUNT_TIMED_OUT 
@@ -329,6 +329,20 @@ groups:
             desc: "Count of desired property patches that were not received"
             type: int
             units: patches
+
+      - desc: "method invoke metrics"
+        values:
+          - name: METHOD_INVOKE_COUNT_REQUEST_RECEIVED
+            value: "methodInvokeCountRequestReceived"
+            desc: "Number of method invoke requests received"
+            type: int
+            units: invokes
+          - name: METHOD_INVOKE_COUNT_REQUEST_TIMED_OUT
+            value: "methodInvokeCountRequestTimedOut"
+            desc: "Number of method invoke requests timed out"
+            type: int
+            units: invokes
+
 
       - desc: "Latency metrics"
         values:
