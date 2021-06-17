@@ -224,9 +224,6 @@ class Metrics(object):
     # Number of (non-fatal) exceptions raised by the client library or test code
     EXCEPTION_COUNT = "exceptionCount"
 
-    # Number of operations that failed because incorrect content was received
-    CONTENT_MISMATCH_COUNT = "contentMismatchCount"
-
     # --------------------
     # SendMesssage metrics
     # --------------------
@@ -352,9 +349,6 @@ class Settings(object):
 
     # How many exceptions do we allow before we fail the test?
     ALLOWED_EXCEPTION_COUNT = "allowedExceptionCount"
-
-    # How many content mismatch failures do we allow before we fail the test?
-    ALLOWED_CONTENT_MISMATCH_COUNT = "allowedContentMismatchCount"
 
     # How many seconds between tests
     INTER_TEST_DELAY_INTERVAL_IN_SECONDS = "interTestDelayIntervalInSeconds"

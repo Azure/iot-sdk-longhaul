@@ -248,12 +248,7 @@ groups:
             value: "exceptionCount"
             desc: "Number of (non-fatal) exceptions raised by the client library or test code"
             type: int
-            units: exceptions
-          - name: CONTENT_MISMATCH_COUNT
-            value: "contentMismatchCount"
-            desc: "Number of operations that failed because incorrect content was received"
-            type: int
-            units: exceptions
+            units: exception count
 
       - desc: "SendMesssage metrics"
         values:
@@ -409,9 +404,6 @@ groups:
       - name: ALLOWED_EXCEPTION_COUNT 
         value: "allowedExceptionCount"
         desc: "How many exceptions do we allow before we fail the test?"
-      - name: ALLOWED_CONTENT_MISMATCH_COUNT
-        value: "allowedContentMismatchCount"
-        desc: "How many content mismatch failures do we allow before we fail the test?"
       - name: INTER_TEST_DELAY_INTERVAL_IN_SECONDS
         value: "interTestDelayIntervalInSeconds"
         desc: "How many seconds between tests"

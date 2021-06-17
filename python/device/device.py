@@ -79,6 +79,10 @@ TestMethod = collections.namedtuple(
 )
 
 
+class ThiefFatalException(Exception):
+    pass
+
+
 def _get_os_release_based_on_user_agent_standard():
     return "({python_runtime};{os_type} {os_release};{architecture})".format(
         python_runtime=platform.python_version(),
@@ -111,7 +115,6 @@ class DeviceRunMetrics(object):
         self.exit_reason = None
 
         self.exception_count = ThreadSafeCounter()
-        self.content_mismatch_count = ThreadSafeCounter()
 
         self.send_message_count_sent = ThreadSafeCounter()
         self.send_message_count_verified = ThreadSafeCounter()
@@ -140,7 +143,6 @@ Currently hardcoded. Later, this will come from desired properties.
 device_run_config = {
     Settings.MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
     Settings.ALLOWED_EXCEPTION_COUNT: 10,
-    Settings.ALLOWED_CONTENT_MISMATCH_COUNT: 0,
     Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
     Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 1000,
@@ -214,12 +216,7 @@ class DeviceApp(object):
         self.reporter.add_integer_measurement(
             Metrics.EXCEPTION_COUNT,
             "Number of (non-fatal) exceptions raised by the client library or test code",
-            "exceptions",
-        )
-        self.reporter.add_integer_measurement(
-            Metrics.CONTENT_MISMATCH_COUNT,
-            "Number of operations that failed because incorrect content was received",
-            "exceptions",
+            "exception count",
         )
 
         # --------------------
@@ -359,7 +356,6 @@ class DeviceApp(object):
 
         props = {
             Metrics.EXCEPTION_COUNT: self.metrics.exception_count.get_count(),
-            Metrics.CONTENT_MISMATCH_COUNT: self.metrics.content_mismatch_count.get_count(),
             Metrics.SEND_MESSAGE_COUNT_SENT: self.metrics.send_message_count_sent.get_count(),
             Metrics.SEND_MESSAGE_COUNT_VERIFIED: self.metrics.send_message_count_verified.get_count(),
             Metrics.SEND_MESSAGE_COUNT_TIMED_OUT: self.metrics.send_message_count_timed_out.get_count(),
@@ -384,16 +380,6 @@ class DeviceApp(object):
         if self.metrics.exception_count.get_count() > self.config[Settings.ALLOWED_EXCEPTION_COUNT]:
             raise Exception(
                 "Exception count ({}) too high.".format(self.metrics.exception_count.get_count())
-            )
-
-        if (
-            self.metrics.content_mismatch_count.get_count()
-            > self.config[Settings.ALLOWED_CONTENT_MISMATCH_COUNT]
-        ):
-            raise Exception(
-                "Content mismatch count ({}) too high.".format(
-                    self.metrics.content_mismatch_count.get_count()
-                )
             )
 
         timeout_count = (
@@ -707,6 +693,8 @@ class DeviceApp(object):
 
                 try:
                     function(*args, **kwargs)
+                except ThiefFatalException:
+                    raise
                 except Exception as e:
                     logger.error(
                         "Test function {} raised {}".format(
@@ -888,11 +876,22 @@ class DeviceApp(object):
 
         self.executor.submit(handle)
 
+    def make_random_payload(self):
+        return {
+            "random_guid": str(uuid.uuid4()),
+            "sub_object": {
+                "string_value": str(uuid.uuid4()),
+                "bool_value": random.random() > 0.5,
+                "int_value": random.randint(1, 65535),
+                "float_value": random.random() * 65535,
+            },
+        }
+
     def test_method_invoke(self, method):
         running_op = self.running_operation_list.make_event_based_operation()
 
         if method.include_payload:
-            payload = {"id": str(uuid.uuid4())}
+            payload = self.make_random_payload()
         else:
             payload = None
 
@@ -923,16 +922,16 @@ class DeviceApp(object):
                     )
                 )
                 fail = True
-                if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
-                    logger.error(
-                        "Unexpected payload: id={}, received {} expected {}".format(
-                            running_op.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
-                        )
+            if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
+                logger.error(
+                    "Unexpected payload: id={}, received {} expected {}".format(
+                        running_op.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
                     )
-                    fail = True
+                )
+                fail = True
 
             if fail:
-                self.metris.content_mismatch_count.increment()
+                raise ThiefFatalException("Content mismatch on method invoke")
             else:
                 logger.info("Method call check succeeded")
 
@@ -944,15 +943,7 @@ class DeviceApp(object):
 
         running_op = self.running_operation_list.make_event_based_operation()
 
-        sent_test_payload = {
-            "random_guid": str(uuid.uuid4()),
-            "sub_object": {
-                "string_value": str(uuid.uuid4()),
-                "bool_value": True,
-                "int_value": random.randint(1, 65535),
-                "float_value": random.random() * 65535,
-            },
-        }
+        sent_test_payload = self.make_random_payload()
 
         command_payload = {
             Fields.THIEF: {
@@ -976,7 +967,7 @@ class DeviceApp(object):
                         running_op.id, sent_test_payload, thief[Fields.TEST_C2D_PAYLOAD]
                     )
                 )
-                raise Exception("C2D payload mismatch")
+                raise ThiefFatalException("C2D payload mismatch")
         else:
             logger.info("C2D timed out for serviceAckId {}".format(running_op.id))
             self.metrics.receive_c2d_count_timed_out.increment()
@@ -992,7 +983,7 @@ class DeviceApp(object):
             try:
                 func(*args, **kwargs)
             except Exception as e:
-                logger.error("exception nin handler: {}".format(str(e) or type(e)), exc_info=True)
+                logger.error("exception in handler: {}".format(str(e) or type(e)), exc_info=True)
                 self.metrics.exception_count.increment()
 
         return newfunc
@@ -1041,20 +1032,23 @@ class DeviceApp(object):
                 self.executor.wait_for_thread_death_event(planned_end_time - time.time())
                 self.executor.check_watchdogs()
 
-                non_critical_failures = 0
+                non_fatal_errors = 0
+                fatal_error = None
 
                 def count_failure(e):
-                    nonlocal non_critical_failures
-                    non_critical_failures += 1
+                    nonlocal non_fatal_errors, fatal_error
+                    if isinstance(e, ThiefFatalException):
+                        logger.info("FATAL ERROR: {}".format(str(e) or type(e)))
+                        fatal_error = e
+                    else:
+                        non_fatal_errors += 1
 
                 self.executor.check_for_failures(count_failure)
-                if non_critical_failures:
-                    logger.info("Adding {} failures to count".format(non_critical_failures))
-                    self.metrics.exception_count.add(non_critical_failures)
-
-                self.check_failure_counts()
-            self.metrics.run_state = RunStates.COMPLETE
-            self.metrics.exit_reason = "Successful run"
+                if non_fatal_errors:
+                    logger.info("Adding {} failures to count".format(non_fatal_errors))
+                    self.metrics.exception_count.add(non_fatal_errors)
+                if fatal_error:
+                    raise (fatal_error)
         except KeyboardInterrupt:
             self.metrics.run_state = RunStates.INTERRUPTED
             self.metrics.exit_reason = "KeyboardInterrupt"
