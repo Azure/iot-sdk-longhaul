@@ -196,6 +196,24 @@ groups:
     sendToAzureMonitor: True
     subgroups:
 
+      - desc: "Run Metrics"
+        values:
+          - name: RUN_START_UTC
+            value: "runStartUtc"
+            desc: "Start of the run in UTC time"
+          - name: LATEST_UPDATE_TIME_UTC
+            value: "latestUpdateTimeUtc"
+            desc: "Latest metric update in UTC time"
+          - name: ELAPSED_TIME
+            value: "elapsedTime"
+            desc: "Elapsed test time"
+          - name: RUN_STATE
+            value: "runState"
+            desc: "State of the run: Running, Failed, etc"
+          - name: EXIT_REASON
+            value: "exitReason"
+            desc: "Reason the text exited"
+
       - desc: "System Health metrics"
         values:
           - name: PROCESS_CPU_PERCENT 

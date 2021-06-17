@@ -174,6 +174,7 @@ class ServiceApp(object):
         self.outgoing_c2d_queue = queue.Queue()
 
         # for service_acks
+        self.force_service_ack_send = threading.Event()
         self.outgoing_service_ack_response_queue = queue.Queue()
 
         # for pairing
@@ -507,7 +508,8 @@ class ServiceApp(object):
 
             # TODO: this should be configurable
             # Too small and this causes C2D throttling
-            time.sleep(15)
+            self.force_service_ack_send.wait(timeout=15)
+            self.force_service_ack_send.clear()
 
     def handle_pairing_request(self, event):
         """
@@ -616,6 +618,7 @@ class ServiceApp(object):
                 self.outgoing_service_ack_response_queue.put(
                     ServiceAck(device_id=device_id, service_ack_id=service_ack_id)
                 )
+                self.force_service_ack_send.set()
 
     def dispatch_twin_change_thread(self):
         """

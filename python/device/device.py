@@ -39,10 +39,6 @@ from running_operation_list import RunningOperationList
 
 faulthandler.enable()
 
-# TODO: exit service when device stops responding
-# TODO: add code to receive rest of pingacks at end.  wait for delta since last to be > 20 seconds.
-# TODO: add mid to debug logs as custom property, maybe service_ack id
-
 # use os.environ[] for required environment variables
 provisioning_host = os.environ["THIEF_DEVICE_PROVISIONING_HOST"]
 id_scope = os.environ["THIEF_DEVICE_ID_SCOPE"]
@@ -347,13 +343,12 @@ class DeviceApp(object):
         now = datetime.datetime.now(datetime.timezone.utc)
         elapsed_time = now - self.metrics.run_start_utc
 
-        # TODO: add these to Fields object
         props = {
-            "runStartUtc": self.metrics.run_start_utc.isoformat(),
-            "latestUpdateTimeUtc": now.isoformat(),
-            "elapsedTime": str(elapsed_time),
-            "runState": str(self.metrics.run_state),
-            "exitReason": self.metrics.exit_reason,
+            Metrics.RUN_START_UTC: self.metrics.run_start_utc.isoformat(),
+            Metrics.LATEST_UPDATE_TIME_UTC: now.isoformat(),
+            Metrics.ELAPSED_TIME: str(elapsed_time),
+            Metrics.RUN_STATE: str(self.metrics.run_state),
+            Metrics.EXIT_REASON: self.metrics.exit_reason,
         }
         return props
 
