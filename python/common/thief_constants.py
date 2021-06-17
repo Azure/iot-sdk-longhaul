@@ -179,6 +179,25 @@ class Metrics(object):
     Names of metrics which are pushed via reported properties, telemetry, and Azure Monitor
     """
 
+    # -----------
+    # Run Metrics
+    # -----------
+
+    # Start of the run in UTC time
+    RUN_START_UTC = "runStartUtc"
+
+    # Latest metric update in UTC time
+    LATEST_UPDATE_TIME_UTC = "latestUpdateTimeUtc"
+
+    # Elapsed test time
+    ELAPSED_TIME = "elapsedTime"
+
+    # State of the run: Running, Failed, etc
+    RUN_STATE = "runState"
+
+    # Reason the text exited
+    EXIT_REASON = "exitReason"
+
     # ---------------------
     # System Health metrics
     # ---------------------
