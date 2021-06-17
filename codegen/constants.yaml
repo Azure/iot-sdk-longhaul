@@ -230,18 +230,23 @@ groups:
             value: "exceptionCount"
             desc: "Number of (non-fatal) exceptions raised by the client library or test code"
             type: int
-            units: exception count
+            units: exceptions
+          - name: CONTENT_MISMATCH_COUNT
+            value: "contentMismatchCount"
+            desc: "Number of operations that failed because incorrect content was received"
+            type: int
+            units: exceptions
 
       - desc: "SendMesssage metrics"
         values:
-          - name: SEND_MESSAGE_COUNT_QUEUED
-            value: "sendMessageCountQueued"
-            desc: "Number of telemetry messages queued for sending"
-            type: int
-            units: messages
           - name: SEND_MESSAGE_COUNT_SENT 
             value: "sendMessageCountSent"
             desc: "Number of telemetry messages sent"
+            type: int
+            units: messages
+          - name: SEND_MESSAGE_COUNT_VERIFIED 
+            value: "sendMessageCountVerified"
+            desc: "Number of telemetry messages sent and verified by the service"
             type: int
             units: messages
           - name: SEND_MESSAGE_COUNT_TIMED_OUT 
@@ -312,6 +317,20 @@ groups:
             type: int
             units: patches
 
+      - desc: "method invoke metrics"
+        values:
+          - name: METHOD_INVOKE_COUNT_REQUEST_RECEIVED
+            value: "methodInvokeCountRequestReceived"
+            desc: "Number of method invoke requests received"
+            type: int
+            units: invokes
+          - name: METHOD_INVOKE_COUNT_REQUEST_TIMED_OUT
+            value: "methodInvokeCountRequestTimedOut"
+            desc: "Number of method invoke requests timed out"
+            type: int
+            units: invokes
+
+
       - desc: "Latency metrics"
         values:
           - name: LATENCY_QUEUE_MESSAGE_TO_SEND 
@@ -372,6 +391,9 @@ groups:
       - name: ALLOWED_EXCEPTION_COUNT 
         value: "allowedExceptionCount"
         desc: "How many exceptions do we allow before we fail the test?"
+      - name: ALLOWED_CONTENT_MISMATCH_COUNT
+        value: "allowedContentMismatchCount"
+        desc: "How many content mismatch failures do we allow before we fail the test?"
       - name: INTER_TEST_DELAY_INTERVAL_IN_SECONDS
         value: "interTestDelayIntervalInSeconds"
         desc: "How many seconds between tests"

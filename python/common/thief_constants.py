@@ -205,15 +205,18 @@ class Metrics(object):
     # Number of (non-fatal) exceptions raised by the client library or test code
     EXCEPTION_COUNT = "exceptionCount"
 
+    # Number of operations that failed because incorrect content was received
+    CONTENT_MISMATCH_COUNT = "contentMismatchCount"
+
     # --------------------
     # SendMesssage metrics
     # --------------------
 
-    # Number of telemetry messages queued for sending
-    SEND_MESSAGE_COUNT_QUEUED = "sendMessageCountQueued"
-
     # Number of telemetry messages sent
     SEND_MESSAGE_COUNT_SENT = "sendMessageCountSent"
+
+    # Number of telemetry messages sent and verified by the service
+    SEND_MESSAGE_COUNT_VERIFIED = "sendMessageCountVerified"
 
     # Number of telemetry messages that timed out with no response from the service
     SEND_MESSAGE_COUNT_TIMED_OUT = "sendMessageCountTimedOut"
@@ -221,9 +224,6 @@ class Metrics(object):
     # -------------------
     # Receive c2d metrics
     # -------------------
-
-    # Number of c2d messages sent
-    RECEIVE_C2D_COUNT_SENT = "receiveC2dCountSent"
 
     # Number of c2d messages received
     RECEIVE_C2D_COUNT_RECEIVED = "receiveC2dCountReceived"
@@ -263,6 +263,16 @@ class Metrics(object):
 
     # Count of desired property patches that were not received
     DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT = "desiredPropertyPatchCountTimedOut"
+
+    # ---------------------
+    # method invoke metrics
+    # ---------------------
+
+    # Number of method invoke requests received
+    METHOD_INVOKE_COUNT_REQUEST_RECEIVED = "methodInvokeCountRequestReceived"
+
+    # Number of method invoke requests timed out
+    METHOD_INVOKE_COUNT_REQUEST_TIMED_OUT = "methodInvokeCountRequestTimedOut"
 
     # ---------------
     # Latency metrics
@@ -323,6 +333,9 @@ class Settings(object):
 
     # How many exceptions do we allow before we fail the test?
     ALLOWED_EXCEPTION_COUNT = "allowedExceptionCount"
+
+    # How many content mismatch failures do we allow before we fail the test?
+    ALLOWED_CONTENT_MISMATCH_COUNT = "allowedContentMismatchCount"
 
     # How many seconds between tests
     INTER_TEST_DELAY_INTERVAL_IN_SECONDS = "interTestDelayIntervalInSeconds"

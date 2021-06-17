@@ -115,12 +115,11 @@ class DeviceRunMetrics(object):
         self.exit_reason = None
 
         self.exception_count = ThreadSafeCounter()
+        self.content_mismatch_count = ThreadSafeCounter()
 
-        self.send_message_count_queued = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
+        self.send_message_count_verified = ThreadSafeCounter()
         self.send_message_count_timed_out = ThreadSafeCounter()
-
-        self.receive_c2d_count_sent = ThreadSafeCounter()
         self.receive_c2d_count_received = ThreadSafeCounter()
         self.receive_c2d_count_timed_out = ThreadSafeCounter()
 
@@ -134,6 +133,9 @@ class DeviceRunMetrics(object):
         self.desired_property_patch_count_received = ThreadSafeCounter()
         self.desired_property_patch_count_timed_out = ThreadSafeCounter()
 
+        self.method_invoke_count_request_received = ThreadSafeCounter()
+        self.method_invoke_count_request_timed_out = ThreadSafeCounter()
+
 
 """
 Object we use internally to keep track of how the entire test is configured.
@@ -142,6 +144,7 @@ Currently hardcoded. Later, this will come from desired properties.
 device_run_config = {
     Settings.MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
     Settings.ALLOWED_EXCEPTION_COUNT: 10,
+    Settings.ALLOWED_CONTENT_MISMATCH_COUNT: 0,
     Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
     Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 1000,
@@ -215,19 +218,24 @@ class DeviceApp(object):
         self.reporter.add_integer_measurement(
             Metrics.EXCEPTION_COUNT,
             "Number of (non-fatal) exceptions raised by the client library or test code",
-            "exception count",
+            "exceptions",
+        )
+        self.reporter.add_integer_measurement(
+            Metrics.CONTENT_MISMATCH_COUNT,
+            "Number of operations that failed because incorrect content was received",
+            "exceptions",
         )
 
         # --------------------
         # SendMesssage metrics
         # --------------------
         self.reporter.add_integer_measurement(
-            Metrics.SEND_MESSAGE_COUNT_QUEUED,
-            "Number of telemetry messages queued for sending",
-            "messages",
+            Metrics.SEND_MESSAGE_COUNT_SENT, "Number of telemetry messages sent", "messages",
         )
         self.reporter.add_integer_measurement(
-            Metrics.SEND_MESSAGE_COUNT_SENT, "Number of telemetry messages sent", "messages",
+            Metrics.SEND_MESSAGE_COUNT_VERIFIED,
+            "Number of telemetry messages sent and verified by the service",
+            "messages",
         )
         self.reporter.add_integer_measurement(
             Metrics.SEND_MESSAGE_COUNT_TIMED_OUT,
@@ -238,9 +246,6 @@ class DeviceApp(object):
         # -------------------
         # Receive c2d metrics
         # -------------------
-        self.reporter.add_integer_measurement(
-            Metrics.RECEIVE_C2D_COUNT_SENT, "Number of c2d messages sent", "messages",
-        )
         self.reporter.add_integer_measurement(
             Metrics.RECEIVE_C2D_COUNT_RECEIVED, "Number of c2d messages received", "messages",
         )
@@ -297,6 +302,20 @@ class DeviceApp(object):
             "patches",
         )
 
+        # ---------------------
+        # method invoke metrics
+        # ---------------------
+        self.reporter.add_integer_measurement(
+            Metrics.METHOD_INVOKE_COUNT_REQUEST_RECEIVED,
+            "Number of method invoke requests received",
+            "invokes",
+        )
+        self.reporter.add_integer_measurement(
+            Metrics.METHOD_INVOKE_COUNT_REQUEST_TIMED_OUT,
+            "Number of method invoke requests timed out",
+            "invokes",
+        )
+
         # ---------------
         # Latency metrics
         # ---------------
@@ -345,10 +364,10 @@ class DeviceApp(object):
 
         props = {
             Metrics.EXCEPTION_COUNT: self.metrics.exception_count.get_count(),
-            Metrics.SEND_MESSAGE_COUNT_QUEUED: self.metrics.send_message_count_queued.get_count(),
+            Metrics.CONTENT_MISMATCH_COUNT: self.metrics.content_mismatch_count.get_count(),
             Metrics.SEND_MESSAGE_COUNT_SENT: self.metrics.send_message_count_sent.get_count(),
+            Metrics.SEND_MESSAGE_COUNT_VERIFIED: self.metrics.send_message_count_verified.get_count(),
             Metrics.SEND_MESSAGE_COUNT_TIMED_OUT: self.metrics.send_message_count_timed_out.get_count(),
-            Metrics.RECEIVE_C2D_COUNT_SENT: self.metrics.receive_c2d_count_sent.get_count(),
             Metrics.RECEIVE_C2D_COUNT_RECEIVED: self.metrics.receive_c2d_count_received.get_count(),
             Metrics.RECEIVE_C2D_COUNT_TIMED_OUT: self.metrics.receive_c2d_count_timed_out.get_count(),
             Metrics.REPORTED_PROPERTIES_COUNT_ADDED: self.metrics.reported_properties_count_added.get_count(),
@@ -358,6 +377,8 @@ class DeviceApp(object):
             Metrics.GET_TWIN_COUNT_TIMED_OUT: self.metrics.get_twin_count_timed_out.get_count(),
             Metrics.DESIRED_PROPERTY_PATCH_COUNT_RECEIVED: self.metrics.desired_property_patch_count_received.get_count(),
             Metrics.DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT: self.metrics.desired_property_patch_count_timed_out.get_count(),
+            Metrics.METHOD_INVOKE_COUNT_REQUEST_RECEIVED: self.metrics.method_invoke_count_request_received.get_count(),
+            Metrics.METHOD_INVOKE_COUNT_REQUEST_TIMED_OUT: self.metrics.method_invoke_count_request_timed_out.get_count(),
         }
         return props
 
@@ -370,12 +391,23 @@ class DeviceApp(object):
                 "Exception count ({}) too high.".format(self.metrics.exception_count.get_count())
             )
 
+        if (
+            self.metrics.content_mismatch_count.get_count()
+            > self.config[Settings.ALLOWED_CONTENT_MISMATCH_COUNT]
+        ):
+            raise Exception(
+                "Content mismatch count ({}) too high.".format(
+                    self.metrics.content_mismatch_count.get_count()
+                )
+            )
+
         timeout_count = (
             self.metrics.send_message_count_timed_out.get_count()
             + self.metrics.receive_c2d_count_timed_out.get_count()
             + self.metrics.reported_properties_count_timed_out.get_count()
             + self.metrics.get_twin_count_timed_out.get_count()
             + self.metrics.desired_property_patch_count_timed_out.get_count()
+            + self.metrics.method_invoke_count_request_timed_out.get_count()
         )
         if timeout_count > self.config[Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT]:
             raise Exception("Timeout count ({}) too high.".format(timeout_count))
@@ -563,7 +595,6 @@ class DeviceApp(object):
             msg = self.create_message_from_dict(payload)
             msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = running_op.id
 
-            self.metrics.send_message_count_queued.increment()
             queue_time = time.time()
             self.client.send_message(msg)
             logger.info("Telemetry op {} sent to service".format(running_op.id))
@@ -573,6 +604,7 @@ class DeviceApp(object):
             send_time = time.time()
             if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
                 logger.info("Telemetry op {} arrived at service".format(running_op.id))
+                self.metrics.send_message_count_verified.increment()
 
                 with self.reporter_lock:
                     self.reporter.set_metrics_from_dict(
@@ -841,6 +873,7 @@ class DeviceApp(object):
     def handle_method_received(self, method_request):
         def handle():
             logger.info("Received method request {}".format(method_request.name))
+            self.metrics.method_invoke_count_request_received.increment()
             if method_request.name == MethodNames.FAIL_WITH_404:
                 logger.info("sending response to fail with 404")
                 self.client.send_method_response(
@@ -881,7 +914,7 @@ class DeviceApp(object):
         self.client.send_message(msg)
 
         if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
-            print(
+            logger.info(
                 "method with guid {} returned {}".format(running_op.id, running_op.result_message)
             )
             thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
@@ -903,18 +936,14 @@ class DeviceApp(object):
                     )
                     fail = True
 
-            logger.info(
-                "---------------------------------------------------------------------------------"
-            )
             if fail:
-                logger.error("Method call check failed")
-                # TODO: log failure and count
+                self.metris.content_mismatch_count.increment()
             else:
-                logger.error("Method call check succeeded")
+                logger.info("Method call check succeeded")
 
         else:
             logger.error("method with guid {} never completed".format(running_op.id))
-            # TODO: timeout here
+            self.metrics.method_invoke_count_request_timed_out = ThreadSafeCounter()
 
     def test_c2d(self):
 
@@ -940,7 +969,6 @@ class DeviceApp(object):
 
         logger.info("Requesting C2D for serviceAckId {}".format(running_op.id))
         self.client.send_message(self.create_message_from_dict(command_payload))
-        self.metrics.receive_c2d_count_sent.increment()
 
         if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
             logger.info("C2D received for serviceAckId {}".format(running_op.id))
