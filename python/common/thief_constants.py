@@ -23,6 +23,25 @@ class Fields(object):
     REPORTED = "reported"
     DESIRED = "desired"
 
+    # -----------------
+    # Test run progress
+    # -----------------
+
+    # Start of the run in UTC time
+    RUN_START_UTC = "runStartUtc"
+
+    # Latest metric update in UTC time
+    LATEST_UPDATE_TIME_UTC = "latestUpdateTimeUtc"
+
+    # Elapsed test time
+    ELAPSED_TIME = "elapsedTime"
+
+    # State of the run: Running, Failed, etc
+    RUN_STATE = "runState"
+
+    # Reason the text exited
+    EXIT_REASON = "exitReason"
+
     # ---------
     # Telemetry
     # ---------
@@ -179,25 +198,6 @@ class Metrics(object):
     Names of metrics which are pushed via reported properties, telemetry, and Azure Monitor
     """
 
-    # -----------
-    # Run Metrics
-    # -----------
-
-    # Start of the run in UTC time
-    RUN_START_UTC = "runStartUtc"
-
-    # Latest metric update in UTC time
-    LATEST_UPDATE_TIME_UTC = "latestUpdateTimeUtc"
-
-    # Elapsed test time
-    ELAPSED_TIME = "elapsedTime"
-
-    # State of the run: Running, Failed, etc
-    RUN_STATE = "runState"
-
-    # Reason the text exited
-    EXIT_REASON = "exitReason"
-
     # ---------------------
     # System Health metrics
     # ---------------------
@@ -206,16 +206,22 @@ class Metrics(object):
     PROCESS_CPU_PERCENT = "processCpuPercent"
 
     # Working set for the device app, includes shared and private, read-only and writeable memory
-    PROCESS_WORKING_SET = "processWorkingSet"
-
-    # Size of all heaps for the device app, essentially 'all available memory'
-    PROCESS_BYTES_IN_ALL_HEAPS = "processBytesInAllHeaps"
+    PROCESS_WORKING_SET_BYTES = "processWorkingSet"
 
     # Amount of private data used by the process
-    PROCESS_PRIVATE_BYTES = "processPrivateBytes"
+    PROCESS_WORKING_SET_PRIVATE_BYTES = "processWorkingSetPrivate"
 
-    # Amount of private data used by the process
-    PROCESS_WORKING_SET_PRIVATE = "processWorkingSetPrivate"
+    # Number of active objects being managed by the garbage collector
+    PROCESS_GARBAGE_COLLECTION_OBJECTS = "processGarbageCollectionObjects"
+
+    # number of threads being used by the current SDK
+    PROCESS_SDK_THREADS = "processSdkThreads"
+
+    # number of active threads in the test app receive threadpool
+    TEST_APP_ACTIVE_RECEIVE_THREADS = "testAppActiveReceiveThreads"
+
+    # number of active threads in the test app send threadpool
+    TEST_APP_ACTIVE_SEND_THREADS = "testAppActiveSendThreads"
 
     # ----------------
     # test app metrics
@@ -297,17 +303,6 @@ class Metrics(object):
     # Number of milliseconds between queueing a telemetry message and actually sending it
     LATENCY_QUEUE_MESSAGE_TO_SEND = "latencyQueueMessageToSendInMilliseconds"
 
-    # Number of seconds between sending a telemetry message and receiving the verification from the service app
-    LATENCY_SEND_MESSAGE_TO_SERVICE_ACK = "latencySendMessageToServiceAckInSeconds"
-
-    # Number of seconds between adding a reported property and receiving verification of the add from the service app
-    LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK = "latencyAddReportedPropertyToServiceAckInSeconds"
-
-    # Number of seconds between removing a reported property and receiving verification of the removal from the service app
-    LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK = (
-        "latencyRemoveReportedPropertyToServiceAckInSeconds"
-    )
-
 
 class SystemProperties(object):
     """
@@ -358,6 +353,18 @@ class Settings(object):
 
     # How many timeouts are allowed before the test fails
     OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT = "operationTimeoutAllowedFailureCount"
+
+    # interval (in seconds) for sending PINGREQ packets on quiet MQTT connections
+    MQTT_KEEP_ALIVE_INTERVAL = "mqttKeepAliveInterval"
+
+    # interval (in seconds) for renewing SAS tokens
+    SAS_TOKEN_RENEWAL_INTERVAL = "sasTokenRenewalInterval"
+
+    # maximum number of send threads in the test app
+    MAX_TEST_SEND_THREADS = "maxTestSendThreads"
+
+    # maximum number of receive threads in the test app
+    MAX_TEST_RECEIVE_THREADS = "maxTestReceiveThreads"
 
     # ----------------
     # pairing settings

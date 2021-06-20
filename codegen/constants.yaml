@@ -27,6 +27,24 @@ groups:
         - name: DESIRED 
           value: "desired"
     subgroups:
+      - name: TestRunProgress
+        desc: "Test run progress"
+        values:
+          - name: RUN_START_UTC
+            value: "runStartUtc"
+            desc: "Start of the run in UTC time"
+          - name: LATEST_UPDATE_TIME_UTC
+            value: "latestUpdateTimeUtc"
+            desc: "Latest metric update in UTC time"
+          - name: ELAPSED_TIME
+            value: "elapsedTime"
+            desc: "Elapsed test time"
+          - name: RUN_STATE
+            value: "runState"
+            desc: "State of the run: Running, Failed, etc"
+          - name: EXIT_REASON
+            value: "exitReason"
+            desc: "Reason the text exited"
       - name: Telemetry
         values:
           - name: CMD 
@@ -196,24 +214,6 @@ groups:
     sendToAzureMonitor: True
     subgroups:
 
-      - desc: "Run Metrics"
-        values:
-          - name: RUN_START_UTC
-            value: "runStartUtc"
-            desc: "Start of the run in UTC time"
-          - name: LATEST_UPDATE_TIME_UTC
-            value: "latestUpdateTimeUtc"
-            desc: "Latest metric update in UTC time"
-          - name: ELAPSED_TIME
-            value: "elapsedTime"
-            desc: "Elapsed test time"
-          - name: RUN_STATE
-            value: "runState"
-            desc: "State of the run: Running, Failed, etc"
-          - name: EXIT_REASON
-            value: "exitReason"
-            desc: "Reason the text exited"
-
       - desc: "System Health metrics"
         values:
           - name: PROCESS_CPU_PERCENT 
@@ -221,26 +221,36 @@ groups:
             desc: "CPU use for the device app, as a percentage of all cores"
             type: float
             units: percentage
-          - name: PROCESS_WORKING_SET 
+          - name: PROCESS_WORKING_SET_BYTES
             value: "processWorkingSet"
             desc: "Working set for the device app, includes shared and private, read-only and writeable memory"
             type: int
             units: bytes
-          - name: PROCESS_BYTES_IN_ALL_HEAPS 
-            value: "processBytesInAllHeaps"
-            desc: "Size of all heaps for the device app, essentially 'all available memory'"
-            type: int
-            units: bytes
-          - name: PROCESS_PRIVATE_BYTES 
-            value: "processPrivateBytes"
-            desc: "Amount of private data used by the process"
-            type: int
-            units: bytes
-          - name: PROCESS_WORKING_SET_PRIVATE 
+          - name: PROCESS_WORKING_SET_PRIVATE_BYTES
             value: "processWorkingSetPrivate"
             desc: "Amount of private data used by the process"
             type: int
             units: bytes
+          - name: PROCESS_GARBAGE_COLLECTION_OBJECTS
+            value: "processGarbageCollectionObjects"
+            desc: "Number of active objects being managed by the garbage collector"
+            type: int
+            units: objects
+          - name: PROCESS_SDK_THREADS
+            value: "processSdkThreads"
+            desc: "number of threads being used by the current SDK"
+            type: int
+            units: threads
+          - name: TEST_APP_ACTIVE_RECEIVE_THREADS
+            value: "testAppActiveReceiveThreads"
+            desc: "number of active threads in the test app receive threadpool"
+            type: int
+            units: threads
+          - name: TEST_APP_ACTIVE_SEND_THREADS
+            value: "testAppActiveSendThreads"
+            desc: "number of active threads in the test app send threadpool"
+            type: int
+            units: threads
 
       - desc: "test app metrics"
         values:
@@ -270,11 +280,6 @@ groups:
 
       - desc: "Receive c2d metrics"
         values:
-          - name: RECEIVE_C2D_COUNT_SENT 
-            value: "receiveC2dCountSent"
-            desc: "Number of c2d messages sent"
-            type: int
-            units: messages
           - name: RECEIVE_C2D_COUNT_RECEIVED 
             value: "receiveC2dCountReceived"
             desc: "Number of c2d messages received"
@@ -351,21 +356,6 @@ groups:
             desc: "Number of milliseconds between queueing a telemetry message and actually sending it"
             type: float
             units: milliseconds
-          - name: LATENCY_SEND_MESSAGE_TO_SERVICE_ACK 
-            value: "latencySendMessageToServiceAckInSeconds"
-            desc: "Number of seconds between sending a telemetry message and receiving the verification from the service app"
-            type: float
-            units: milliseconds
-          - name: LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK 
-            value: "latencyAddReportedPropertyToServiceAckInSeconds"
-            desc: "Number of seconds between adding a reported property and receiving verification of the add from the service app"
-            type: float
-            units: seconds
-          - name: LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK 
-            value: "latencyRemoveReportedPropertyToServiceAckInSeconds"
-            desc: "Number of seconds between removing a reported property and receiving verification of the removal from the service app"
-            type: float
-            units: seconds
 
   - name: SystemProperties
     desc: "Properties for the system runnin the test"
@@ -413,6 +403,18 @@ groups:
       - name: OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT 
         value: "operationTimeoutAllowedFailureCount"
         desc: "How many timeouts are allowed before the test fails"
+      - name: MQTT_KEEP_ALIVE_INTERVAL
+        value: "mqttKeepAliveInterval"
+        desc: "interval (in seconds) for sending PINGREQ packets on quiet MQTT connections"
+      - name: SAS_TOKEN_RENEWAL_INTERVAL
+        value: "sasTokenRenewalInterval"
+        desc: "interval (in seconds) for renewing SAS tokens"
+      - name: MAX_TEST_SEND_THREADS
+        value: "maxTestSendThreads"
+        desc: "maximum number of send threads in the test app"
+      - name: MAX_TEST_RECEIVE_THREADS
+        value: "maxTestReceiveThreads"
+        desc: "maximum number of receive threads in the test app"
 
     subgroups:
       - desc: "pairing settings"

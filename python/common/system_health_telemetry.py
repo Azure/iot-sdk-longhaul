@@ -16,15 +16,11 @@ class SystemHealthTelemetry(object):
         return self.process.cpu_percent()
 
     @property
-    def process_working_set(self):
+    def process_working_set_bytes(self):
         return self.process.memory_info().rss
 
     @property
-    def process_bytes_in_all_heaps(self):
-        return self.process.memory_info().vms
-
-    @property
-    def process_private_bytes(self):
+    def process_working_set_private_bytes(self):
         if self.system == "Linux":
             memory_info = self.process.memory_info()
             # from /proc/{pid}/statm - equal to (VmRSS - (RssFile+RssShmem)) from /proc/{pid}/status
@@ -35,7 +31,3 @@ class SystemHealthTelemetry(object):
         else:
             # osx, aix, bsd -- undefined
             return 0
-
-    @property
-    def process_working_set_private(self):
-        return self.process_private_bytes

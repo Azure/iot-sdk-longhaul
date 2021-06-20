@@ -23,7 +23,7 @@ def _derive_device_key(registration_id, group_symmetric_key):
 
 
 def create_device_client_using_dps_group_key(
-    provisioning_host, registration_id, id_scope, group_symmetric_key
+    provisioning_host, registration_id, id_scope, group_symmetric_key, **kwargs
 ):
     device_key = _derive_device_key(registration_id, group_symmetric_key)
     provisioning_client = ProvisioningDeviceClient.create_from_symmetric_key(
@@ -41,6 +41,6 @@ def create_device_client_using_dps_group_key(
     device_id = registration_result.registration_state.device_id
 
     client = IoTHubDeviceClient.create_from_symmetric_key(
-        symmetric_key=device_key, hostname=hostname, device_id=device_id,
+        symmetric_key=device_key, hostname=hostname, device_id=device_id, **kwargs,
     )
     return client, hostname, device_id
