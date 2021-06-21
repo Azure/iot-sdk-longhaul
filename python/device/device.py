@@ -142,7 +142,7 @@ Object we use internally to keep track of how the entire test is configured.
 Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
-    Settings.MAX_RUN_DURATION_IN_SECONDS: 1 * 60 * 60,
+    Settings.MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
     Settings.ALLOWED_EXCEPTION_COUNT: 10,
     Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
