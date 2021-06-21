@@ -17,6 +17,7 @@ from executor import BetterThreadPoolExecutor, reset_watchdog, dump_active_stack
 import dps
 import queue
 import faulthandler
+import gc
 from azure.iot.device import Message, MethodResponse
 import azure.iot.device.constant
 from measurement import ThreadSafeCounter
@@ -145,10 +146,14 @@ device_run_config = {
     Settings.ALLOWED_EXCEPTION_COUNT: 10,
     Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
-    Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 1000,
+    Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 10,
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
     Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS: 30,
-    Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
+    Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 10,
+    Settings.MQTT_KEEP_ALIVE_INTERVAL: 20,
+    Settings.SAS_TOKEN_RENEWAL_INTERVAL: 600,
+    Settings.MAX_TEST_SEND_THREADS: 128,
+    Settings.MAX_TEST_RECEIVE_THREADS: 10,
 }
 
 
@@ -161,13 +166,18 @@ class DeviceApp(object):
         global device_run_config
         super(DeviceApp, self).__init__()
 
-        self.executor = BetterThreadPoolExecutor(max_workers=128)
+        self.config = device_run_config
+        self.outgoing_executor = BetterThreadPoolExecutor(
+            max_workers=self.config[Settings.MAX_TEST_SEND_THREADS]
+        )
+        self.incoming_executor = BetterThreadPoolExecutor(
+            max_workers=self.config[Settings.MAX_TEST_RECEIVE_THREADS]
+        )
         self.done = threading.Event()
         self.client = None
         self.hub = None
         self.device_id = None
         self.metrics = DeviceRunMetrics()
-        self.config = device_run_config
         self.service_instance_id = None
         self.system_health_telemetry = SystemHealthTelemetry()
         # for service_acks
@@ -192,22 +202,34 @@ class DeviceApp(object):
             "percentage",
         )
         self.reporter.add_integer_measurement(
-            Metrics.PROCESS_WORKING_SET,
+            Metrics.PROCESS_WORKING_SET_BYTES,
             "Working set for the device app, includes shared and private, read-only and writeable memory",
             "bytes",
         )
         self.reporter.add_integer_measurement(
-            Metrics.PROCESS_BYTES_IN_ALL_HEAPS,
-            "Size of all heaps for the device app, essentially 'all available memory'",
-            "bytes",
-        )
-        self.reporter.add_integer_measurement(
-            Metrics.PROCESS_PRIVATE_BYTES, "Amount of private data used by the process", "bytes",
-        )
-        self.reporter.add_integer_measurement(
-            Metrics.PROCESS_WORKING_SET_PRIVATE,
+            Metrics.PROCESS_WORKING_SET_PRIVATE_BYTES,
             "Amount of private data used by the process",
             "bytes",
+        )
+        self.reporter.add_integer_measurement(
+            Metrics.PROCESS_GARBAGE_COLLECTION_OBJECTS,
+            "Number of active objects being managed by the garbage collector",
+            "objects",
+        )
+        self.reporter.add_integer_measurement(
+            Metrics.PROCESS_SDK_THREADS,
+            "number of threads being used by the current SDK",
+            "threads",
+        )
+        self.reporter.add_integer_measurement(
+            Metrics.TEST_APP_ACTIVE_RECEIVE_THREADS,
+            "number of active threads in the test app receive threadpool",
+            "threads",
+        )
+        self.reporter.add_integer_measurement(
+            Metrics.TEST_APP_ACTIVE_SEND_THREADS,
+            "number of active threads in the test app send threadpool",
+            "threads",
         )
 
         # ----------------
@@ -317,21 +339,6 @@ class DeviceApp(object):
             "Number of milliseconds between queueing a telemetry message and actually sending it",
             "milliseconds",
         )
-        self.reporter.add_float_measurement(
-            Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK,
-            "Number of seconds between sending a telemetry message and receiving the verification from the service app",
-            "milliseconds",
-        )
-        self.reporter.add_float_measurement(
-            Metrics.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK,
-            "Number of seconds between adding a reported property and receiving verification of the add from the service app",
-            "seconds",
-        )
-        self.reporter.add_float_measurement(
-            Metrics.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK,
-            "Number of seconds between removing a reported property and receiving verification of the removal from the service app",
-            "seconds",
-        )
 
     def get_session_metrics(self):
         """
@@ -341,11 +348,11 @@ class DeviceApp(object):
         elapsed_time = now - self.metrics.run_start_utc
 
         props = {
-            Metrics.RUN_START_UTC: self.metrics.run_start_utc.isoformat(),
-            Metrics.LATEST_UPDATE_TIME_UTC: now.isoformat(),
-            Metrics.ELAPSED_TIME: str(elapsed_time),
-            Metrics.RUN_STATE: str(self.metrics.run_state),
-            Metrics.EXIT_REASON: self.metrics.exit_reason,
+            Fields.RUN_START_UTC: self.metrics.run_start_utc.isoformat(),
+            Fields.LATEST_UPDATE_TIME_UTC: now.isoformat(),
+            Fields.ELAPSED_TIME: str(elapsed_time),
+            Fields.RUN_STATE: str(self.metrics.run_state),
+            Fields.EXIT_REASON: self.metrics.exit_reason,
         }
         return props
 
@@ -427,10 +434,16 @@ class DeviceApp(object):
     def get_system_health_telemetry(self):
         props = {
             Metrics.PROCESS_CPU_PERCENT: self.system_health_telemetry.process_cpu_percent,
-            Metrics.PROCESS_WORKING_SET: self.system_health_telemetry.process_working_set,
-            Metrics.PROCESS_BYTES_IN_ALL_HEAPS: self.system_health_telemetry.process_bytes_in_all_heaps,
-            Metrics.PROCESS_PRIVATE_BYTES: self.system_health_telemetry.process_private_bytes,
-            Metrics.PROCESS_WORKING_SET_PRIVATE: self.system_health_telemetry.process_working_set_private,
+            Metrics.PROCESS_WORKING_SET_BYTES: self.system_health_telemetry.process_working_set_bytes,
+            Metrics.PROCESS_WORKING_SET_PRIVATE_BYTES: self.system_health_telemetry.process_working_set_private_bytes,
+            Metrics.PROCESS_GARBAGE_COLLECTION_OBJECTS: len(gc.get_objects()),
+            Metrics.PROCESS_SDK_THREADS: threading.active_count()
+            - len(self.outgoing_executor.all_threads)
+            - len(self.incoming_executor.all_threads),
+            Metrics.TEST_APP_ACTIVE_RECEIVE_THREADS: len(
+                list(self.incoming_executor.active_threads)
+            ),
+            Metrics.TEST_APP_ACTIVE_SEND_THREADS: len(list(self.outgoing_executor.active_threads)),
         }
         return props
 
@@ -589,10 +602,7 @@ class DeviceApp(object):
 
                 with self.reporter_lock:
                     self.reporter.set_metrics_from_dict(
-                        {
-                            Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000,
-                            Metrics.LATENCY_SEND_MESSAGE_TO_SERVICE_ACK: time.time() - send_time,
-                        }
+                        {Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000}
                     )
                     self.reporter.record()
             else:
@@ -601,7 +611,7 @@ class DeviceApp(object):
 
         while not self.done.isSet():
             reset_watchdog()
-            self.executor.submit(send_message)
+            self.outgoing_executor.submit(send_message)
             # sleep until we need to send again
             self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
 
@@ -636,7 +646,7 @@ class DeviceApp(object):
                 Commands.METHOD_RESPONSE,
                 Commands.C2D_RESPONSE,
             ]:
-                self.executor.submit(self.handle_service_ack_response, msg)
+                self.incoming_executor.submit(self.handle_service_ack_response, msg)
 
             else:
                 logger.warning("Unknown command received: {}".format(obj))
@@ -690,18 +700,7 @@ class DeviceApp(object):
         while not self.done.isSet():
             for (function, args, kwargs) in tests:
                 reset_watchdog()
-
-                try:
-                    function(*args, **kwargs)
-                except ThiefFatalException:
-                    raise
-                except Exception as e:
-                    logger.error(
-                        "Test function {} raised {}".format(
-                            function.__name__, str(e) or type(e), exc_info=True
-                        )
-                    )
-                    self.metrics.exception_count.increment()
+                self.outgoing_executor.submit(function, *args, **kwargs)
 
                 time.sleep(self.config[Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS])
                 if self.done.isSet():
@@ -720,14 +719,14 @@ class DeviceApp(object):
 
         # Get metrics.  We report them to Azure monitor and also push them as part of the twin
         metrics = {
-            Fields.SESSION_METRICS: self.get_session_metrics(),
             Fields.TEST_METRICS: self.get_test_metrics(),
             Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
         }
         self.send_metrics_to_azure_monitor(metrics)
 
-        # systemHealthMetrics don't go into reported properties
-        del metrics[Fields.SYSTEM_HEALTH_METRICS]
+        # session metrics goes into reported propertes, but not azure monitor
+        # They're either never-changing (like start time) or redundant (like elapsed time)
+        metrics[Fields.SESSION_METRICS] = self.get_session_metrics()
 
         def make_reported_prop(property_name, val):
             return {
@@ -748,7 +747,6 @@ class DeviceApp(object):
         }
 
         logger.info("Adding test property {}".format(prop_name))
-        start_time = time.time()
         props = make_reported_prop(prop_name, prop_value)
         props[Fields.THIEF].update(metrics)
         self.client.patch_twin_reported_properties(props)
@@ -756,25 +754,16 @@ class DeviceApp(object):
         if add_operation.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
             logger.info("Add of reported property {} verified by service".format(prop_name))
             self.metrics.reported_properties_count_added.increment()
-            self.reporter.set_metric(
-                Metrics.LATENCY_ADD_REPORTED_PROPERTY_TO_SERVICE_ACK, time.time() - start_time
-            )
-            self.reporter.record()
         else:
             logger.info("Add of reported property {} verification timeout".format(prop_name))
             self.metrics.reported_properties_count_timed_out.increment()
 
         logger.info("Removing test property {}".format(prop_name))
-        start_time = time.time()
         self.client.patch_twin_reported_properties(make_reported_prop(prop_name, None))
 
         if remove_operation.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
             logger.info("Remove of reported property {} verified by service".format(prop_name))
             self.metrics.reported_properties_count_removed.increment()
-            self.reporter.set_metric(
-                Metrics.LATENCY_REMOVE_REPORTED_PROPERTY_TO_SERVICE_ACK, time.time() - start_time,
-            )
-            self.reporter.record()
         else:
             logger.info("Remove of reported property {} verification timeout".format(prop_name))
             self.metrics.reported_properties_count_timed_out.increment()
@@ -874,7 +863,7 @@ class DeviceApp(object):
                     MethodResponse.create_from_method_request(method_request, 500)
                 )
 
-        self.executor.submit(handle)
+        self.incoming_executor.submit(handle)
 
     def make_random_payload(self):
         return {
@@ -1000,6 +989,8 @@ class DeviceApp(object):
             registration_id=registration_id,
             id_scope=id_scope,
             group_symmetric_key=group_symmetric_key,
+            keep_alive=self.config[Settings.MQTT_KEEP_ALIVE_INTERVAL],
+            sastoken_ttl=self.config[Settings.SAS_TOKEN_RENEWAL_INTERVAL],
         )
         hub_host_name = self.hub[: self.hub.find(".")]  # keep everything before the first dot
         azure_monitor.add_logging_properties(hub=hub_host_name, device_id=self.device_id)
@@ -1020,8 +1011,8 @@ class DeviceApp(object):
         self.pair_with_service()
 
         # Start testing threads
-        self.executor.submit(self.test_send_message_thread, critical=True)
-        self.executor.submit(self.operation_test_thread, critical=True)
+        self.outgoing_executor.submit(self.test_send_message_thread, critical=True)
+        self.outgoing_executor.submit(self.operation_test_thread, critical=True)
 
         self.metrics.exit_reason = ""
         start_time = time.time()
@@ -1029,8 +1020,9 @@ class DeviceApp(object):
         try:
             while time.time() < planned_end_time:
                 # TODO: limit sleep length to check failure counts more often
-                self.executor.wait_for_thread_death_event(planned_end_time - time.time())
-                self.executor.check_watchdogs()
+                self.outgoing_executor.wait_for_thread_death_event(planned_end_time - time.time())
+                self.outgoing_executor.check_watchdogs()
+                self.incoming_executor.check_watchdogs()
 
                 non_fatal_errors = 0
                 fatal_error = None
@@ -1043,12 +1035,14 @@ class DeviceApp(object):
                     else:
                         non_fatal_errors += 1
 
-                self.executor.check_for_failures(count_failure)
+                self.outgoing_executor.check_for_failures(count_failure)
+                self.incoming_executor.check_for_failures(count_failure)
                 if non_fatal_errors:
                     logger.info("Adding {} failures to count".format(non_fatal_errors))
                     self.metrics.exception_count.add(non_fatal_errors)
                 if fatal_error:
                     raise (fatal_error)
+            self.metrics.run_state = RunStates.COMPLETE
         except KeyboardInterrupt:
             self.metrics.run_state = RunStates.INTERRUPTED
             self.metrics.exit_reason = "KeyboardInterrupt"
@@ -1056,18 +1050,22 @@ class DeviceApp(object):
         except BaseException as e:
             self.metrics.run_state = RunStates.FAILED
             self.metrics.exit_reason = str(e) or type(e)
+            logger.error("Run failed: {}".format(self.metrics.exit_reason), exc_info=True)
             raise
         finally:
             logger.info("-------------------------------------------------------------")
             logger.info("Setting done flag: {}".format(self.metrics.exit_reason))
             logger.info("-------------------------------------------------------------")
             self.done.set()
-            done, not_done = self.executor.wait(
-                timeout=2 * self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
-            )
-            if not_done:
-                logger.error("{} threads not stopped after ending run".format(len(not_done)))
-                dump_active_stacks(self.executor)
+            active_threads = 0
+            for executor in [self.outgoing_executor, self.incoming_executor]:
+                done, not_done = executor.wait(
+                    timeout=2 * self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
+                )
+                active_threads += len(not_done)
+            if active_threads:
+                logger.error("{} threads not stopped after ending run".format(active_threads))
+                dump_active_stacks(logger.info)
 
             logger.info("Exiting main at {}".format(datetime.datetime.utcnow()))
             event_logger.info(
@@ -1081,6 +1079,7 @@ class DeviceApp(object):
                 Fields.THIEF: {
                     Fields.SESSION_METRICS: self.get_session_metrics(),
                     Fields.TEST_METRICS: self.get_test_metrics(),
+                    Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
                 }
             }
             logger.info("Results: {}".format(pprint.pformat(props)))

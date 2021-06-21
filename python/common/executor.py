@@ -41,18 +41,18 @@ def reset_watchdog():
     thread_local_storage.future_thread_info.watchdog_reset_time = time.time()
 
 
-def dump_active_stacks(executor, printer=print):
+def dump_active_stacks(printer=print):
     """
     Helper function to dump all non-idle stacks inside a ThreadPoolExecutor
     """
-    pool_thread_ids = [t.ident for t in executor._threads]
-    for (thread_id, frame) in sys._current_frames().items():
-        if thread_id in pool_thread_ids:
+    for thread in threading.enumerate():
+        frame = sys._current_frames().get(thread.ident, None)
+        if frame:
             stack = traceback.extract_stack(frame)
             last_frame = stack[len(stack) - 1]
             if not last_frame.filename.endswith("/concurrent/futures/thread.py"):
                 printer("------------")
-                printer("Stack for thread {}".format(thread_id))
+                printer("Stack for thread {}".format(thread.ident))
                 for line in traceback.format_stack(frame):
                     printer(line)
 
@@ -91,6 +91,20 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
         with self.outstanding_futures_lock:
             futures = [x.future for x in self.outstanding_futures]
         return concurrent.futures.wait(futures, timeout=timeout)
+
+    @property
+    def all_threads(self):
+        return self._threads
+
+    @property
+    def active_threads(self):
+        frames = sys._current_frames()
+        for thread in list(self._threads):
+            frame = frames[thread.ident]
+            stack = traceback.extract_stack(frame)
+            last_frame = stack[len(stack) - 1]
+            if not last_frame.filename.endswith("/concurrent/futures/thread.py"):
+                yield thread
 
     def submit(self, fn, *args, critical=False, thread_name=None, **kwargs):
         def _thread_outer_proc(future_thread_info, *args, **kwargs):
