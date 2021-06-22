@@ -142,7 +142,7 @@ Object we use internally to keep track of how the entire test is configured.
 Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
-    Settings.MAX_RUN_DURATION_IN_SECONDS: 2 * 60,
+    Settings.MAX_RUN_DURATION_IN_SECONDS: 10 * 60 * 60,
     Settings.ALLOWED_EXCEPTION_COUNT: 10,
     Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
@@ -155,6 +155,25 @@ device_run_config = {
     Settings.MAX_TEST_SEND_THREADS: 128,
     Settings.MAX_TEST_RECEIVE_THREADS: 10,
 }
+
+
+def return_if_already_running(func):
+    """
+    Decorator function to make sure that the wrapped function cannot be called in parallel.
+    The wrapped funciton can be invoked once.  If is called again before the first invocation
+    is complete, it immediately returns without running.  Once the first invocatoin completes,
+    then it an be invoked again.
+    """
+    already_running = threading.BoundedSemaphore()
+
+    def inner(*args, **kwargs):
+        if already_running.acquire(blocking=False):
+            try:
+                return func(*args, **kwargs)
+            finally:
+                already_running.release()
+
+    return inner
 
 
 class DeviceApp(object):
@@ -768,6 +787,7 @@ class DeviceApp(object):
             logger.info("Remove of reported property {} verification timeout".format(prop_name))
             self.metrics.reported_properties_count_timed_out.increment()
 
+    @return_if_already_running
     def test_desired_properties(self):
         """
         Test function to set a desired property, wait for the patch to arrive at the client,
@@ -843,7 +863,7 @@ class DeviceApp(object):
             self.metrics.get_twin_count_timed_out_out.increment()
 
     def handle_method_received(self, method_request):
-        def handle():
+        def handle(method_request):
             logger.info("Received method request {}".format(method_request.name))
             self.metrics.method_invoke_count_request_received.increment()
             if method_request.name == MethodNames.FAIL_WITH_404:
@@ -863,7 +883,7 @@ class DeviceApp(object):
                     MethodResponse.create_from_method_request(method_request, 500)
                 )
 
-        self.incoming_executor.submit(handle)
+        self.incoming_executor.submit(handle, method_request)
 
     def make_random_payload(self):
         return {
@@ -871,8 +891,7 @@ class DeviceApp(object):
             "sub_object": {
                 "string_value": str(uuid.uuid4()),
                 "bool_value": random.random() > 0.5,
-                "int_value": random.randint(1, 65535),
-                "float_value": random.random() * 65535,
+                "int_value": random.randint(-65535, 65535),
             },
         }
 
