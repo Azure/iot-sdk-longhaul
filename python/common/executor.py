@@ -161,9 +161,11 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
 
         with self.outstanding_futures_lock:
             for info in (x for x in self.outstanding_futures if x.thread):
-                thread = (
-                    info.thread
-                )  # capture the thread in case it exits while this method is running
+                # capture the thread in case it exits while this method is running
+                thread = info.thread
+                if not thread:
+                    # race condition: thread ended after we made the list and before we got to this point
+                    continue
                 if info.watchdog_reset_time:
                     # Threads that use watchdog need to call reset_watchdog at a regular interval or else they fail
                     time_since_reset = time.time() - info.watchdog_reset_time
