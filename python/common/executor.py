@@ -161,6 +161,11 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
 
         with self.outstanding_futures_lock:
             for info in (x for x in self.outstanding_futures if x.thread):
+                # capture the thread in case it exits while this method is running
+                thread = info.thread
+                if not thread:
+                    # race condition: thread ended after we made the list and before we got to this point
+                    continue
                 if info.watchdog_reset_time:
                     # Threads that use watchdog need to call reset_watchdog at a regular interval or else they fail
                     time_since_reset = time.time() - info.watchdog_reset_time
@@ -168,16 +173,16 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
 
                         logger.warning(
                             "Thread named {} with id {} has not responded in {} seconds".format(
-                                info.thread.name, info.thread.ident, time_since_reset
+                                thread.name, thread.ident, time_since_reset
                             )
                         )
-                        frame = sys._current_frames().get(info.thread.ident, None)
+                        frame = sys._current_frames().get(thread.ident, None)
                         logger.warning(traceback.format_stack(frame))
 
                         if info.critical:
-                            logger.error("Thread {} watchdog failure".format(info.thread.name))
+                            logger.error("Thread {} watchdog failure".format(thread.name))
                             first_exception = first_exception or Exception(
-                                "Thread {} watchdog failure".format(info.thread.name)
+                                "Thread {} watchdog failure".format(thread.name)
                             )
 
                 else:
@@ -189,16 +194,21 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
 
                             logger.warning(
                                 "Long-running thread named {} with id {} has been alive for {} seconds".format(
-                                    info.thread.name, info.thread.ident, thread_life_time
+                                    thread.name, thread.ident, thread_life_time
                                 )
                             )
-                            frame = sys._current_frames().get(info.thread.ident, None)
-                            logger.warning(traceback.format_stack(frame))
+                            frame = sys._current_frames().get(thread.ident, None)
+                            if frame:
+                                logger.warning(traceback.format_stack(frame))
+                            else:
+                                logger.warning(
+                                    "Frame for thread named {} is gone".format(thread.name)
+                                )
 
                             if info.critical:
-                                logger.error("Thread {} long-run failure".format(info.thread.name))
+                                logger.error("Thread {} long-run failure".format(thread.name))
                                 first_exception = first_exception or Exception(
-                                    "Thread {} long-run failure".format(info.thread.name)
+                                    "Thread {} long-run failure".format(thread.name)
                                 )
                             info.long_run_warning_reported = True
 

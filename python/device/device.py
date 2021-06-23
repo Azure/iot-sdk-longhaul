@@ -161,7 +161,7 @@ def return_if_already_running(func):
     """
     Decorator function to make sure that the wrapped function cannot be called in parallel.
     The wrapped funciton can be invoked once.  If is called again before the first invocation
-    is complete, it immediately returns without running.  Once the first invocatoin completes,
+    is complete, it immediately returns without running.  Once the first invocation completes,
     then it an be invoked again.
     """
     already_running = threading.BoundedSemaphore()
