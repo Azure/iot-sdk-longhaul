@@ -52,8 +52,7 @@ event_logger = azure_monitor.get_event_logger()
 azure_monitor.log_to_azure_monitor("thief")
 
 ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
-OutgoingC2d = collections.namedtuple("OutgoingC2d", "device_id message props fail_count")
-OutgoingC2d.__new__.__defaults__ = (0,)  # applied to rightmost args, so fail_count defaults to 0
+OutgoingC2d = collections.namedtuple("OutgoingC2d", "device_id message props")
 
 
 # TODO: remove items from pairing list of no traffic for X minutes
@@ -132,13 +131,7 @@ class ServiceRunConfig(object):
         self.watchdog_failure_interval_in_seconds = 300
 
         # How long until our AMQP sas tokens expire
-        self.amqp_sas_expiry_in_seconds = 3600
-
-        # How often to refresh the AMQP connection.  Sometime before it expires.
-        self.amqp_refresh_interval_in_seconds = self.amqp_sas_expiry_in_seconds - 300
-
-        # How many times to retry sending C2D before failing
-        self.send_c2d_retry_count = 3
+        self.amqp_sas_expiry_in_seconds = 24 * 60 * 60
 
 
 def get_device_id_from_event(event):
@@ -165,7 +158,6 @@ class ServiceApp(object):
 
         self.executor = BetterThreadPoolExecutor(max_workers=128)
         self.done = threading.Event()
-        self.registry_manager_lock = threading.Lock()
         self.registry_manager = None
         self.eventhub_consumer_client = None
         self.config = ServiceRunConfig()
@@ -206,24 +198,12 @@ class ServiceApp(object):
             ),
         )
 
-        # TODO: don't hold this lock while calling into registry manager
-        # TODO: wrap registry manager call in try/except to return result to device
-        logger.info("------------------------------------------------------------------")
         logger.info("invoking {}".format(method_guid))
         try:
-            with self.registry_manager_lock:
-                response = self.registry_manager.invoke_device_method(
-                    device_data.device_id, request
-                )
+            response = self.registry_manager.invoke_device_method(device_data.device_id, request)
         except Exception as e:
-            # TODO: remove this once future callback is added
-            logger.info("------------------------------------------------------------------")
-            logger.error("exception: {}".format(str(e) or type(e)))
+            logger.error("exception for invoke on {}: {}".format(method_guid, str(e) or type(e)))
             raise
-        finally:
-            logger.info("------------------------------------------------------------------")
-            logger.info("invoke complete finally")
-        logger.info("------------------------------------------------------------------")
         logger.info("invoke complete {}".format(method_guid))
 
         response_message = json.dumps(
@@ -239,7 +219,6 @@ class ServiceApp(object):
             }
         )
 
-        logger.info("------------------------------------------------------------------")
         logger.info("queueing response {}".format(method_guid))
 
         self.outgoing_c2d_queue.put(
@@ -292,10 +271,9 @@ class ServiceApp(object):
                     desired = thief.get(Fields.DESIRED_PROPERTIES, {})
                     if desired:
                         logger.info("Updating desired props: {}".format(desired))
-                        with self.registry_manager_lock:
-                            self.registry_manager.update_twin(
-                                device_id, Twin(properties=TwinProperties(desired=desired)), "*"
-                            )
+                        self.registry_manager.update_twin(
+                            device_id, Twin(properties=TwinProperties(desired=desired)), "*"
+                        )
                 elif cmd == Commands.INVOKE_METHOD:
                     self.executor.submit(self.handle_method_invoke, device_data, event)
                     # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too
@@ -372,38 +350,18 @@ class ServiceApp(object):
         function and we don't want to block other threads while we're sending.
         """
         logger.info("Starting thread")
-        last_amqp_refresh_epochtime = time.time()
-        refresh_registry_manager = False
 
         while not (self.done.isSet() and self.outgoing_c2d_queue.empty()):
             reset_watchdog()
 
-            if (
-                time.time() - last_amqp_refresh_epochtime
-                > self.config.amqp_refresh_interval_in_seconds
-            ):
-                logger.info("AMQP credential approaching expiration.")
-                refresh_registry_manager = True
-
-            if refresh_registry_manager:
-                logger.info("Creating new registry manager object.")
-                with self.registry_manager_lock:
-                    self.registry_manager.amqp_svc_client.disconnect_sync()
-                    self.registry_manager = None
-                    time.sleep(1)
-                    self.registry_manager = IoTHubRegistryManager(iothub_connection_string)
-                logger.info("New registry_manager object created")
-                last_amqp_refresh_epochtime = time.time()
-                refresh_registry_manager = False
-
             try:
                 outgoing_c2d = self.outgoing_c2d_queue.get(timeout=1)
-                device_id = outgoing_c2d.device_id
-                message = outgoing_c2d.message
-                props = outgoing_c2d.props
             except queue.Empty:
                 pass
             else:
+                device_id = outgoing_c2d.device_id
+                message = outgoing_c2d.message
+                props = outgoing_c2d.props
                 device_data = self.device_list.try_get(device_id)
 
                 if not device_data:
@@ -415,32 +373,15 @@ class ServiceApp(object):
                 else:
                     start = time.time()
                     try:
-                        with self.registry_manager_lock:
-                            self.registry_manager.send_c2d_message(device_id, message, props)
+                        self.registry_manager.send_c2d_message(device_id, message, props)
                     except Exception as e:
-                        fail_count = outgoing_c2d.fail_count + 1
-
-                        if fail_count <= self.config.send_c2d_retry_count:
-                            logger.warning(
-                                "send_c2d_messge to {} raised {}. Failure count={}. Trying again.".format(
-                                    device_id, str(e) or type(e), fail_count
-                                ),
-                                exc_info=e,
-                                extra=custom_props(device_id, device_data.run_id),
-                            )
-                            refresh_registry_manager = True
-                            self.outgoing_c2d_queue.put(
-                                outgoing_c2d._replace(fail_count=fail_count)
-                            )
-                        else:
-                            logger.error(
-                                "send_c2d_message to {} raised {}. Failure count={}. Forcing un-pair with device".format(
-                                    device_id, str(e) or type(e), fail_count
-                                ),
-                                exc_info=e,
-                                extra=custom_props(device_id, device_data.run_id),
-                            )
-                            self.device_list.remove(device_id)
+                        logger.error(
+                            "send_c2d_message to {} raised {}. Dropping. ".format(
+                                device_id, str(e) or type(e)
+                            ),
+                            exc_info=e,
+                            extra=custom_props(device_id, device_data.run_id),
+                        )
                     else:
                         end = time.time()
                         if end - start > 2:
@@ -557,10 +498,9 @@ class ServiceApp(object):
                     }
                 }
 
-                with self.registry_manager_lock:
-                    self.registry_manager.update_twin(
-                        device_id, Twin(properties=TwinProperties(desired=desired)), "*"
-                    )
+                self.registry_manager.update_twin(
+                    device_id, Twin(properties=TwinProperties(desired=desired)), "*"
+                )
 
             elif received_service_instance_id == service_instance_id:
                 # If the device has selected us, the pairing is complete.
@@ -667,9 +607,8 @@ class ServiceApp(object):
 
     def main(self):
 
-        with self.registry_manager_lock:
-            logger.info("creating registry manager")
-            self.registry_manager = IoTHubRegistryManager(iothub_connection_string)
+        logger.info("creating registry manager")
+        self.registry_manager = IoTHubRegistryManager(iothub_connection_string)
 
         self.eventhub_consumer_client = EventHubConsumerClient.from_connection_string(
             eventhub_connection_string, consumer_group=eventhub_consumer_group
