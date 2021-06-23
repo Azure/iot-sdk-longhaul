@@ -49,8 +49,8 @@ groups:
         values:
           - name: CMD 
             value: "cmd"
-          - name: SERVICE_ACK_ID 
-            value: "serviceAckId"
+          - name: OPERATION_ID 
+            value: "operationId"
           - name: SERVICE_INSTANCE_ID 
             value: "serviceInstanceId"
           - name: RUN_ID 
@@ -95,10 +95,10 @@ groups:
       - name: ReportedPropertyTest
         desc: "properties.reported.thief.testContent.reportedPropertytest"
         values:
-          - name: ADD_SERVICE_ACK_ID 
-            value: "addServiceAckId"
-          - name: REMOVE_SERVICE_ACK_ID 
-            value: "removeServiceAckId"
+          - name: ADD_OPERATION_ID 
+            value: "addOperationId"
+          - name: REMOVE_OPERATION_ID 
+            value: "removeOperationId"
 
       - name: Desired
         desc: "properties.desired.thief"
@@ -126,8 +126,8 @@ groups:
             value: "serviceInstanceId"
           - name: RUN_ID 
             value: "runId"
-          - name: SERVICE_ACKS 
-            value: "serviceAcks"
+          - name: OPERATION_IDS 
+            value: "operationIds"
           - name: CMD 
             value: "cmd"
           - name: TEST_C2D_PAYLOAD
@@ -164,9 +164,9 @@ groups:
       - name: "TelemetryCommands"
         desc: "Values for the command field inside telemetry messages"
         values:
-          - name: SERVICE_ACK_REQUEST 
-            value: "serviceAckRequest"
-            desc: "Request a serviceAckResposne message from the service"
+          - name: SEND_OPERATION_RESPONSE 
+            value: "sendOperationResponse"
+            desc: "Request a operationResponse message from the service"
           - name: SET_DESIRED_PROPS 
             value: "setDesiredProps"
             desc: "Apply a the device twin desired properties patch"
@@ -179,9 +179,9 @@ groups:
       - name: "C2dCommands"
         desc: "Values for the command field inside c2d messages"
         values:
-          - name: SERVICE_ACK_RESPONSE 
-            value: "serviceAckResponse"
-            desc: "Response from one or more serviceAckRequest messsages"
+          - name: OPERATION_RESPONSE 
+            value: "operationResponse"
+            desc: "Response from one or more sendOperationResponse messsages"
           - name: C2D_RESPONSE 
             value: "c2dResponse"
             desc: "C2d test messaage - a respnse to a SEND_C2D request"

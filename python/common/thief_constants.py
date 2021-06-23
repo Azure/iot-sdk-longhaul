@@ -46,7 +46,7 @@ class Fields(object):
     # Telemetry
     # ---------
     CMD = "cmd"
-    SERVICE_ACK_ID = "serviceAckId"
+    OPERATION_ID = "operationId"
     SERVICE_INSTANCE_ID = "serviceInstanceId"
     RUN_ID = "runId"
     DESIRED_PROPERTIES = "desiredProperties"
@@ -79,8 +79,8 @@ class Fields(object):
     # ----------------------------------------------------------
     # properties.reported.thief.testContent.reportedPropertytest
     # ----------------------------------------------------------
-    ADD_SERVICE_ACK_ID = "addServiceAckId"
-    REMOVE_SERVICE_ACK_ID = "removeServiceAckId"
+    ADD_OPERATION_ID = "addOperationId"
+    REMOVE_OPERATION_ID = "removeOperationId"
 
     # ------------------------
     # properties.desired.thief
@@ -104,7 +104,7 @@ class Fields(object):
     # -----------------------------------
     SERVICE_INSTANCE_ID = "serviceInstanceId"
     RUN_ID = "runId"
-    SERVICE_ACKS = "serviceAcks"
+    OPERATION_IDS = "operationIds"
     CMD = "cmd"
 
     # payload used for testing C2d Messages
@@ -146,8 +146,8 @@ class Commands(object):
     # Values for the command field inside telemetry messages
     # ------------------------------------------------------
 
-    # Request a serviceAckResposne message from the service
-    SERVICE_ACK_REQUEST = "serviceAckRequest"
+    # Request a operationResponse message from the service
+    SEND_OPERATION_RESPONSE = "sendOperationResponse"
 
     # Apply a the device twin desired properties patch
     SET_DESIRED_PROPS = "setDesiredProps"
@@ -162,8 +162,8 @@ class Commands(object):
     # Values for the command field inside c2d messages
     # ------------------------------------------------
 
-    # Response from one or more serviceAckRequest messsages
-    SERVICE_ACK_RESPONSE = "serviceAckResponse"
+    # Response from one or more sendOperationResponse messsages
+    OPERATION_RESPONSE = "operationResponse"
 
     # C2d test messaage - a respnse to a SEND_C2D request
     C2D_RESPONSE = "c2dResponse"
