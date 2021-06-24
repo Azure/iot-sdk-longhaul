@@ -37,15 +37,16 @@ from thief_constants import (
     SystemProperties,
 )
 from running_operation_list import RunningOperationList
+import thief_secrets
 
 faulthandler.enable()
 
 # use os.environ[] for required environment variables
-provisioning_host = os.environ["THIEF_DEVICE_PROVISIONING_HOST"]
-id_scope = os.environ["THIEF_DEVICE_ID_SCOPE"]
-group_symmetric_key = os.environ["THIEF_DEVICE_GROUP_SYMMETRIC_KEY"]
-registration_id = os.environ["THIEF_DEVICE_ID"]
-requested_service_pool = os.environ["THIEF_REQUESTED_SERVICE_POOL"]
+provisioning_host = thief_secrets.THIEF_DEVICE_PROVISIONING_HOST
+id_scope = thief_secrets.THIEF_DEVICE_ID_SCOPE
+group_symmetric_key = thief_secrets.THIEF_DEVICE_GROUP_SYMMETRIC_KEY
+registration_id = thief_secrets.THIEF_DEVICE_ID
+requested_service_pool = thief_secrets.THIEF_REQUESTED_SERVICE_POOL
 
 # Optional environment variables.
 # run_reason can be an environment variable or is can be passed on the command line.

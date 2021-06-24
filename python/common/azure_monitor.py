@@ -1,14 +1,14 @@
 # Copyright (c) Microsoft. All rights reserved.
 # Licensed under the MIT license. See LICENSE file in the project root for
 # full license information.
-import os
 import logging
 import platform
+import thief_secrets
 from thief_constants import CustomDimensions
 from opencensus.ext.azure.log_exporter import AzureEventHandler
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 
-app_insights_instrumentation_key = os.environ["THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY"]
+app_insights_instrumentation_key = thief_secrets.THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY
 app_insights_connection_string = "InstrumentationKey={}".format(app_insights_instrumentation_key)
 
 _client_type = None

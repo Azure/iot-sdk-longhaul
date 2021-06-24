@@ -73,6 +73,9 @@ class PythonConstantsGenerator(PythonBaseGenerator):
     Generator for thief_constants.py
     """
 
+    def include_group(self, group):
+        return group.get("generateCodeConstants", True) in [True, "True", "true"]
+
     def dump_group_header(self, group):
         print("class {}(object):".format(group["name"]))
         if "desc" in group:
@@ -119,6 +122,24 @@ class PythonConfigureMetricsGenerator(PythonBaseGenerator):
         print("        )")
 
 
+class PythonSecretGenerator(PythonBaseGenerator):
+    """
+    Generator for python secret reading code
+    """
+
+    def include_group(self, group):
+        return group.get("generateSecretReading", False) in [True, "True", "true"]
+
+    def dump_group_header(self, group):
+        pass
+
+    def dump_group_value(self, value):
+        if "desc" in value:
+            print("")
+            print("# {}".format(value["desc"]))
+        print('{}=secrets.get("{}", None)'.format(value["name"], value["value"]))
+
+
 def print_prefix(gen):
     if gen:
         try:
@@ -160,6 +181,7 @@ def generate_thief_constants(constants, generator):
 generators = {
     "python-constants": PythonConstantsGenerator,
     "python-configure-metrics": PythonConfigureMetricsGenerator,
+    "python-secrets": PythonSecretGenerator,
 }
 
 
