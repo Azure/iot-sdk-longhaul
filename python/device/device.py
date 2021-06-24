@@ -100,11 +100,6 @@ def custom_props(extra_props):
     return {"custom_dimensions": extra_props}
 
 
-class CustomPropertyNames(object):
-    EVENT_DATE_TIME_UTC = "eventDateTimeUtc"
-    OPERATION_ID = "operationId"
-
-
 class DeviceRunMetrics(object):
     """
     Object we use internally to keep track of how a the entire test is performing.
@@ -199,7 +194,7 @@ class DeviceApp(object):
         self.metrics = DeviceRunMetrics()
         self.service_instance_id = None
         self.system_health_telemetry = SystemHealthTelemetry()
-        # for running oeprations
+        # for running operations
         self.running_operation_list = RunningOperationList()
         # for metrics
         self.reporter_lock = threading.Lock()
@@ -482,10 +477,6 @@ class DeviceApp(object):
         msg.content_type = Const.JSON_CONTENT_TYPE
         msg.content_encoding = Const.JSON_CONTENT_ENCODING
 
-        msg.custom_properties[CustomPropertyNames.EVENT_DATE_TIME_UTC] = datetime.datetime.now(
-            datetime.timezone.utc
-        ).isoformat()
-
         return msg
 
     def pair_with_service(self):
@@ -606,7 +597,6 @@ class DeviceApp(object):
             }
 
             msg = self.create_message_from_dict(payload)
-            msg.custom_properties[CustomPropertyNames.OPERATION_ID] = running_op.id
 
             queue_time = time.time()
             self.client.send_message(msg)
