@@ -83,11 +83,11 @@ class RunningOperationList(object):
     Object which keeps tracks of operations which are running (in progress, not yet complete.)
 
     The "running operation" objects in this list have two properties which make them useful:
-    1. They have an automatically-generated ID value (a guid) which can be passed as a serviceAckId
+    1. They have an automatically-generated ID value (a guid) which can be passed as a operationId.
     2. They have a complete method, which can either set a `threading.Event` object or call a callback.
 
-    Using these objects, we can have a guid (a `serviceAckId`) which is like a "completion token".
-    When the server returns the serviceAckId, this list can use that guid to run some "on complete"
+    Using these objects, we can have a guid (a `operationId`) which is like a "completion token".
+    When the server returns the operationId, this list can use that guid to run some "on complete"
     code, which might be a callback, or might be a `threading.Event` object.
     """
 

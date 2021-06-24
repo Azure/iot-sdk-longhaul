@@ -100,11 +100,6 @@ def custom_props(extra_props):
     return {"custom_dimensions": extra_props}
 
 
-class CustomPropertyNames(object):
-    EVENT_DATE_TIME_UTC = "eventDateTimeUtc"
-    SERVICE_ACK_ID = "serviceAckid"
-
-
 class DeviceRunMetrics(object):
     """
     Object we use internally to keep track of how a the entire test is performing.
@@ -142,7 +137,7 @@ Object we use internally to keep track of how the entire test is configured.
 Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
-    Settings.MAX_RUN_DURATION_IN_SECONDS: 10 * 60 * 60,
+    Settings.MAX_RUN_DURATION_IN_SECONDS: 10 * 60,
     Settings.ALLOWED_EXCEPTION_COUNT: 10,
     Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
     Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
@@ -199,7 +194,7 @@ class DeviceApp(object):
         self.metrics = DeviceRunMetrics()
         self.service_instance_id = None
         self.system_health_telemetry = SystemHealthTelemetry()
-        # for service_acks
+        # for running operations
         self.running_operation_list = RunningOperationList()
         # for metrics
         self.reporter_lock = threading.Lock()
@@ -482,10 +477,6 @@ class DeviceApp(object):
         msg.content_type = Const.JSON_CONTENT_TYPE
         msg.content_encoding = Const.JSON_CONTENT_ENCODING
 
-        msg.custom_properties[CustomPropertyNames.EVENT_DATE_TIME_UTC] = datetime.datetime.now(
-            datetime.timezone.utc
-        ).isoformat()
-
         return msg
 
     def pair_with_service(self):
@@ -597,8 +588,8 @@ class DeviceApp(object):
 
             payload = {
                 Fields.THIEF: {
-                    Fields.CMD: Commands.SERVICE_ACK_REQUEST,
-                    Fields.SERVICE_ACK_ID: running_op.id,
+                    Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
+                    Fields.OPERATION_ID: running_op.id,
                     Fields.SESSION_METRICS: self.get_session_metrics(),
                     Fields.TEST_METRICS: self.get_test_metrics(),
                     Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
@@ -606,7 +597,6 @@ class DeviceApp(object):
             }
 
             msg = self.create_message_from_dict(payload)
-            msg.custom_properties[CustomPropertyNames.SERVICE_ACK_ID] = running_op.id
 
             queue_time = time.time()
             self.client.send_message(msg)
@@ -661,11 +651,11 @@ class DeviceApp(object):
             # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
             cmd = thief[Fields.CMD]
             if cmd in [
-                Commands.SERVICE_ACK_RESPONSE,
+                Commands.OPERATION_RESPONSE,
                 Commands.METHOD_RESPONSE,
                 Commands.C2D_RESPONSE,
             ]:
-                self.incoming_executor.submit(self.handle_service_ack_response, msg)
+                self.incoming_executor.submit(self.handle_operation_response, msg)
 
             else:
                 logger.warning("Unknown command received: {}".format(obj))
@@ -673,30 +663,30 @@ class DeviceApp(object):
         else:
             logger.warning("C2D received, but it's not for us: {}".format(obj))
 
-    def handle_service_ack_response(self, msg):
+    def handle_operation_response(self, msg):
         """
-        Code to handle incoming service_ack responses.  This is where we go through the list
-        of `serviceAckId` values that we received and call the appropriate callbacks to indicate that
+        Code to handle incoming operationResponse messages.  This is where we go through the list
+        of `operationId` values that we received and call the appropriate callbacks to indicate that
         the service has responded.
         """
 
         thief = json.loads(msg.data.decode())[Fields.THIEF]
 
-        service_acks = thief.get(Fields.SERVICE_ACKS, [])
-        if not service_acks:
-            service_acks = [
-                thief.get(Fields.SERVICE_ACK_ID),
+        operation_ids = thief.get(Fields.OPERATION_IDS, [])
+        if not operation_ids:
+            operation_ids = [
+                thief.get(Fields.OPERATION_ID),
             ]
 
-        logger.info("Received {} message with {}".format(thief[Fields.CMD], service_acks))
+        logger.info("Received {} message with {}".format(thief[Fields.CMD], operation_ids))
 
-        for service_ack_id in service_acks:
-            running_op = self.running_operation_list.get(service_ack_id)
+        for operation_id in operation_ids:
+            running_op = self.running_operation_list.get(operation_id)
             if running_op:
                 running_op.result_message = msg
                 running_op.complete()
             else:
-                logger.warning("Received unknown serviceAckId: {}:".format(service_ack_id))
+                logger.warning("Received unknown operationId: {}:".format(operation_id))
 
     def operation_test_thread(self):
         """
@@ -730,9 +720,9 @@ class DeviceApp(object):
         test function to send a single reported property and then clear it after the
         server verifies it. It does this by setting properties inside
         `properties/reported/thief/testContent/reportedPropertyTest`.  Each property has
-        a `addServiceAckId` value and a `removeServiceAckId` value.  When  the service sees the
-        property added, it sends the `addServiceAckId` to the device.  When the service sees the
-        property removed, it sends the `removeServiceAckid` to the device. This way the device
+        a `addOperationId` value and a `removeOperationId` value.  When  the service sees the
+        property added, it sends the `addOperationId` to the device.  When the service sees the
+        property removed, it sends the `removeOperationId` to the device. This way the device
         can add a property, verify that it was added, then remove it and verify that it was removed.
         """
 
@@ -761,8 +751,8 @@ class DeviceApp(object):
         self.reported_property_index += 1
 
         prop_value = {
-            Fields.ADD_SERVICE_ACK_ID: add_operation.id,
-            Fields.REMOVE_SERVICE_ACK_ID: remove_operation.id,
+            Fields.ADD_OPERATION_ID: add_operation.id,
+            Fields.REMOVE_OPERATION_ID: remove_operation.id,
         }
 
         logger.info("Adding test property {}".format(prop_name))
@@ -906,7 +896,7 @@ class DeviceApp(object):
         command_payload = {
             Fields.THIEF: {
                 Fields.CMD: Commands.INVOKE_METHOD,
-                Fields.SERVICE_ACK_ID: running_op.id,
+                Fields.OPERATION_ID: running_op.id,
                 Fields.METHOD_NAME: method.method_name,
                 Fields.METHOD_INVOKE_PAYLOAD: payload,
             }
@@ -956,28 +946,28 @@ class DeviceApp(object):
         command_payload = {
             Fields.THIEF: {
                 Fields.CMD: Commands.SEND_C2D,
-                Fields.SERVICE_ACK_ID: running_op.id,
+                Fields.OPERATION_ID: running_op.id,
                 Fields.TEST_C2D_PAYLOAD: sent_test_payload,
             }
         }
 
-        logger.info("Requesting C2D for serviceAckId {}".format(running_op.id))
+        logger.info("Requesting C2D for operationId {}".format(running_op.id))
         self.client.send_message(self.create_message_from_dict(command_payload))
 
         if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
-            logger.info("C2D received for serviceAckId {}".format(running_op.id))
+            logger.info("C2D received for operationId {}".format(running_op.id))
             self.metrics.receive_c2d_count_received.increment()
 
             thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
             if thief[Fields.TEST_C2D_PAYLOAD] != sent_test_payload:
                 logger.warning(
-                    "C2D payload for serviceAckId {}  does not match.  Expected={}, Received={}".format(
+                    "C2D payload for operationId {}  does not match.  Expected={}, Received={}".format(
                         running_op.id, sent_test_payload, thief[Fields.TEST_C2D_PAYLOAD]
                     )
                 )
                 raise ThiefFatalException("C2D payload mismatch")
         else:
-            logger.info("C2D timed out for serviceAckId {}".format(running_op.id))
+            logger.info("C2D timed out for operationId {}".format(running_op.id))
             self.metrics.receive_c2d_count_timed_out.increment()
 
     def wrap_handler(self, func):

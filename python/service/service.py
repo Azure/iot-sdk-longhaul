@@ -51,7 +51,7 @@ azure_monitor.add_logging_properties(
 event_logger = azure_monitor.get_event_logger()
 azure_monitor.log_to_azure_monitor("thief")
 
-ServiceAck = collections.namedtuple("ServiceAck", "device_id service_ack_id")
+OperationResponse = collections.namedtuple("OperationResponse", "device_id operation_id")
 OutgoingC2d = collections.namedtuple("OutgoingC2d", "device_id message props")
 
 
@@ -165,9 +165,9 @@ class ServiceApp(object):
         # for any kind of c2d
         self.outgoing_c2d_queue = queue.Queue()
 
-        # for service_acks
-        self.force_service_ack_send = threading.Event()
-        self.outgoing_service_ack_response_queue = queue.Queue()
+        # for operationResponse messages
+        self.force_send_operation_response = threading.Event()
+        self.outgoing_operation_response_queue = queue.Queue()
 
         # for pairing
         self.device_list = PerDeviceDataList()
@@ -181,7 +181,7 @@ class ServiceApp(object):
     def handle_method_invoke(self, device_data, event):
         body = event.body_as_json()
         thief = body.get(Fields.THIEF, {})
-        method_guid = thief.get(Fields.SERVICE_ACK_ID)
+        method_guid = thief.get(Fields.OPERATION_ID)
         method_name = thief.get(Fields.METHOD_NAME)
 
         logger.info("------------------------------------------------------------------")
@@ -212,7 +212,7 @@ class ServiceApp(object):
                     Fields.CMD: Commands.METHOD_RESPONSE,
                     Fields.SERVICE_INSTANCE_ID: service_instance_id,
                     Fields.RUN_ID: device_data.run_id,
-                    Fields.SERVICE_ACK_ID: method_guid,
+                    Fields.OPERATION_ID: method_guid,
                     Fields.METHOD_RESPONSE_PAYLOAD: response.payload,
                     Fields.METHOD_RESPONSE_STATUS_CODE: response.status,
                 }
@@ -255,16 +255,16 @@ class ServiceApp(object):
             cmd = thief.get(Fields.CMD, None)
 
             if device_data:
-                if cmd == Commands.SERVICE_ACK_REQUEST:
+                if cmd == Commands.SEND_OPERATION_RESPONSE:
                     logger.info(
-                        "Received telemetry serviceAckRequest from {} with serviceAckId {}".format(
-                            device_id, thief[Fields.SERVICE_ACK_ID]
+                        "Received telemetry sendOperationResponse from {} with operationId {}".format(
+                            device_id, thief[Fields.OPERATION_ID]
                         ),
                         extra=custom_props(device_id, device_data.run_id),
                     )
-                    self.outgoing_service_ack_response_queue.put(
-                        ServiceAck(
-                            device_id=device_id, service_ack_id=thief[Fields.SERVICE_ACK_ID],
+                    self.outgoing_operation_response_queue.put(
+                        OperationResponse(
+                            device_id=device_id, operation_id=thief[Fields.OPERATION_ID],
                         )
                     )
                 elif cmd == Commands.SET_DESIRED_PROPS:
@@ -280,8 +280,8 @@ class ServiceApp(object):
 
                 elif cmd == Commands.SEND_C2D:
                     logger.info(
-                        "Sending C2D to {} with serviceAckId {}".format(
-                            device_id, thief[Fields.SERVICE_ACK_ID]
+                        "Sending C2D to {} with operationId {}".format(
+                            device_id, thief[Fields.OPERATION_ID]
                         ),
                         extra=custom_props(device_id, device_data.run_id),
                     )
@@ -291,7 +291,7 @@ class ServiceApp(object):
                                 Fields.CMD: Commands.C2D_RESPONSE,
                                 Fields.SERVICE_INSTANCE_ID: service_instance_id,
                                 Fields.RUN_ID: device_data.run_id,
-                                Fields.SERVICE_ACK_ID: thief[Fields.SERVICE_ACK_ID],
+                                Fields.OPERATION_ID: thief[Fields.OPERATION_ID],
                                 Fields.TEST_C2D_PAYLOAD: thief[Fields.TEST_C2D_PAYLOAD],
                             }
                         }
@@ -390,12 +390,12 @@ class ServiceApp(object):
                                 extra=custom_props(device_id, device_data.run_id),
                             )
 
-    def handle_service_ack_request_thread(self):
+    def handle_send_operation_response_thread(self):
         """
-        Thread which is responsible for returning serviceAckResponse message to the
-        device clients.  The various serviceAcks are collected in `outgoing_service_ack_response_queue`
-        and this thread collects the serviceAcks into batches to send at a regular interval.  This
-        batching is required because we send many serviceAck responses per second and IoTHub will throttle
+        Thread which is responsible for returning operationResponse message to the
+        device clients. The operationResponse objects are collected in `outgoing_operation_response_queue`
+        and this thread collects the responses into batches to send at a regular interval.  This
+        batching is required because we send many responses per second and IoTHub will throttle
         C2D events if we send too many.  Sending fewer big messages is better than sending fewer
         small messages.
         """
@@ -403,27 +403,32 @@ class ServiceApp(object):
         while not self.done.isSet():
             reset_watchdog()
 
-            service_acks = {}
+            operation_ids = {}
             while True:
                 try:
-                    service_ack = self.outgoing_service_ack_response_queue.get_nowait()
+                    operation_response = self.outgoing_operation_response_queue.get_nowait()
                 except queue.Empty:
                     break
-                if service_ack.device_id not in service_acks:
-                    service_acks[service_ack.device_id] = []
+                if operation_response.device_id not in operation_ids:
+                    operation_ids[operation_response.device_id] = []
                 # it's possible to get the same eventhub message twice, especially if we have to reconnect
                 # to refresh credentials. Don't send the same service ack twice.
-                if service_ack.service_ack_id not in service_acks[service_ack.device_id]:
-                    service_acks[service_ack.device_id].append(service_ack.service_ack_id)
+                if (
+                    operation_response.operation_id
+                    not in operation_ids[operation_response.device_id]
+                ):
+                    operation_ids[operation_response.device_id].append(
+                        operation_response.operation_id
+                    )
 
-            for device_id in service_acks:
+            for device_id in operation_ids:
 
                 device_data = self.device_list.try_get(device_id)
 
                 if device_data:
                     logger.info(
-                        "Send serviceAckResponse for device_id = {}: {}".format(
-                            device_id, service_acks[device_id]
+                        "Send operationResponse for device_id = {}: {}".format(
+                            device_id, operation_ids[device_id]
                         ),
                         extra=custom_props(device_id, device_data.run_id),
                     )
@@ -431,10 +436,10 @@ class ServiceApp(object):
                     message = json.dumps(
                         {
                             Fields.THIEF: {
-                                Fields.CMD: Commands.SERVICE_ACK_RESPONSE,
+                                Fields.CMD: Commands.OPERATION_RESPONSE,
                                 Fields.SERVICE_INSTANCE_ID: service_instance_id,
                                 Fields.RUN_ID: device_data.run_id,
-                                Fields.SERVICE_ACKS: service_acks[device_id],
+                                Fields.OPERATION_IDS: operation_ids[device_id],
                             }
                         }
                     )
@@ -449,8 +454,8 @@ class ServiceApp(object):
 
             # TODO: this should be configurable
             # Too small and this causes C2D throttling
-            self.force_service_ack_send.wait(timeout=15)
-            self.force_service_ack_send.clear()
+            self.force_send_operation_response.wait(timeout=15)
+            self.force_send_operation_response.clear()
 
     def handle_pairing_request(self, event):
         """
@@ -526,7 +531,7 @@ class ServiceApp(object):
         properties contain content, such as properties that contain random strings which are
         used to test various features.
 
-        for `reportedPropertyTest` properties, this function will send serviceAckResponse messages to the
+        for `reportedPropertyTest` properties, this function will send operationResponse messages to the
         device when the property is added, and then again when the property is removed
         """
         device_id = get_device_id_from_event(event)
@@ -547,18 +552,18 @@ class ServiceApp(object):
 
                 with device_data.reported_property_list_lock:
                     if property_value:
-                        service_ack_id = property_value[Fields.ADD_SERVICE_ACK_ID]
+                        operation_id = property_value[Fields.ADD_OPERATION_ID]
                         device_data.reported_property_values[property_name] = property_value
                     else:
-                        service_ack_id = device_data.reported_property_values[property_name][
-                            Fields.REMOVE_SERVICE_ACK_ID
+                        operation_id = device_data.reported_property_values[property_name][
+                            Fields.REMOVE_OPERATION_ID
                         ]
                         del device_data.reported_property_values[property_name]
 
-                self.outgoing_service_ack_response_queue.put(
-                    ServiceAck(device_id=device_id, service_ack_id=service_ack_id)
+                self.outgoing_operation_response_queue.put(
+                    OperationResponse(device_id=device_id, operation_id=operation_id)
                 )
-                self.force_service_ack_send.set()
+                self.force_send_operation_response.set()
 
     def dispatch_twin_change_thread(self):
         """
@@ -617,7 +622,7 @@ class ServiceApp(object):
         self.executor.submit(self.receive_incoming_messages_thread, critical=True)
         self.executor.submit(self.dispatch_twin_change_thread, critical=True)
         self.executor.submit(self.send_outgoing_c2d_messages_thread, critical=True)
-        self.executor.submit(self.handle_service_ack_request_thread, critical=True)
+        self.executor.submit(self.handle_send_operation_response_thread, critical=True)
 
         try:
             while True:
