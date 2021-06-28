@@ -18,15 +18,15 @@ import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
 import azure_monitor
 from thief_constants import Const, Fields, Commands, RunStates
+import thief_secrets
 
 faulthandler.enable()
 
-# use os.environ[] for required environment variables
-iothub_connection_string = os.environ["THIEF_SERVICE_CONNECTION_STRING"]
-iothub_name = os.environ["THIEF_IOTHUB_NAME"]
-eventhub_connection_string = os.environ["THIEF_EVENTHUB_CONNECTION_STRING"]
-eventhub_consumer_group = os.environ["THIEF_EVENTHUB_CONSUMER_GROUP"]
-service_pool = os.environ["THIEF_SERVICE_POOL"]
+iothub_connection_string = thief_secrets.THIEF_SERVICE_CONNECTION_STRING
+iothub_name = thief_secrets.THIEF_IOTHUB_NAME
+eventhub_connection_string = thief_secrets.THIEF_EVENTHUB_CONNECTION_STRING
+eventhub_consumer_group = thief_secrets.THIEF_EVENTHUB_CONSUMER_GROUP
+service_pool = thief_secrets.THIEF_SERVICE_POOL
 
 # Optional environment variables.
 # run_id can be an environment variable or it can be automatically generated

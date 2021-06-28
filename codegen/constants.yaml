@@ -507,3 +507,97 @@ groups:
       - name: INTERRUPTED
         value: "Interrupted"
         desc: "Test run was interrupted"
+
+  - name: SecretNames
+    desc: "Names of secrets stored in json"
+    generateCodeConstants: false
+    generateSecretReading: true
+    values:
+      - name: THIEF_KEYVAULT_NAME
+        value: thiefKeyvaultName
+        desc: "Name of keyvault that stores thief secrets"
+      - name: THIEF_DEVICE_ID
+        value: thiefDeviceId
+        desc: "Device ID used when running thief tests"
+      - name: THIEF_SERVICE_POOL
+        value: thiefServicePool
+        desc: "Name of service pool that a specific service app is running under"
+      - name: THIEF_REQUESTED_SERVICE_POOL
+        value: thiefRequestedServicePool
+        desc: "Name of service pool that a specific device app would like to pair with."
+      - name: THIEF_SUBSCRIPTION_ID
+        value: thiefSubscriptionId
+        keyvaultSecretName: THIEF-SUBSCRIPTION-ID
+        desc: "ID for subscription that holds thief resources"
+      - name: THIEF_SERVICE_CONNECTION_STRING
+        value: thiefServiceConnectionString
+        keyvaultSecretName: THIEF-SERVICE-CONNECTION-STRING
+        desc: "Connection string for the iothub instance that thief is using for tests"
+      - name: THIEF_DEVICE_PROVISIONING_HOST
+        value: thiefDeviceProvisioningHost
+        keyvaultSecretName: THIEF-DEVICE-PROVISIONING-HOST
+        desc: "Name of the provisioning host that thief is using for tests"
+      - name: THIEF_DEVICE_ID_SCOPE
+        value: thiefDeviceIdScope
+        keyvaultSecretName: THIEF-DEVICE-ID-SCOPE
+        desc: "IDScope for the provisioning host that thief is using for tests."
+      - name: THIEF_DEVICE_GROUP_SYMMETRIC_KEY
+        value: thiefDeviceGroupSymmetricKey
+        keyvaultSecretName: THIEF-DEVICE-GROUP-SYMMETRIC-KEY
+        desc: "Symmetric Key for the provisioning device group that thief is using for tests."
+      - name: THIEF_EVENTHUB_CONNECTION_STRING
+        value: thiefEventhubConnectionString
+        keyvaultSecretName: THIEF-EVENTHUB-CONNECTION-STRING
+        desc: "Connection string for the eventhub instance that thief is using"
+      - name: THIEF_EVENTHUB_CONSUMER_GROUP
+        value: thiefEventhubConsumerGroup
+        keyvaultSecretName: THIEF-EVENTHUB-CONSUMER-GROUP
+        desc: "Consumer group that thief is using when monitoring eventhub events"
+      - name: THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY
+        value: thiefAppInsightsInstrumentationKey
+        keyvaultSecretName: THIEF-APP-INSIGHTS-INSTRUMENTATION-KEY
+        desc: "App Insights instrumentation key that thief is using for pushing metrics and log events"
+      - name: THIEF_CONTAINER_REGISTRY_HOST
+        value: thiefContainerRegistryHost
+        keyvaultSecretName: THIEF-CONTAINER-REGISTRY-HOST
+        desc: "Host for the ontainer regsitry that thief is using for images under test (DNS name)"
+      - name: THIEF_CONTAINTER_REGISTRY_PASSWORD
+        value: thiefContainerRegistryPassword
+        keyvaultSecretName: THIEF-CONTAINER-REGISTRY-PASSWORD
+        desc: "Password to use when logging into thief container registry"
+      - name: THIEF_CONTAINER_REGISTRY_USER
+        value: thiefContainerRegistryUser
+        keyvaultSecretName: THIEF-CONTAINER-REGISTRY-USER
+        desc: "User name to use when logging into thief container registry"
+      - name: THIEF_CONTAINER_REGISTRY_SHORTNAME
+        value: thiefContainerRegistryShortname
+        keyvaultSecretName: THIEF-CONTAINER-REGISTRY-SHORTNAME
+        desc: "Short name for thief container registry.  Pprobably the DNS name without the .azurecr.io suffix"
+      - name: THIEF_RUNS_RESOURCE_GROUP
+        value: thiefRunsResourceGroup
+        keyvaultSecretName: THIEF-RUNS-RESOURCE-GROUP
+        desc: "Resource group used for holding running thief containers"
+      - name: THIEF_USER_RESOURCE_ID
+        value: thiefUserResourceId
+        keyvaultSecretName: THIEF-USER-RESOURCE-ID
+        desc: "Resource ID for the managed identity that thief uses for containers under test"
+      - name: THIEF_RESOURCE_GROUP
+        value: thiefResourceGroup
+        keyvaultSecretName: THIEF-RESOURCE-GROUP
+        desc: "Resource group used for holding thief resources "
+      - name: THIEF_IOTHUB_NAME
+        value: thiefIothubName
+        keyvaultSecretName: THIEF-IOTHUB-NAME
+        desc: "Name of thief iothub.  Probably DNS name for the hub without the azure-devices.net suffix"
+      - name: THIEF_SHARED_KEYVAULT_NAME
+        value: thiefSharedKeyvaultName
+        keyvaultSecretName: THIEF-SHARED-KEYVAULT-NAME
+        desc: "Name of keyvault holding secrets for thief shared resources."
+      - name: THIEF_SHARED_SUBSCRIPTION_ID
+        value: thiefSharedSubscriptionId
+        keyvaultSecretName: THIEF-SHARED-SUBSCRIPTION-ID
+        desc: "Subscription ID used for thief shared resources."
+      - name: THIEF_SHARED_RESOURCE_GROUP
+        value: thiefSharedResourceGroup
+        keyvaultSecretName: THIEF-SHARED-RESOURCE-GROUP
+        desc: "Resource group used for holding thief shared resources."
