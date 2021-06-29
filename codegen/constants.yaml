@@ -262,6 +262,11 @@ groups:
 
       - desc: "SendMesssage metrics"
         values:
+          - name: SEND_MESSAGE_COUNT_QUEUED
+            value: "sendMessageCountQueued"
+            desc: "Number of telemetry messages queued for sending"
+            type: int
+            units: messages
           - name: SEND_MESSAGE_COUNT_SENT 
             value: "sendMessageCountSent"
             desc: "Number of telemetry messages sent"
@@ -419,18 +424,30 @@ groups:
     subgroups:
       - desc: "pairing settings"
         values:
-        - name: PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS 
-          value: "pairingRequestTimeoutIntervalInSeconds"
-          desc: "How long to keep trying to pair with a service instance before giving up"
-        - name: PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS 
-          value: "pairingRequestSendIntervalInSeconds"
-          desc: "How many seconds to wait while pairing before trying to pair again"
+          - name: PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS 
+            value: "pairingRequestTimeoutIntervalInSeconds"
+            desc: "How long to keep trying to pair with a service instance before giving up"
+          - name: PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS 
+            value: "pairingRequestSendIntervalInSeconds"
+            desc: "How many seconds to wait while pairing before trying to pair again"
 
       - desc: "send_message settings"
         values:
-        - name: SEND_MESSAGE_OPERATIONS_PER_SECOND 
-          value: "sendMessageOperationsPerSecond"
-          desc: "How many times to call send_message per second"
+          - name: SEND_MESSAGE_OPERATIONS_PER_SECOND 
+            value: "sendMessageOperationsPerSecond"
+            desc: "How many times to call send_message per second"
+
+      - desc: "send_message flood settings"
+        values:
+          - name: DO_SEND_MESSAGE_FLOODS
+            value: "doSendMessageFloods"
+            desc: "True to do send_message floods"
+          - name: SEND_MESSAGE_FLOOD_INTERVAL_IN_SECONDS
+            value: "sendMessageFloodInterval"
+            desc: "How often (in seconds) to do send_message floods"
+          - name: SEND_MESSAGE_FLOOD_MAX_MESSAGE_COUNT
+            value: "sendMessageFloodMaxMessageCount"
+            desc: "Maximum size of send_message floods"
 
 
   - name: CustomDimensions

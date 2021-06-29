@@ -234,6 +234,9 @@ class Metrics(object):
     # SendMesssage metrics
     # --------------------
 
+    # Number of telemetry messages queued for sending
+    SEND_MESSAGE_COUNT_QUEUED = "sendMessageCountQueued"
+
     # Number of telemetry messages sent
     SEND_MESSAGE_COUNT_SENT = "sendMessageCountSent"
 
@@ -382,6 +385,19 @@ class Settings(object):
 
     # How many times to call send_message per second
     SEND_MESSAGE_OPERATIONS_PER_SECOND = "sendMessageOperationsPerSecond"
+
+    # ---------------------------
+    # send_message flood settings
+    # ---------------------------
+
+    # True to do send_message floods
+    DO_SEND_MESSAGE_FLOODS = "doSendMessageFloods"
+
+    # How often (in seconds) to do send_message floods
+    SEND_MESSAGE_FLOOD_INTERVAL_IN_SECONDS = "sendMessageFloodInterval"
+
+    # Maximum size of send_message floods
+    SEND_MESSAGE_FLOOD_MAX_MESSAGE_COUNT = "sendMessageFloodMaxMessageCount"
 
 
 class CustomDimensions(object):
