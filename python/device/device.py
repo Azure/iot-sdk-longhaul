@@ -41,7 +41,6 @@ import thief_secrets
 
 faulthandler.enable()
 
-# use os.environ[] for required environment variables
 provisioning_host = thief_secrets.THIEF_DEVICE_PROVISIONING_HOST
 id_scope = thief_secrets.THIEF_DEVICE_ID_SCOPE
 group_symmetric_key = thief_secrets.THIEF_DEVICE_GROUP_SYMMETRIC_KEY
@@ -113,6 +112,7 @@ class DeviceRunMetrics(object):
 
         self.exception_count = ThreadSafeCounter()
 
+        self.send_message_count_queued = ThreadSafeCounter()
         self.send_message_count_sent = ThreadSafeCounter()
         self.send_message_count_verified = ThreadSafeCounter()
         self.send_message_count_timed_out = ThreadSafeCounter()
@@ -141,15 +141,18 @@ device_run_config = {
     Settings.MAX_RUN_DURATION_IN_SECONDS: 10 * 60,
     Settings.ALLOWED_EXCEPTION_COUNT: 10,
     Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
-    Settings.OPERATION_TIMEOUT_IN_SECONDS: 60,
+    Settings.OPERATION_TIMEOUT_IN_SECONDS: 120,
     Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 10,
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
     Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS: 30,
-    Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 10,
+    Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 3,
     Settings.MQTT_KEEP_ALIVE_INTERVAL: 20,
     Settings.SAS_TOKEN_RENEWAL_INTERVAL: 600,
     Settings.MAX_TEST_SEND_THREADS: 128,
     Settings.MAX_TEST_RECEIVE_THREADS: 10,
+    Settings.DO_SEND_MESSAGE_FLOODS: True,
+    Settings.SEND_MESSAGE_FLOOD_INTERVAL_IN_SECONDS: 120,
+    Settings.SEND_MESSAGE_FLOOD_MAX_MESSAGE_COUNT: 500,
 }
 
 
@@ -259,6 +262,11 @@ class DeviceApp(object):
         # --------------------
         # SendMesssage metrics
         # --------------------
+        self.reporter.add_integer_measurement(
+            Metrics.SEND_MESSAGE_COUNT_QUEUED,
+            "Number of telemetry messages queued for sending",
+            "messages",
+        )
         self.reporter.add_integer_measurement(
             Metrics.SEND_MESSAGE_COUNT_SENT, "Number of telemetry messages sent", "messages",
         )
@@ -378,6 +386,7 @@ class DeviceApp(object):
 
         props = {
             Metrics.EXCEPTION_COUNT: self.metrics.exception_count.get_count(),
+            Metrics.SEND_MESSAGE_COUNT_QUEUED: self.metrics.send_message_count_queued.get_count(),
             Metrics.SEND_MESSAGE_COUNT_SENT: self.metrics.send_message_count_sent.get_count(),
             Metrics.SEND_MESSAGE_COUNT_VERIFIED: self.metrics.send_message_count_verified.get_count(),
             Metrics.SEND_MESSAGE_COUNT_TIMED_OUT: self.metrics.send_message_count_timed_out.get_count(),
@@ -576,6 +585,27 @@ class DeviceApp(object):
             self.reporter.set_metrics_from_dict(props[Fields.TEST_METRICS])
             self.reporter.record()
 
+    def send_message_with_metrics(self, message, operation_id, message_type="send_message"):
+        """
+        Wrapper around send_message which sends a message to iothub and keeps track of all
+        necessary metric.
+        """
+        queue_time = time.time()
+        self.metrics.send_message_count_queued.increment()
+
+        self.client.send_message(message)
+        self.metrics.send_message_count_sent.increment()
+
+        logger.info("{} op {} sent to service".format(message_type, operation_id))
+
+        send_time = time.time()
+
+        with self.reporter_lock:
+            self.reporter.set_metrics_from_dict(
+                {Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000}
+            )
+            self.reporter.record()
+
     def test_send_message_thread(self):
         """
         Thread to continuously send d2c messages throughout the longhaul run.  This thread doesn't
@@ -585,6 +615,11 @@ class DeviceApp(object):
         """
 
         def send_message():
+            """
+            Helper function to create and send send a single message to iothub.  Intended
+            to run in it's own thread.  Returns after the service acknowledges receipt of
+            the message.
+            """
             running_op = self.running_operation_list.make_event_based_operation()
 
             payload = {
@@ -598,23 +633,12 @@ class DeviceApp(object):
             }
 
             msg = self.create_message_from_dict(payload)
+            self.send_message_with_metrics(msg, running_op.id)
 
-            queue_time = time.time()
-            self.client.send_message(msg)
-            logger.info("Telemetry op {} sent to service".format(running_op.id))
-
-            self.metrics.send_message_count_sent.increment()
-
-            send_time = time.time()
             if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
                 logger.info("Telemetry op {} arrived at service".format(running_op.id))
                 self.metrics.send_message_count_verified.increment()
 
-                with self.reporter_lock:
-                    self.reporter.set_metrics_from_dict(
-                        {Metrics.LATENCY_QUEUE_MESSAGE_TO_SEND: (send_time - queue_time) * 1000}
-                    )
-                    self.reporter.record()
             else:
                 logger.warning("Telemetry op {} did not arrive at service".format(running_op.id))
                 self.metrics.send_message_count_timed_out.increment()
@@ -624,6 +648,95 @@ class DeviceApp(object):
             self.outgoing_executor.submit(send_message)
             # sleep until we need to send again
             self.done.wait(1 / self.config[Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND])
+
+    def sleep_with_watchdog(self, sleep_time):
+        """
+        Execute a `time.sleep` operation which will not get interrupted by a watchdog timeout.
+        """
+        sleep_end = time.time() + sleep_time
+        while not self.done.isSet() and time.time() <= sleep_end:
+            reset_watchdog()
+            time_left = max(0, sleep_end - time.time())
+            self.done.wait(
+                timeout=min(time_left, self.outgoing_executor.watchdog_interval - 10)
+            )  # -10 for headroom
+        reset_watchdog()
+
+    def test_flood_thread(self):
+        """
+        A thread which runs occasional message floods on some regular interval.  A message
+        flood is a large number of send_message calls in a short period of time.
+        """
+
+        def send_flood_message(operation_id):
+            """
+            Helper function to create and send send a single message to iothub.  Intended
+            to run in it's own thread.  Returns when the PUBACK returns.
+            """
+            payload = {
+                Fields.THIEF: {
+                    Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
+                    Fields.OPERATION_ID: operation_id,
+                    "extraPayload": self.make_random_payload(),
+                }
+            }
+
+            msg = self.create_message_from_dict(payload)
+            self.send_message_with_metrics(msg, operation_id, "Flood")
+
+        def do_flood():
+            """
+            Function to run send a flood of messages to iothub.  Intended to run in its own
+            thread.  Waits for the server to acknowledge all messages before returning.
+            """
+
+            # Make RunningOperation objects for all of our messages.
+            all_ops = [
+                self.running_operation_list.make_event_based_operation()
+                for x in range(
+                    random.randint(1, self.config[Settings.SEND_MESSAGE_FLOOD_MAX_MESSAGE_COUNT])
+                )
+            ]
+            logger.info("flooding with {} send_message operations".format(len(all_ops)))
+
+            # Queue up sends for all these messages.  The number of sends which can be outstanding
+            # on the wire is limited by the number of threads in the outgoing_executor thread pool.
+            for op in all_ops:
+                self.outgoing_executor.submit(send_flood_message, op.id)
+
+            # Wait for all of the sends to complete.  We do this by waiting for some arbitrary
+            # operation to complete, then we prune the list of remaining operations and wait
+            # for another arbitrary operation until the list of remaining operations is empty.
+            start_time = time.time()
+            timeout_time = time.time() + self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]
+            while len(all_ops) and time.time() < timeout_time:
+                time_left = timeout_time - time.time()
+                all_ops[0].event.wait(timeout=time_left)
+                remaining_ops = [x for x in all_ops if x.event]
+                count_remaining = len(remaining_ops)
+                count_verified = len(all_ops) - len(remaining_ops)
+                logger.info(
+                    "Flood check - after {} seconds, {} operations verified, {} remaining".format(
+                        time.time() - start_time, count_verified, count_remaining,
+                    )
+                )
+                self.metrics.send_message_count_verified.add(count_verified)
+                all_ops = remaining_ops
+
+            if len(all_ops):
+                logger.warning("Flood complete.  {} opperations timed out".format(len(all_ops)))
+                self.metrics.send_message_count_timed_out.add(len(all_ops))
+            else:
+                logger.info("Flood complete.  All operations verified")
+
+        # Finally the main loop of the flood thread.  This just sleeps for a while, then queues
+        # up the flood in a different thread.  This means that floods can theoretically overlap.
+        while not self.done.isSet():
+            self.sleep_with_watchdog(self.config[Settings.SEND_MESSAGE_FLOOD_INTERVAL_IN_SECONDS])
+            if self.done.isSet():
+                return
+
+            self.outgoing_executor.submit(do_flood, long_run=True)
 
     def handle_desired_property_patch_received(self, patch):
         """
@@ -1023,6 +1136,8 @@ class DeviceApp(object):
         # Start testing threads
         self.outgoing_executor.submit(self.test_send_message_thread, critical=True)
         self.outgoing_executor.submit(self.operation_test_thread, critical=True)
+        if self.config[Settings.DO_SEND_MESSAGE_FLOODS]:
+            self.outgoing_executor.submit(self.test_flood_thread, critical=True)
 
         self.metrics.exit_reason = ""
         start_time = time.time()
@@ -1033,6 +1148,7 @@ class DeviceApp(object):
                 self.outgoing_executor.wait_for_thread_death_event(planned_end_time - time.time())
                 self.outgoing_executor.check_watchdogs()
                 self.incoming_executor.check_watchdogs()
+                self.check_failure_counts()
 
                 non_fatal_errors = 0
                 fatal_error = None

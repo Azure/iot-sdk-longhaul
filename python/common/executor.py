@@ -25,6 +25,7 @@ class FutureThreadInfo(object):
         self.long_run_warning_reported = False
         self.executor = None
         self.name_at_death = None
+        self.long_run = False
 
 
 # thread_local_storage is an object that looks like a global, but has a different
@@ -106,7 +107,7 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
             if not last_frame.filename.endswith("/concurrent/futures/thread.py"):
                 yield thread
 
-    def submit(self, fn, *args, critical=False, thread_name=None, **kwargs):
+    def submit(self, fn, *args, critical=False, long_run=False, thread_name=None, **kwargs):
         def _thread_outer_proc(future_thread_info, *args, **kwargs):
             # Keep a pointer to our structure in TLS
             thread_local_storage.future_thread_info = future_thread_info
@@ -114,6 +115,7 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
             future_thread_info.thread = threading.current_thread()
             future_thread_info.critical = critical
             future_thread_info.start_time = time.time()
+            future_thread_info.long_run = long_run
 
             # Set our Event so calling code can know that we're ready to run
             future_thread_info.started.set()
@@ -186,9 +188,9 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
                             )
 
                 else:
-                    # threads that don't use watchdog can only live so long before generating a warning.
+                    # short-run threads that don't use watchdog can only live so long before generating a warning.
                     # But, only generate one warning
-                    if not info.long_run_warning_reported:
+                    if not info.long_run and not info.long_run_warning_reported:
                         thread_life_time = time.time() - info.start_time
                         if thread_life_time > self.long_thread_warning_interval:
 
