@@ -47,7 +47,6 @@ class EventBasedOperation(OperationBase):
         """
         if self.event:
             self.event.set()
-            self.event = None
             self.remove_from_owning_list()
         else:
             logger.warning("Attempt to complete already completed operation: id={}".format(self.id))

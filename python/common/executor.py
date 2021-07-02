@@ -36,6 +36,9 @@ thread_local_storage = threading.local()
 # How many seconds can a thread go without calling `reset_watchdog` before a failure occurs.
 DEFAULT_WATCHDOG_INTERVAL = 600
 
+# How many seconds before a "short run" thread issues a warning
+DEFAULT_SHORT_THREAD_LIFETIME_WARNING_INTERVAL = 120
+
 
 def reset_watchdog():
     # reset the watchdog_reset_time value inside this thread's local storage
@@ -70,14 +73,14 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
         self,
         *args,
         watchdog_interval=DEFAULT_WATCHDOG_INTERVAL,
-        long_thread_warning_interval=60,
+        short_thread_lifetime_warning_interval=DEFAULT_SHORT_THREAD_LIFETIME_WARNING_INTERVAL,
         **kwargs
     ):
         super(BetterThreadPoolExecutor, self).__init__(*args, **kwargs)
         self.outstanding_futures = []
         self.outstanding_futures_lock = threading.Lock()
         self.watchdog_interval = watchdog_interval
-        self.long_thread_warning_interval = long_thread_warning_interval
+        self.short_thread_lifetime_warning_interval = short_thread_lifetime_warning_interval
         self.cv = threading.Condition()
 
     def wait_for_thread_death_event(self, timeout=None):
@@ -182,9 +185,9 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
                         logger.warning(traceback.format_stack(frame))
 
                         if info.critical:
-                            logger.error("Thread {} watchdog failure".format(thread.name))
+                            logger.error("Critical thread {} watchdog failure".format(thread.name))
                             first_exception = first_exception or Exception(
-                                "Thread {} watchdog failure".format(thread.name)
+                                "Critical thread {} watchdog failure".format(thread.name)
                             )
 
                 else:
@@ -192,10 +195,10 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
                     # But, only generate one warning
                     if not info.long_run and not info.long_run_warning_reported:
                         thread_life_time = time.time() - info.start_time
-                        if thread_life_time > self.long_thread_warning_interval:
+                        if thread_life_time > self.short_thread_lifetime_warning_interval:
 
                             logger.warning(
-                                "Long-running thread named {} with id {} has been alive for {} seconds".format(
+                                "Short-run thread named {} with id {} has been alive for {} seconds".format(
                                     thread.name, thread.ident, thread_life_time
                                 )
                             )
@@ -208,9 +211,9 @@ class BetterThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
                                 )
 
                             if info.critical:
-                                logger.error("Thread {} long-run failure".format(thread.name))
+                                logger.error("Critical thread {} failure".format(thread.name))
                                 first_exception = first_exception or Exception(
-                                    "Thread {} long-run failure".format(thread.name)
+                                    "Critical thread {} failure".format(thread.name)
                                 )
                             info.long_run_warning_reported = True
 
