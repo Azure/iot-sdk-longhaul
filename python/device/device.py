@@ -138,20 +138,20 @@ Object we use internally to keep track of how the entire test is configured.
 Currently hardcoded. Later, this will come from desired properties.
 """
 device_run_config = {
-    Settings.MAX_RUN_DURATION_IN_SECONDS: 10 * 60,
+    Settings.MAX_RUN_DURATION_IN_SECONDS: 12 * 60 * 60,
     Settings.ALLOWED_EXCEPTION_COUNT: 10,
     Settings.INTER_TEST_DELAY_INTERVAL_IN_SECONDS: 1,
-    Settings.OPERATION_TIMEOUT_IN_SECONDS: 120,
+    Settings.OPERATION_TIMEOUT_IN_SECONDS: 300,
     Settings.OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT: 10,
     Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS: 900,
     Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS: 30,
-    Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 3,
+    Settings.SEND_MESSAGE_OPERATIONS_PER_SECOND: 1,
     Settings.MQTT_KEEP_ALIVE_INTERVAL: 20,
     Settings.SAS_TOKEN_RENEWAL_INTERVAL: 600,
     Settings.MAX_TEST_SEND_THREADS: 128,
     Settings.MAX_TEST_RECEIVE_THREADS: 10,
     Settings.DO_SEND_MESSAGE_FLOODS: True,
-    Settings.SEND_MESSAGE_FLOOD_INTERVAL_IN_SECONDS: 120,
+    Settings.SEND_MESSAGE_FLOOD_INTERVAL_IN_SECONDS: 600,
     Settings.SEND_MESSAGE_FLOOD_MAX_MESSAGE_COUNT: 500,
 }
 
@@ -712,7 +712,7 @@ class DeviceApp(object):
             while len(all_ops) and time.time() < timeout_time:
                 time_left = timeout_time - time.time()
                 all_ops[0].event.wait(timeout=time_left)
-                remaining_ops = [x for x in all_ops if x.event]
+                remaining_ops = [x for x in all_ops if not x.event.isSet()]
                 count_remaining = len(remaining_ops)
                 count_verified = len(all_ops) - len(remaining_ops)
                 logger.info(
