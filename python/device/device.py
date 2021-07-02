@@ -511,64 +511,33 @@ class DeviceApp(object):
         while (time.time() - pairing_start_time) < self.config[
             Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS
         ]:
-            props = {
+            running_op = self.running_operation_list.make_event_based_operation()
+            pairing_payload = {
                 Fields.THIEF: {
-                    Fields.PAIRING: {
-                        Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
-                        Fields.SERVICE_INSTANCE_ID: None,
-                        Fields.RUN_ID: run_id,
-                    }
+                    Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
+                    Fields.OPERATION_ID: running_op.id,
+                    Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
                 }
             }
-            logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
+            msg = self.create_message_from_dict(pairing_payload)
+            self.client.send_message(msg)
+            logger.info("Sending pairing request: {}".format(pprint.pformat(pairing_payload)))
             event_logger.info(Events.SENDING_PAIRING_REQUEST)
-            self.client.patch_twin_reported_properties(props)
 
-            try:
-                msg = self.incoming_pairing_message_queue.get(
-                    timeout=self.config[Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS]
-                )
-            except queue.Empty:
-                msg = None
+            running_op.event.wait(
+                timeout=self.config[Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS]
+            )
+            if running_op.event.isSet():
+                msg = json.loads(running_op.result_message.data.decode())
 
-            if not msg:
-                logger.info("No pairing msg.  looping")
-
-            if msg:
-                logger.info("Received pairing desired props: {}".format(pprint.pformat(msg)))
+                logger.info("Received pairing response: {}".format(pprint.pformat(msg)))
                 event_logger.info(Events.RECEIVED_PAIRING_RESPONSE)
 
-                pairing = msg.get(Fields.THIEF, {}).get(Fields.PAIRING, {})
-                received_run_id = pairing.get(Fields.RUN_ID, None)
-                received_service_instance_id = pairing.get(Fields.SERVICE_INSTANCE_ID, None)
+                thief = msg[Fields.THIEF]
+                self.service_instance_id = thief[Fields.SERVICE_INSTANCE_ID]
 
-                if received_run_id == run_id and received_service_instance_id:
-                    azure_monitor.add_logging_properties(
-                        service_instance_id=received_service_instance_id
-                    )
-
-                    # It looks like a service app has decided to pair with us.  Set reported
-                    # properties to "select" this service instance as our partner.
-                    logger.info(
-                        "Service app {} claimed this device instance".format(
-                            received_service_instance_id
-                        )
-                    )
-                    self.service_instance_id = received_service_instance_id
-
-                    props = {
-                        Fields.THIEF: {
-                            Fields.PAIRING: {
-                                Fields.SERVICE_INSTANCE_ID: self.service_instance_id,
-                                Fields.RUN_ID: run_id,
-                            }
-                        }
-                    }
-                    logger.info("Updating pairing reported props: {}".format(pprint.pformat(props)))
-                    event_logger.info(Events.PAIRING_COMPLETE)
-                    self.client.patch_twin_reported_properties(props)
-
-                    return
+                event_logger.info(Events.PAIRING_COMPLETE)
+                return
 
         raise Exception("Pairing timed out")
 
@@ -757,14 +726,10 @@ class DeviceApp(object):
         obj = json.loads(msg.data.decode())
         thief = obj.get(Fields.THIEF)
 
-        if (
-            thief
-            and thief[Fields.RUN_ID] == run_id
-            and thief[Fields.SERVICE_INSTANCE_ID] == self.service_instance_id
-        ):
-            # We only inspect messages that have `thief/runId` and `thief/serviceInstanceId` set to the expected values
+        if thief and thief[Fields.RUN_ID] == run_id:
             cmd = thief[Fields.CMD]
             if cmd in [
+                Commands.PAIR_RESPONSE,
                 Commands.OPERATION_RESPONSE,
                 Commands.METHOD_RESPONSE,
                 Commands.C2D_RESPONSE,

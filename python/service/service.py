@@ -55,9 +55,6 @@ OperationResponse = collections.namedtuple("OperationResponse", "device_id opera
 OutgoingC2d = collections.namedtuple("OutgoingC2d", "device_id message props")
 
 
-# TODO: remove items from pairing list of no traffic for X minutes
-
-
 def custom_props(device_id, run_id=None):
     """
     helper function for adding customDimensions to logger calls at execution time
@@ -239,33 +236,76 @@ class ServiceApp(object):
 
         body = event.body_as_json()
         thief = body.get(Fields.THIEF, {})
+
         received_service_instance_id = thief.get(Fields.SERVICE_INSTANCE_ID, None)
         received_run_id = thief.get(Fields.RUN_ID, None)
+        received_operation_id = thief.get(Fields.OPERATION_ID, None)
 
         device_data = self.device_list.try_get(device_id)
 
         if get_message_source_from_event(event) == "twinChangeEvents":
-            thief = body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {}).get(Fields.THIEF, {})
-            if thief and thief.get(Fields.PAIRING, {}):
-                self.executor.submit(self.handle_pairing_request, event)
             if device_data:
                 self.incoming_twin_changes.put(event)
 
-        elif received_run_id and received_service_instance_id:
+        elif received_run_id:
             cmd = thief.get(Fields.CMD, None)
 
-            if device_data:
+            if cmd == Commands.PAIR_WITH_SERVICE_APP:
+                if thief.get(Fields.REQUESTED_SERVICE_POOL, None) == service_pool:
+                    logger.info(
+                        "Device {} attempting to pair with operation ID {}".format(
+                            device_id, received_operation_id
+                        ),
+                        extra=custom_props(device_id, received_run_id),
+                    )
+
+                    message = json.dumps(
+                        {
+                            Fields.THIEF: {
+                                Fields.CMD: Commands.PAIR_RESPONSE,
+                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                                Fields.RUN_ID: received_run_id,
+                                Fields.OPERATION_ID: received_operation_id,
+                            }
+                        }
+                    )
+
+                    self.outgoing_c2d_queue.put(
+                        OutgoingC2d(
+                            device_id=device_id,
+                            message=message,
+                            props=Const.JSON_TYPE_AND_ENCODING,
+                        )
+                    )
+
+                    # don't add device_id to self.device_list until we get a message with our
+                    # service_instance_id
+
+            elif not received_service_instance_id == service_instance_id:
+                if device_data:
+                    logger.info(
+                        "Device {} deviced to pair with service instance {}.".format(
+                            device_id, received_service_instance_id
+                        ),
+                        extra=custom_props(device_id, received_run_id),
+                    )
+                    self.device_list.remove(device_id)
+
+            else:  # service_instance_id matches
+
+                if not device_data:
+                    device_data = PerDeviceData(device_id, received_run_id)
+                    self.device_list.add(device_id, device_data)
+
                 if cmd == Commands.SEND_OPERATION_RESPONSE:
                     logger.info(
                         "Received telemetry sendOperationResponse from {} with operationId {}".format(
-                            device_id, thief[Fields.OPERATION_ID]
+                            device_id, received_operation_id,
                         ),
                         extra=custom_props(device_id, device_data.run_id),
                     )
                     self.outgoing_operation_response_queue.put(
-                        OperationResponse(
-                            device_id=device_id, operation_id=thief[Fields.OPERATION_ID],
-                        )
+                        OperationResponse(device_id=device_id, operation_id=received_operation_id,)
                     )
                 elif cmd == Commands.SET_DESIRED_PROPS:
                     desired = thief.get(Fields.DESIRED_PROPERTIES, {})
@@ -276,12 +316,12 @@ class ServiceApp(object):
                         )
                 elif cmd == Commands.INVOKE_METHOD:
                     self.executor.submit(self.handle_method_invoke, device_data, event)
-                    # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too
+                    # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
 
                 elif cmd == Commands.SEND_C2D:
                     logger.info(
                         "Sending C2D to {} with operationId {}".format(
-                            device_id, thief[Fields.OPERATION_ID]
+                            device_id, received_operation_id,
                         ),
                         extra=custom_props(device_id, device_data.run_id),
                     )
@@ -291,7 +331,7 @@ class ServiceApp(object):
                                 Fields.CMD: Commands.C2D_RESPONSE,
                                 Fields.SERVICE_INSTANCE_ID: service_instance_id,
                                 Fields.RUN_ID: device_data.run_id,
-                                Fields.OPERATION_ID: thief[Fields.OPERATION_ID],
+                                Fields.OPERATION_ID: received_operation_id,
                                 Fields.TEST_C2D_PAYLOAD: thief[Fields.TEST_C2D_PAYLOAD],
                             }
                         }
@@ -363,32 +403,26 @@ class ServiceApp(object):
                 message = outgoing_c2d.message
                 props = outgoing_c2d.props
                 device_data = self.device_list.try_get(device_id)
+                run_id = device_data.run_id if device_data else None
 
-                if not device_data:
-                    logger.warning(
-                        "C2D found in outgoing queue for device {} which is not paired".format(
-                            device_id
-                        )
+                start = time.time()
+                try:
+                    self.registry_manager.send_c2d_message(device_id, message, props)
+                except Exception as e:
+                    logger.error(
+                        "send_c2d_message to {} raised {}. Dropping. ".format(
+                            device_id, str(e) or type(e)
+                        ),
+                        exc_info=e,
+                        extra=custom_props(device_id, run_id),
                     )
                 else:
-                    start = time.time()
-                    try:
-                        self.registry_manager.send_c2d_message(device_id, message, props)
-                    except Exception as e:
-                        logger.error(
-                            "send_c2d_message to {} raised {}. Dropping. ".format(
-                                device_id, str(e) or type(e)
-                            ),
-                            exc_info=e,
-                            extra=custom_props(device_id, device_data.run_id),
+                    end = time.time()
+                    if end - start > 2:
+                        logger.warning(
+                            "Send throttled.  Time delta={} seconds".format(end - start),
+                            extra=custom_props(device_id, run_id),
                         )
-                    else:
-                        end = time.time()
-                        if end - start > 2:
-                            logger.warning(
-                                "Send throttled.  Time delta={} seconds".format(end - start),
-                                extra=custom_props(device_id, device_data.run_id),
-                            )
 
     def handle_send_operation_response_thread(self):
         """
@@ -456,74 +490,6 @@ class ServiceApp(object):
             # Too small and this causes C2D throttling
             self.force_send_operation_response.wait(timeout=15)
             self.force_send_operation_response.clear()
-
-    def handle_pairing_request(self, event):
-        """
-        Handle all device twin reported propreties under /thief/pairing.  If the change is
-        interesting, the thread acts on it.  If not, it ignores it.
-        """
-
-        device_id = get_device_id_from_event(event)
-        body = event.body_as_json()
-        pairing = (
-            body.get(Fields.PROPERTIES, {})
-            .get(Fields.REPORTED, {})
-            .get(Fields.THIEF, {})
-            .get(Fields.PAIRING, {})
-        )
-
-        received_run_id = pairing.get(Fields.RUN_ID, None)
-        requested_service_pool = pairing.get(Fields.REQUESTED_SERVICE_POOL, None)
-        received_service_instance_id = pairing.get(Fields.SERVICE_INSTANCE_ID, None)
-
-        logger.info(
-            "Received pairing request for device {}: {}".format(device_id, pairing),
-            extra=custom_props(device_id, received_run_id),
-        )
-
-        if received_run_id and requested_service_pool == service_pool:
-            if not received_service_instance_id:
-                # If the device hasn't selected a serviceInstanceId value yet, we will try to
-                # pair with it.
-                logger.info(
-                    "Device {} attempting to pair".format(device_id),
-                    extra=custom_props(device_id, received_run_id),
-                )
-
-                # Assume success.  Remove later if we don't pair.
-                device_data = PerDeviceData(device_id, received_run_id)
-                self.device_list.add(device_id, device_data)
-
-                desired = {
-                    Fields.THIEF: {
-                        Fields.PAIRING: {
-                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                            Fields.RUN_ID: received_run_id,
-                        }
-                    }
-                }
-
-                self.registry_manager.update_twin(
-                    device_id, Twin(properties=TwinProperties(desired=desired)), "*"
-                )
-
-            elif received_service_instance_id == service_instance_id:
-                # If the device has selected us, the pairing is complete.
-                logger.info(
-                    "Device {} pairing complete".format(device_id),
-                    extra=custom_props(device_id, received_run_id),
-                )
-
-            else:
-                # If the device paired with someone else, drop any per-device-data that
-                # we might have
-                logger.info(
-                    "Device {} deviced to pair with service instance {}.".format(
-                        device_id, received_service_instance_id
-                    ),
-                    extra=custom_props(device_id, received_run_id),
-                )
-                self.device_list.remove(device_id)
 
     def respond_to_test_content_properties(self, event):
         """

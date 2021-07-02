@@ -50,6 +50,7 @@ class Fields(object):
     SERVICE_INSTANCE_ID = "serviceInstanceId"
     RUN_ID = "runId"
     DESIRED_PROPERTIES = "desiredProperties"
+    REQUESTED_SERVICE_POOL = "requestedServicePool"
 
     # -------------------------
     # properties.reported.thief
@@ -67,7 +68,6 @@ class Fields(object):
     # ---------------------------------
     # properties.reported.thief.pairing
     # ---------------------------------
-    REQUESTED_SERVICE_POOL = "requestedServicePool"
     SERVICE_INSTANCE_ID = "serviceInstanceId"
     RUN_ID = "runId"
 
@@ -146,6 +146,9 @@ class Commands(object):
     # Values for the command field inside telemetry messages
     # ------------------------------------------------------
 
+    # Look for service app to pair with
+    PAIR_WITH_SERVICE_APP = "pairWithServiceApp"
+
     # Request a operationResponse message from the service
     SEND_OPERATION_RESPONSE = "sendOperationResponse"
 
@@ -161,6 +164,9 @@ class Commands(object):
     # ------------------------------------------------
     # Values for the command field inside c2d messages
     # ------------------------------------------------
+
+    # Response to pairWithServiceApp request
+    PAIR_RESPONSE = "pairResponse"
 
     # Response from one or more sendOperationResponse messsages
     OPERATION_RESPONSE = "operationResponse"
