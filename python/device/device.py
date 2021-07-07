@@ -492,18 +492,8 @@ class DeviceApp(object):
     def pair_with_service(self):
         """
         "pair" with a service app. This is necessary because we can have a single
-        service app responsible for multiple device apps.  The pairing process works
-        like this:
-
-        1. Device sets reported properties in `properties/reported/thief/pairing` which indicates
-            that it doesn't have a service app (by settign `serviceInstanceId` = None).
-        2. An available service sets `properties/desired/thief/pairing/serviceInstanceId` to the service
-            app's `runId` value
-        3. The device sets `properties/reported/thief/pairing/serviceInstanceId` to the service app's
-            `runId` value.
-
-        Once the device starts sending telemetry with `thief/serviceInstanceId` set to the service app's
-            `runId` value, the pairing is complete.
+        service app responsible for multiple device apps and we want to make sure
+        the service app is actually running before we continue.
         """
 
         pairing_start_time = time.time()

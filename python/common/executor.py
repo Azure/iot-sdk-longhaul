@@ -56,7 +56,7 @@ def dump_active_stacks(printer=print):
             last_frame = stack[len(stack) - 1]
             if not last_frame.filename.endswith("/concurrent/futures/thread.py"):
                 printer("------------")
-                printer("Stack for thread {}".format(thread.ident))
+                printer("Stack for thread {} ({})".format(thread.name, thread.ident))
                 for line in traceback.format_stack(frame):
                     printer(line)
 
