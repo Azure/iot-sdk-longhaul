@@ -57,6 +57,8 @@ groups:
             value: "runId"
           - name: DESIRED_PROPERTIES 
             value: "desiredProperties"
+          - name: REQUESTED_SERVICE_POOL 
+            value: "requestedServicePool"
       - name: ReportedProperties
         desc: "properties.reported.thief"
         values:
@@ -81,8 +83,6 @@ groups:
       - name: Pairing
         desc: "properties.reported.thief.pairing"
         values:
-          - name: REQUESTED_SERVICE_POOL 
-            value: "requestedServicePool"
           - name: SERVICE_INSTANCE_ID 
             value: "serviceInstanceId"
           - name: RUN_ID 
@@ -164,6 +164,9 @@ groups:
       - name: "TelemetryCommands"
         desc: "Values for the command field inside telemetry messages"
         values:
+          - name: PAIR_WITH_SERVICE_APP
+            value: "pairWithServiceApp"
+            desc: "Look for service app to pair with"
           - name: SEND_OPERATION_RESPONSE 
             value: "sendOperationResponse"
             desc: "Request a operationResponse message from the service"
@@ -179,6 +182,9 @@ groups:
       - name: "C2dCommands"
         desc: "Values for the command field inside c2d messages"
         values:
+          - name: PAIR_RESPONSE
+            value: "pairResponse"
+            desc: "Response to pairWithServiceApp request"
           - name: OPERATION_RESPONSE 
             value: "operationResponse"
             desc: "Response from one or more sendOperationResponse messsages"
