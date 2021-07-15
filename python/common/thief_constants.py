@@ -46,6 +46,7 @@ class Fields(object):
     # Telemetry
     # ---------
     CMD = "cmd"
+    FLAGS = "flags"
     OPERATION_ID = "operationId"
     SERVICE_INSTANCE_ID = "serviceInstanceId"
     RUN_ID = "runId"
@@ -482,3 +483,16 @@ class RunStates(object):
 
     # Test run was interrupted
     INTERRUPTED = "Interrupted"
+
+
+class Flags(object):
+    """
+    Flags used to modify the behavior of various operations
+    """
+
+    # ------------------
+    # send_message flags
+    # ------------------
+
+    # Send response immediately rather than waiting for next interval
+    RESPOND_IMMEDIATELY = "respondImmediately"

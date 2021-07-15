@@ -49,6 +49,8 @@ groups:
         values:
           - name: CMD 
             value: "cmd"
+          - name: FLAGS
+            value: "flags"
           - name: OPERATION_ID 
             value: "operationId"
           - name: SERVICE_INSTANCE_ID 
@@ -624,3 +626,12 @@ groups:
         value: thiefSharedResourceGroup
         keyvaultSecretName: THIEF-SHARED-RESOURCE-GROUP
         desc: "Resource group used for holding thief shared resources."
+
+  - name:  Flags
+    desc: "Flags used to modify the behavior of various operations"
+    subgroups:
+      - desc: "send_message flags"
+        values:
+          - name: RESPOND_IMMEDIATELY
+            value: "respondImmediately"
+            desc: "Send response immediately rather than waiting for next interval"
