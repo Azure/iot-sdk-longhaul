@@ -17,7 +17,7 @@ from azure.iot.hub.protocol.models import Twin, TwinProperties, CloudToDeviceMet
 import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
 import azure_monitor
-from thief_constants import Const, Fields, Commands, RunStates
+from thief_constants import Const, Fields, Commands, RunStates, Flags
 import thief_secrets
 
 faulthandler.enable()
@@ -296,6 +296,8 @@ class ServiceApp(object):
                 if not device_data:
                     device_data = PerDeviceData(device_id, received_run_id)
                     self.device_list.add(device_id, device_data)
+                else:
+                    device_data.run_id = received_run_id
 
                 if cmd == Commands.SEND_OPERATION_RESPONSE:
                     logger.info(
@@ -307,6 +309,10 @@ class ServiceApp(object):
                     self.outgoing_operation_response_queue.put(
                         OperationResponse(device_id=device_id, operation_id=received_operation_id,)
                     )
+
+                    if Flags.RESPOND_IMMEDIATELY in thief.get(Fields.FLAGS, []):
+                        self.force_send_operation_response.set()
+
                 elif cmd == Commands.SET_DESIRED_PROPS:
                     desired = thief.get(Fields.DESIRED_PROPERTIES, {})
                     if desired:

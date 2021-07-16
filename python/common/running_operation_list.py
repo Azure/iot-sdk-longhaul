@@ -34,10 +34,10 @@ class EventBasedOperation(OperationBase):
     Running operation which sets an event when it is complete.
     """
 
-    def __init__(self, owner):
+    def __init__(self, owner, event_module):
         self.owner_weakref = weakref.ref(owner)
         self.id = str(uuid.uuid4())
-        self.event = threading.Event()
+        self.event = event_module.Event()
         self.result_message = None
 
     def complete(self):
@@ -94,11 +94,11 @@ class RunningOperationList(object):
         self.lock = threading.Lock()
         self.list = {}
 
-    def make_event_based_operation(self):
+    def make_event_based_operation(self, event_module=threading):
         """
         Make and return a running opreation object which fires an event when it is complete.
         """
-        operation = EventBasedOperation(self)
+        operation = EventBasedOperation(self, event_module=event_module)
         with self.lock:
             self.list[operation.id] = operation
         return operation
