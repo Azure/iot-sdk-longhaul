@@ -8,6 +8,8 @@ import logging
 import os
 import time
 import collections
+import uuid
+import random
 from azure.iot.device.iothub import Message
 from azure.iot.device.iothub.aio import IoTHubDeviceClient
 from thief_constants import Fields, Commands, Const
@@ -147,9 +149,14 @@ async def paired_client(
 
 
 @pytest.fixture(scope="module")
-async def message_wrapper(running_operation_list, run_id, paired_client):
+def service_instance_id(paired_client):
+    return paired_client.service_instance_id
+
+
+@pytest.fixture(scope="module")
+def message_factory(run_id, paired_client, op_factory):
     def wrapper_function(payload, cmd=None):
-        running_op = running_operation_list.make_event_based_operation(event_module=asyncio)
+        running_op = op_factory()
 
         if Fields.THIEF not in payload:
             payload[Fields.THIEF] = {}
@@ -163,3 +170,59 @@ async def message_wrapper(running_operation_list, run_id, paired_client):
         return collections.namedtuple("WrappedMessage", "message running_op")(message, running_op)
 
     return wrapper_function
+
+
+@pytest.fixture(scope="module")
+def op_factory(running_operation_list):
+    def factory_function():
+        return running_operation_list.make_event_based_operation(event_module=asyncio)
+
+    return factory_function
+
+
+@pytest.fixture(scope="module")
+def reported_props_factory(run_id, service_instance_id):
+    def factory_function(running_op):
+        return {
+            Fields.THIEF: {
+                Fields.RUN_ID: run_id,
+                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                Fields.TEST_CONTENT: {
+                    Fields.REPORTED_PROPERTY_TEST: {
+                        "prop_e2e": {Fields.ADD_OPERATION_ID: running_op.id}
+                    }
+                },
+            }
+        }
+
+    return factory_function
+
+
+@pytest.fixture(scope="function")
+def running_op(op_factory):
+    return op_factory()
+
+
+@pytest.fixture(scope="function")
+def reported_props(reported_props_factory, running_op):
+    return reported_props_factory(running_op)
+
+
+@pytest.fixture(scope="function")
+def payload_factory():
+    def factory_function():
+        return {
+            "random_guid": str(uuid.uuid4()),
+            "sub_object": {
+                "string_value": str(uuid.uuid4()),
+                "bool_value": random.random() > 0.5,
+                "int_value": random.randint(-65535, 65535),
+            },
+        }
+
+    return factory_function
+
+
+@pytest.fixture(scope="function")
+def random_payload(payload_factory):
+    return payload_factory()

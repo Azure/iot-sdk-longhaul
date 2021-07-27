@@ -235,13 +235,34 @@ class ServiceApp(object):
         device_id = get_device_id_from_event(event)
 
         body = event.body_as_json()
-        thief = body.get(Fields.THIEF, {})
+
+        if get_message_source_from_event(event) == "twinChangeEvents":
+            thief = body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {}).get(Fields.THIEF, {})
+        else:
+            thief = body.get(Fields.THIEF, {})
 
         received_service_instance_id = thief.get(Fields.SERVICE_INSTANCE_ID, None)
         received_run_id = thief.get(Fields.RUN_ID, None)
         received_operation_id = thief.get(Fields.OPERATION_ID, None)
 
         device_data = self.device_list.try_get(device_id)
+
+        if not device_data and received_service_instance_id == service_instance_id:
+            # The device app wants to pair with us
+            device_data = PerDeviceData(device_id, received_run_id)
+            self.device_list.add(device_id, device_data)
+        elif device_data and not received_service_instance_id == service_instance_id:
+            # previously paired, but not any more
+            logger.info(
+                "Device {} deviced to pair with service instance {}.".format(
+                    device_id, received_service_instance_id
+                ),
+                extra=custom_props(device_id, received_run_id),
+            )
+            self.device_list.remove(device_id)
+
+        if device_data:
+            device_data.run_id = received_run_id
 
         if get_message_source_from_event(event) == "twinChangeEvents":
             if device_data:
@@ -281,24 +302,7 @@ class ServiceApp(object):
                     # don't add device_id to self.device_list until we get a message with our
                     # service_instance_id
 
-            elif not received_service_instance_id == service_instance_id:
-                if device_data:
-                    logger.info(
-                        "Device {} deviced to pair with service instance {}.".format(
-                            device_id, received_service_instance_id
-                        ),
-                        extra=custom_props(device_id, received_run_id),
-                    )
-                    self.device_list.remove(device_id)
-
-            else:  # service_instance_id matches
-
-                if not device_data:
-                    device_data = PerDeviceData(device_id, received_run_id)
-                    self.device_list.add(device_id, device_data)
-                else:
-                    device_data.run_id = received_run_id
-
+            elif received_service_instance_id == service_instance_id:
                 if cmd == Commands.SEND_OPERATION_RESPONSE:
                     logger.info(
                         "Received telemetry sendOperationResponse from {} with operationId {}".format(
@@ -519,23 +523,31 @@ class ServiceApp(object):
         reported_property_test = test_content.get(Fields.REPORTED_PROPERTY_TEST)
 
         for property_name in reported_property_test:
-            if property_name.startswith("prop_"):
+            if device_data and property_name.startswith("prop_"):
                 property_value = reported_property_test[property_name]
 
                 with device_data.reported_property_list_lock:
                     if property_value:
                         operation_id = property_value[Fields.ADD_OPERATION_ID]
-                        device_data.reported_property_values[property_name] = property_value
+                        if Fields.REMOVE_OPERATION_ID in property_value:
+                            device_data.reported_property_values[property_name] = property_value
                     else:
-                        operation_id = device_data.reported_property_values[property_name][
+                        if (
                             Fields.REMOVE_OPERATION_ID
-                        ]
-                        del device_data.reported_property_values[property_name]
+                            in device_data.reported_property_values[property_name]
+                        ):
+                            operation_id = device_data.reported_property_values[property_name][
+                                Fields.REMOVE_OPERATION_ID
+                            ]
+                            del device_data.reported_property_values[property_name]
+                        else:
+                            operation_id = None
 
-                self.outgoing_operation_response_queue.put(
-                    OperationResponse(device_id=device_id, operation_id=operation_id)
-                )
-                self.force_send_operation_response.set()
+                if operation_id:
+                    self.outgoing_operation_response_queue.put(
+                        OperationResponse(device_id=device_id, operation_id=operation_id)
+                    )
+                    self.force_send_operation_response.set()
 
     def dispatch_twin_change_thread(self):
         """
