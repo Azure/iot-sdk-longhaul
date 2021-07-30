@@ -12,7 +12,7 @@ import uuid
 import collections
 import faulthandler
 from executor import BetterThreadPoolExecutor, reset_watchdog
-from azure.iot.hub import IoTHubRegistryManager, iothub_amqp_client
+from azure.iot.hub import IoTHubRegistryManager, iothub_amqp_client, DigitalTwinClient
 from azure.iot.hub.protocol.models import Twin, TwinProperties, CloudToDeviceMethod
 import azure.iot.hub.constant
 from azure.eventhub import EventHubConsumerClient
@@ -156,6 +156,7 @@ class ServiceApp(object):
         self.executor = BetterThreadPoolExecutor(max_workers=128)
         self.done = threading.Event()
         self.registry_manager = None
+        self.digital_twin_client = None
         self.eventhub_consumer_client = None
         self.config = ServiceRunConfig()
 
@@ -324,9 +325,54 @@ class ServiceApp(object):
                         self.registry_manager.update_twin(
                             device_id, Twin(properties=TwinProperties(desired=desired)), "*"
                         )
+
                 elif cmd == Commands.INVOKE_METHOD:
                     self.executor.submit(self.handle_method_invoke, device_data, event)
                     # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
+
+                elif cmd == Commands.GET_DIGITAL_TWIN:
+                    logger.info(
+                        "Getting digital twin for {} with operationid {}".format(
+                            device_id, received_operation_id
+                        ),
+                        extra=custom_props(device_id, device_data.run_id),
+                    )
+
+                    twin = self.digital_twin_client.get_digital_twin(device_id)
+
+                    message = json.dumps(
+                        {
+                            Fields.THIEF: {
+                                Fields.CMD: Commands.OPERATION_RESPONSE,
+                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                                Fields.RUN_ID: received_run_id,
+                                Fields.OPERATION_ID: received_operation_id,
+                                Fields.DIGITAL_TWIN_CONTENTS: twin,
+                            }
+                        }
+                    )
+
+                    self.outgoing_c2d_queue.put(
+                        OutgoingC2d(
+                            device_id=device_id,
+                            message=message,
+                            props=Const.JSON_TYPE_AND_ENCODING,
+                        )
+                    )
+
+                elif cmd == Commands.UPDATE_DIGITAL_TWIN:
+                    logger.info(
+                        "Updating digital twin for {} with operationid {}".format(
+                            device_id, received_operation_id
+                        ),
+                        extra=custom_props(device_id, device_data.run_id),
+                    )
+
+                    self.digital_twin_client.update_digital_twin(
+                        device_id, thief[Fields.DIGITAL_TWIN_UPDATE_PATCH]
+                    )
+
+                    # TODO: send ack for all of these ops, include error if failure
 
                 elif cmd == Commands.SEND_C2D:
                     logger.info(
@@ -598,6 +644,9 @@ class ServiceApp(object):
 
         logger.info("creating registry manager")
         self.registry_manager = IoTHubRegistryManager(iothub_connection_string)
+        self.digital_twin_client = DigitalTwinClient.from_connection_string(
+            iothub_connection_string
+        )
 
         self.eventhub_consumer_client = EventHubConsumerClient.from_connection_string(
             eventhub_connection_string, consumer_group=eventhub_consumer_group

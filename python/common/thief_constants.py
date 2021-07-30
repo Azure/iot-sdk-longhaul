@@ -22,6 +22,7 @@ class Fields(object):
     PROPERTIES = "properties"
     REPORTED = "reported"
     DESIRED = "desired"
+    RANDOM_CONTENT = "randomContent"
 
     # -----------------
     # Test run progress
@@ -82,6 +83,7 @@ class Fields(object):
     # ----------------------------------------------------------
     ADD_OPERATION_ID = "addOperationId"
     REMOVE_OPERATION_ID = "removeOperationId"
+    E2E_PROPERTY = "prop_e2e"
 
     # ------------------------
     # properties.desired.thief
@@ -137,6 +139,52 @@ class Fields(object):
     # Status code sent with method response
     METHOD_RESPONSE_STATUS_CODE = "methodResponseStatusCode"
 
+    # --------------------------------------------------------------------------
+    # Fields inside C2D messages used for testing get_digital_twin functionality
+    # --------------------------------------------------------------------------
+
+    # Contents of digital twin, as returned by get_digital_twin function
+    DIGITAL_TWIN_CONTENTS = "digitalTwinContents"
+
+    # -----------------------------------------------------------------------------------
+    # Fields inside telemetry messages used for testing update_digital_twin functionality
+    # -----------------------------------------------------------------------------------
+
+    # Digital twin patch to send to update_digital_twin
+    DIGITAL_TWIN_UPDATE_PATCH = "digitalTwinUpdatePatch"
+
+    # ETAG to use when calling update_digital_twin
+    DIGITAL_TWIN_UPDATE_ETAG = "digitalTwinUpdateEtag"
+
+    # -----------------------------------------------------------------------------------------------------------
+    # Fields inside telemetry messages used for testing invoke_command and invoke_component_command functionality
+    # -----------------------------------------------------------------------------------------------------------
+
+    # Name of command to invoke
+    COMMAND_NAME = "commandName"
+
+    # Component to pass when invoking command
+    COMMAND_COMPONENT_NAME = "commandComponentName"
+
+    # Payload to send with command invocation
+    COMMAND_INVOKE_PAYLOAD = "commandInvokePayload"
+
+    # timeout for receiving a response from a command invoke
+    COMMAND_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS = "commandInvokeResponseTimeoutInSeconds"
+
+    # timeout for connecting a client based on a comand invoke
+    COMMAND_INVOKE_CONNECT_TIMEOUT_IN_SECONDS = "commandInvokeConnectTimeoutInSeconds"
+
+    # -----------------------------------------------------------------------------------------------------
+    # Fields inside c2d messages used for testing invoke_command and invoke_component_command functionality
+    # -----------------------------------------------------------------------------------------------------
+
+    # Payload sent with command response
+    COMMAND_RESPONSE_PAYLOAD = "commandResponsePayload"
+
+    # Status code sent with command response
+    COMMAND_RESPONSE_STATUS_CODE = "commandResponseStatusCode"
+
 
 class Commands(object):
     """
@@ -161,6 +209,15 @@ class Commands(object):
 
     # Send C2d Message
     SEND_C2D = "sendC2d"
+
+    # Get the digital twin
+    GET_DIGITAL_TWIN = "getDigitalTwin"
+
+    # Update the digital twin
+    UPDATE_DIGITAL_TWIN = "updateDigitalTwin"
+
+    # Invoke a digital twin command
+    INVOKE_DIGITAL_TWIN_COMMAND = "invokeDigitalTwinCommand"
 
     # ------------------------------------------------
     # Values for the command field inside c2d messages

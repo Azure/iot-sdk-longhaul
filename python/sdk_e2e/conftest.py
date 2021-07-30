@@ -24,7 +24,7 @@ def run_id():
     return str(uuid.uuid4())
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def requested_service_pool():
     return thief_secrets.THIEF_REQUESTED_SERVICE_POOL
 
@@ -34,10 +34,10 @@ def transport():
     return "mqtt"
 
 
-# TODO: set to 10 only when necessary
-@pytest.fixture(scope="module")
-def keep_alive():
-    return 10
+# default kwargs.  probably overridden at a smaller scope
+@pytest.fixture(scope="session")
+def client_kwargs():
+    return {}
 
 
 class Dropper(object):

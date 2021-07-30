@@ -26,6 +26,8 @@ groups:
           value: "reported"
         - name: DESIRED 
           value: "desired"
+        - name: RANDOM_CONTENT
+          value: "randomContent"
     subgroups:
       - name: TestRunProgress
         desc: "Test run progress"
@@ -101,6 +103,8 @@ groups:
             value: "addOperationId"
           - name: REMOVE_OPERATION_ID 
             value: "removeOperationId"
+          - name: E2E_PROPERTY
+            value: "prop_e2e"
 
       - name: Desired
         desc: "properties.desired.thief"
@@ -159,6 +163,48 @@ groups:
           - name: METHOD_RESPONSE_STATUS_CODE
             value: "methodResponseStatusCode"
             desc: "Status code sent with method response"
+      - name: GetDigitalTwinC2d
+        desc: "Fields inside C2D messages used for testing get_digital_twin functionality"
+        values:
+          - name: DIGITAL_TWIN_CONTENTS
+            value: "digitalTwinContents"
+            desc: "Contents of digital twin, as returned by get_digital_twin function"
+      - name: UpdateDigitalTwinTelemetry
+        desc: "Fields inside telemetry messages used for testing update_digital_twin functionality"
+        values:
+          - name: DIGITAL_TWIN_UPDATE_PATCH
+            value: "digitalTwinUpdatePatch"
+            desc: "Digital twin patch to send to update_digital_twin"
+          - name: DIGITAL_TWIN_UPDATE_ETAG
+            value: "digitalTwinUpdateEtag"
+            desc: "ETAG to use when calling update_digital_twin"
+      - name: InvokeDigitalTwinCommandTelemetry
+        desc: "Fields inside telemetry messages used for testing invoke_command and invoke_component_command functionality"
+        values:
+          - name: COMMAND_NAME
+            value: "commandName"
+            desc: "Name of command to invoke"
+          - name: COMMAND_COMPONENT_NAME
+            value: "commandComponentName"
+            desc: "Component to pass when invoking command"
+          - name: COMMAND_INVOKE_PAYLOAD
+            value: "commandInvokePayload"
+            desc: "Payload to send with command invocation"
+          - name: COMMAND_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS
+            value: "commandInvokeResponseTimeoutInSeconds"
+            desc: "timeout for receiving a response from a command invoke"
+          - name: COMMAND_INVOKE_CONNECT_TIMEOUT_IN_SECONDS
+            value: "commandInvokeConnectTimeoutInSeconds"
+            desc: "timeout for connecting a client based on a comand invoke"
+      - name: InvokeDigitalTwinCommandC2d
+        desc: "Fields inside c2d messages used for testing invoke_command and invoke_component_command functionality"
+        values:
+          - name: COMMAND_RESPONSE_PAYLOAD
+            value: "commandResponsePayload"
+            desc: "Payload sent with command response"
+          - name: COMMAND_RESPONSE_STATUS_CODE
+            value: "commandResponseStatusCode"
+            desc: "Status code sent with command response"
 
   - name: Commands
     desc: "Names for different command/message types"
@@ -181,6 +227,17 @@ groups:
           - name: SEND_C2D
             value: "sendC2d"
             desc: "Send C2d Message"
+          - name: GET_DIGITAL_TWIN
+            value: "getDigitalTwin"
+            desc: "Get the digital twin"
+          - name: UPDATE_DIGITAL_TWIN
+            value: "updateDigitalTwin"
+            desc: "Update the digital twin"
+          - name: INVOKE_DIGITAL_TWIN_COMMAND
+            value: "invokeDigitalTwinCommand"
+            desc: "Invoke a digital twin command"
+
+
       - name: "C2dCommands"
         desc: "Values for the command field inside c2d messages"
         values:
@@ -626,6 +683,10 @@ groups:
         value: thiefSharedResourceGroup
         keyvaultSecretName: THIEF-SHARED-RESOURCE-GROUP
         desc: "Resource group used for holding thief shared resources."
+      - name: THIEF_DEVICE_CONNECTION_STRING
+        value: thiefDeviceConnectionString
+        keyvaultSecretName: THIEF-DEVICE-CONNECTION-STRING
+        desc: "Connection string for device under test"
 
   - name:  Flags
     desc: "Flags used to modify the behavior of various operations"
