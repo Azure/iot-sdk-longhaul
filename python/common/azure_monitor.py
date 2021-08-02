@@ -9,7 +9,12 @@ from opencensus.ext.azure.log_exporter import AzureEventHandler
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 
 app_insights_instrumentation_key = thief_secrets.APP_INSIGHTS_INSTRUMENTATION_KEY
-app_insights_connection_string = "InstrumentationKey={}".format(app_insights_instrumentation_key)
+if app_insights_instrumentation_key:
+    app_insights_connection_string = "InstrumentationKey={}".format(
+        app_insights_instrumentation_key
+    )
+else:
+    app_insights_connection_string = None
 
 _client_type = None
 _service_instance_id = None
@@ -121,11 +126,12 @@ def get_event_logger():
     global _client_type
     logger = logging.getLogger("thief_events.{}".format(_client_type))
 
-    handler = AzureEventHandler(connection_string=app_insights_connection_string)
-    handler.add_telemetry_processor(telemetry_processor_callback)
+    if app_insights_connection_string:
+        handler = AzureEventHandler(connection_string=app_insights_connection_string)
+        handler.add_telemetry_processor(telemetry_processor_callback)
 
-    logger.setLevel(logging.INFO)
-    logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.addHandler(handler)
 
     return logger
 
@@ -160,15 +166,16 @@ def _azure_monitor_one_time_config():
     """
     global log_handler
 
-    _log_all_warnings_and_exceptions_to_azure_monitor()
+    if app_insights_connection_string:
+        _log_all_warnings_and_exceptions_to_azure_monitor()
 
-    log_handler = AzureLogHandler(connection_string=app_insights_connection_string)
-    log_handler.add_telemetry_processor(telemetry_processor_callback)
+        log_handler = AzureLogHandler(connection_string=app_insights_connection_string)
+        log_handler.add_telemetry_processor(telemetry_processor_callback)
 
-    # `_log_all_warnings_and_exceptions_to_azure_monitor` above will send _all_ warning and exception
-    # logs up to Azure Monitor with the `always_log_handler`. We need to filter these levels from
-    # `log_handler` because we don't want to push them up twice.
-    log_handler.addFilter(WarningAndExceptionFilter())
+        # `_log_all_warnings_and_exceptions_to_azure_monitor` above will send _all_ warning and exception
+        # logs up to Azure Monitor with the `always_log_handler`. We need to filter these levels from
+        # `log_handler` because we don't want to push them up twice.
+        log_handler.addFilter(WarningAndExceptionFilter())
 
 
 def log_to_azure_monitor(logger_name):
@@ -180,4 +187,5 @@ def log_to_azure_monitor(logger_name):
     if not log_handler:
         _azure_monitor_one_time_config()
 
-    logging.getLogger(logger_name).addHandler(log_handler)
+    if log_handler:
+        logging.getLogger(logger_name).addHandler(log_handler)

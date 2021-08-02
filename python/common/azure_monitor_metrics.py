@@ -15,7 +15,12 @@ view_manager = stats.view_manager
 stats_recorder = stats.stats_recorder
 
 app_insights_instrumentation_key = thief_secrets.APP_INSIGHTS_INSTRUMENTATION_KEY
-app_insights_connection_string = "InstrumentationKey={}".format(app_insights_instrumentation_key)
+if app_insights_instrumentation_key:
+    app_insights_connection_string = "InstrumentationKey={}".format(
+        app_insights_instrumentation_key
+    )
+else:
+    app_insights_connection_string = None
 
 
 def json_name_to_metric_name(metric_name):
@@ -26,63 +31,69 @@ def json_name_to_metric_name(metric_name):
 
 class MetricsReporter(object):
     def __init__(self):
-        self.exporter = metrics_exporter.new_metrics_exporter(
-            connection_string=app_insights_connection_string, enable_standard_metrics=False,
-        )
-        self.exporter.add_telemetry_processor(azure_monitor.telemetry_processor_callback)
-        view_manager.register_exporter(self.exporter)
-        self.mmap = stats_recorder.new_measurement_map()
-        self.tmap = tag_map_module.TagMap()
-        self.metrics = {}
+        if app_insights_connection_string:
+            self.exporter = metrics_exporter.new_metrics_exporter(
+                connection_string=app_insights_connection_string, enable_standard_metrics=False,
+            )
+            self.exporter.add_telemetry_processor(azure_monitor.telemetry_processor_callback)
+            view_manager.register_exporter(self.exporter)
+            self.mmap = stats_recorder.new_measurement_map()
+            self.tmap = tag_map_module.TagMap()
+            self.metrics = {}
 
     def add_integer_measurement(self, json_name, description, units):
         """
         Add a measurement for an integer value
         """
-        metric_name = json_name_to_metric_name(json_name)
+        if app_insights_connection_string:
+            metric_name = json_name_to_metric_name(json_name)
 
-        new_measure = measure_module.MeasureInt(metric_name, description, units)
-        new_view = view_module.View(
-            metric_name, description, [], new_measure, aggregation_module.LastValueAggregation()
-        )
-        view_manager.register_view(new_view)
+            new_measure = measure_module.MeasureInt(metric_name, description, units)
+            new_view = view_module.View(
+                metric_name, description, [], new_measure, aggregation_module.LastValueAggregation()
+            )
+            view_manager.register_view(new_view)
 
-        def new_setter(value):
-            self.mmap.measure_int_put(new_measure, value)
+            def new_setter(value):
+                self.mmap.measure_int_put(new_measure, value)
 
-        self.metrics[json_name] = new_setter
+            self.metrics[json_name] = new_setter
 
     def add_float_measurement(self, json_name, description, units):
         """
         Add a measurement for a float value
         """
-        metric_name = json_name_to_metric_name(json_name)
+        if app_insights_connection_string:
+            metric_name = json_name_to_metric_name(json_name)
 
-        new_measure = measure_module.MeasureFloat(metric_name, description, units)
-        new_view = view_module.View(
-            metric_name, description, [], new_measure, aggregation_module.LastValueAggregation()
-        )
-        view_manager.register_view(new_view)
+            new_measure = measure_module.MeasureFloat(metric_name, description, units)
+            new_view = view_module.View(
+                metric_name, description, [], new_measure, aggregation_module.LastValueAggregation()
+            )
+            view_manager.register_view(new_view)
 
-        def new_setter(value):
-            self.mmap.measure_float_put(new_measure, value)
+            def new_setter(value):
+                self.mmap.measure_float_put(new_measure, value)
 
-        self.metrics[json_name] = new_setter
+            self.metrics[json_name] = new_setter
 
     def set_metrics_from_dict(self, metrics):
         """
         Given a dict with metrics, indexed by json name, record measurements using the
         appropriate metric name
         """
-        for key in metrics:
-            self.set_metric(key, metrics[key])
+        if app_insights_connection_string:
+            for key in metrics:
+                self.set_metric(key, metrics[key])
 
     def set_metric(self, key, value):
         """
         Set the value of an individual metric
         """
-        setter = self.metrics[key]
-        setter(value)
+        if app_insights_connection_string:
+            setter = self.metrics[key]
+            setter(value)
 
     def record(self):
-        self.mmap.record(self.tmap)
+        if app_insights_connection_string:
+            self.mmap.record(self.tmap)
