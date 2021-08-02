@@ -5,7 +5,6 @@ import pytest
 import asyncio
 import json
 import logging
-import os
 import time
 import collections
 import uuid
@@ -13,6 +12,7 @@ import random
 from azure.iot.device.iothub import Message
 from azure.iot.device.iothub.aio import IoTHubDeviceClient
 from thief_constants import Fields, Commands, Const
+import thief_secrets
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("paho").setLevel(level=logging.DEBUG)
@@ -51,21 +51,26 @@ def event_loop():
     loop.close()
 
 
-@pytest.fixture(scope="module")
-def client(keep_alive):
+@pytest.fixture(scope="class")
+def client_kwargs():
+    return {"keep_alive": 10}
+
+
+@pytest.fixture(scope="class")
+def client(client_kwargs):
     return IoTHubDeviceClient.create_from_connection_string(
-        os.environ["IOTHUB_DEVICE_CONNECTION_STRING"], keep_alive=keep_alive,
+        thief_secrets.THIEF_DEVICE_CONNECTION_STRING, **client_kwargs
     )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 async def connected_client(client):
     await client.connect()
     yield client
     await client.shutdown()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 async def c2d_waiter(event_loop, connected_client, running_operation_list, run_id):
     async def handle_c2d(msg):
         thief = json.loads(msg.data.decode()).get(Fields.THIEF, {})
@@ -113,7 +118,7 @@ async def c2d_waiter(event_loop, connected_client, running_operation_list, run_i
     connected_client.on_message_received = handle_c2d
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 async def paired_client(
     connected_client, running_operation_list, c2d_waiter, run_id, requested_service_pool
 ):
@@ -148,12 +153,12 @@ async def paired_client(
     assert False
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 def service_instance_id(paired_client):
     return paired_client.service_instance_id
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 def message_factory(run_id, paired_client, op_factory):
     def wrapper_function(payload, cmd=None):
         running_op = op_factory()
@@ -172,7 +177,7 @@ def message_factory(run_id, paired_client, op_factory):
     return wrapper_function
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 def op_factory(running_operation_list):
     def factory_function():
         return running_operation_list.make_event_based_operation(event_module=asyncio)
@@ -180,8 +185,8 @@ def op_factory(running_operation_list):
     return factory_function
 
 
-@pytest.fixture(scope="module")
-def reported_props_factory(run_id, service_instance_id):
+@pytest.fixture(scope="class")
+def reported_props_factory(run_id, service_instance_id, random_content_factory):
     def factory_function(running_op):
         return {
             Fields.THIEF: {
@@ -189,7 +194,10 @@ def reported_props_factory(run_id, service_instance_id):
                 Fields.SERVICE_INSTANCE_ID: service_instance_id,
                 Fields.TEST_CONTENT: {
                     Fields.REPORTED_PROPERTY_TEST: {
-                        "prop_e2e": {Fields.ADD_OPERATION_ID: running_op.id}
+                        Fields.E2E_PROPERTY: {
+                            Fields.ADD_OPERATION_ID: running_op.id,
+                            Fields.RANDOM_CONTENT: random_content_factory(),
+                        }
                     }
                 },
             }
@@ -208,8 +216,8 @@ def reported_props(reported_props_factory, running_op):
     return reported_props_factory(running_op)
 
 
-@pytest.fixture(scope="function")
-def payload_factory():
+@pytest.fixture(scope="class")
+def random_content_factory():
     def factory_function():
         return {
             "random_guid": str(uuid.uuid4()),
@@ -224,5 +232,23 @@ def payload_factory():
 
 
 @pytest.fixture(scope="function")
-def random_payload(payload_factory):
-    return payload_factory()
+def random_content(random_content_factory):
+    return random_content_factory()
+
+
+@pytest.fixture(scope="session")
+def pnp_model_id():
+    return "dtmi:com:example:TemperatureController;2"
+
+
+@pytest.fixture(scope="session")
+def random_key_factory():
+    def factory_function():
+        return "prop{}".format(random.choice([1, 3, 4, 5]))
+
+    return factory_function
+
+
+@pytest.fixture(scope="function")
+def random_key(random_key_factory):
+    return random_key_factory()

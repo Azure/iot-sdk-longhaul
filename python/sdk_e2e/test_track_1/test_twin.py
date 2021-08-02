@@ -11,21 +11,22 @@ logger.setLevel(level=logging.INFO)
 
 pytestmark = pytest.mark.asyncio
 
-# TODO: move to Fields
-RANDOM_PAYLOAD = "randomPayload"
-E2E_PROPERTY = "prop_e2e"
 
-
-def validate_add_operation_id(twin, id):
-    actual_op_id = (
+def validate_patch_reported(twin, patch):
+    twin_prop = (
         twin.get(Fields.REPORTED, {})
         .get(Fields.THIEF, {})
         .get(Fields.TEST_CONTENT, {})
         .get(Fields.REPORTED_PROPERTY_TEST, {})
-        .get(E2E_PROPERTY, {})
-        .get(Fields.ADD_OPERATION_ID, None)
+        .get(Fields.E2E_PROPERTY, {})
     )
-    assert actual_op_id == id
+    patch_prop = (
+        patch.get(Fields.THIEF, {})
+        .get(Fields.TEST_CONTENT, {})
+        .get(Fields.REPORTED_PROPERTY_TEST, {})
+        .get(Fields.E2E_PROPERTY, {})
+    )
+    assert twin_prop == patch_prop
 
 
 # TODO: rename running_op to op_ticket?
@@ -34,7 +35,11 @@ def validate_add_operation_id(twin, id):
 
 async def clean_reported_properties(client):
     await client.patch_twin_reported_properties(
-        {Fields.THIEF: {Fields.TEST_CONTENT: {Fields.REPORTED_PROPERTY_TEST: {E2E_PROPERTY: None}}}}
+        {
+            Fields.THIEF: {
+                Fields.TEST_CONTENT: {Fields.REPORTED_PROPERTY_TEST: {Fields.E2E_PROPERTY: None}}
+            }
+        }
     )
 
 
@@ -48,7 +53,7 @@ class TestReportedProperties(object):
         await running_op.event.wait()
 
         twin = await client.get_twin()
-        validate_add_operation_id(twin, running_op.id)
+        validate_patch_reported(twin, reported_props)
 
         await clean_reported_properties(client)
 
@@ -64,7 +69,7 @@ class TestReportedProperties(object):
         await running_op.event.wait()
 
         twin = await client.get_twin()
-        validate_add_operation_id(twin, running_op.id)
+        validate_patch_reported(twin, reported_props)
 
         await clean_reported_properties(client)
 
@@ -120,7 +125,7 @@ class TestReportedProperties(object):
 @pytest.mark.describe("Device Client Desired Properties")
 class TestDesiredProperties(object):
     @pytest.mark.it("Receives a patch for a simple desired property")
-    async def test_simple_patch(self, paired_client, message_factory, random_payload, event_loop):
+    async def test_simple_patch(self, paired_client, message_factory, random_content, event_loop):
         client = paired_client.client
         received_patch = None
         received = asyncio.Event()
@@ -138,7 +143,9 @@ class TestDesiredProperties(object):
                 {
                     Fields.THIEF: {
                         Fields.CMD: Commands.SET_DESIRED_PROPS,
-                        Fields.DESIRED_PROPERTIES: {Fields.THIEF: {RANDOM_PAYLOAD: random_payload}},
+                        Fields.DESIRED_PROPERTIES: {
+                            Fields.THIEF: {Fields.RANDOM_CONTENT: random_content}
+                        },
                     }
                 }
             ).message
@@ -147,10 +154,13 @@ class TestDesiredProperties(object):
         await asyncio.wait_for(received.wait(), 10)
         logger.info("got it")
 
-        assert received_patch.get(Fields.THIEF, {}).get(RANDOM_PAYLOAD, {}) == random_payload
+        assert received_patch.get(Fields.THIEF, {}).get(Fields.RANDOM_CONTENT, {}) == random_content
 
         twin = await client.get_twin()
         assert (
-            twin.get(Fields.DESIRED, {}).get(Fields.THIEF, {}).get(RANDOM_PAYLOAD, {})
-            == random_payload
+            twin.get(Fields.DESIRED, {}).get(Fields.THIEF, {}).get(Fields.RANDOM_CONTENT, {})
+            == random_content
         )
+
+
+# TODO: etag tests, version tests

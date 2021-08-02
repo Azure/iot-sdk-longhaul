@@ -82,6 +82,9 @@ THIEF_SHARED_SUBSCRIPTION_ID = secrets.get("thiefSharedSubscriptionId", None)
 # Resource group used for holding thief shared resources.
 THIEF_SHARED_RESOURCE_GROUP = secrets.get("thiefSharedResourceGroup", None)
 
+# Connection string for device under test
+THIEF_DEVICE_CONNECTION_STRING = secrets.get("thiefDeviceConnectionString", None)
+
 del secrets
 del this_file_path
 del json_file_path
