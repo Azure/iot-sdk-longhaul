@@ -217,7 +217,7 @@ class Commands(object):
     UPDATE_PNP_PROPERTIES = "updatePnpProperites"
 
     # Invoke a PnP command
-    INVOKE_PNP_CPOMMAND = "invokePnpCommand"
+    INVOKE_PNP_COMMAND = "invokePnpCommand"
 
     # ------------------------------------------------
     # Values for the command field inside c2d messages

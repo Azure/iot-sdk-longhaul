@@ -233,7 +233,7 @@ groups:
           - name: UPDATE_PNP_PROPERTIES
             value: "updatePnpProperites"
             desc: "Update Pnp properites"
-          - name: INVOKE_PNP_CPOMMAND
+          - name: INVOKE_PNP_COMMAND
             value: "invokePnpCommand"
             desc: "Invoke a PnP command"
 

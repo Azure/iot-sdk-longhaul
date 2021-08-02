@@ -244,7 +244,7 @@ def pnp_model_id():
 @pytest.fixture(scope="session")
 def random_key_factory():
     def factory_function():
-        return "prop{}".format(random.choice([1, 3, 4, 5]))
+        return "prop{}".format(random.choice([4]))
 
     return factory_function
 

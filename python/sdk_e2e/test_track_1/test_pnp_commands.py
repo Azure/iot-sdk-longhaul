@@ -6,7 +6,7 @@ import logging
 import asyncio
 import json
 from thief_constants import Fields, Commands
-from azure.iot.device.iothub import MethodResponse
+from azure.iot.device.iothub import CommandResponse
 
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
@@ -15,30 +15,42 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-def method_name():
-    return "this_is_my_method_name"
+def command_name():
+    return "this_is_my_command_name"
 
 
 @pytest.fixture
-def method_response_status():
+def component_name():
+    return "this_is_my_component_name"
+
+
+@pytest.fixture
+def command_response_status():
     return 299
 
 
-@pytest.mark.describe("Device Client methods")
-class TestMethods(object):
-    @pytest.mark.it("Can handle a simple direct method call")
+@pytest.mark.describe("Pnp Commands")
+class TestPnpCommands(object):
+    @pytest.mark.it("Can handle a simple command")
     @pytest.mark.parametrize(
         "include_request_payload",
         [
             pytest.param(True, id="with request payload"),
-            pytest.param(False, id="wihout request payload"),
+            pytest.param(False, id="without request payload"),
         ],
     )
     @pytest.mark.parametrize(
         "include_response_payload",
         [
             pytest.param(True, id="with response payload"),
-            pytest.param(False, id="wihout response payload"),
+            pytest.param(False, id="without response payload"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "include_component_name",
+        [
+            pytest.param(True, id="with component name"),
+            pytest.param(False, id="without component name"),
         ],
     )
     async def test_handle_method_call(
@@ -47,8 +59,10 @@ class TestMethods(object):
         message_factory,
         random_content_factory,
         event_loop,
-        method_name,
-        method_response_status,
+        command_name,
+        component_name,
+        command_response_status,
+        include_component_name,
         include_request_payload,
         include_response_payload,
     ):
@@ -59,34 +73,39 @@ class TestMethods(object):
         if include_request_payload:
             request_payload = random_content_factory()
         else:
-            request_payload = None
+            request_payload = ""
 
         if include_response_payload:
             response_payload = random_content_factory()
         else:
             response_payload = None
 
-        async def handle_on_method_request_received(request):
+        async def handle_on_command_request_received(request):
             nonlocal actual_request
-            logger.info("Method request for {} received".format(request.name))
+            logger.info(
+                "command request for component {}, command {} received".format(
+                    request.component_name, request.command_name
+                )
+            )
             actual_request = request
             logger.info("Sending response")
-            await client.send_method_response(
-                MethodResponse.create_from_method_request(
-                    request, method_response_status, response_payload
+            await client.send_command_response(
+                CommandResponse.create_from_command_request(
+                    request, command_response_status, response_payload
                 )
             )
 
-        client.on_method_request_received = handle_on_method_request_received
+        client.on_command_request_received = handle_on_command_request_received
         await asyncio.sleep(1)  # wait for subscribe, etc, to complete
 
         # invoke the method call
         invoke = message_factory(
             {
                 Fields.THIEF: {
-                    Fields.CMD: Commands.INVOKE_METHOD,
-                    Fields.METHOD_NAME: method_name,
-                    Fields.METHOD_INVOKE_PAYLOAD: request_payload,
+                    Fields.CMD: Commands.INVOKE_PNP_COMMAND,
+                    Fields.COMMAND_NAME: command_name,
+                    Fields.COMMAND_COMPONENT_NAME: component_name,
+                    Fields.COMMAND_INVOKE_PAYLOAD: request_payload,
                 }
             }
         )
@@ -94,15 +113,17 @@ class TestMethods(object):
 
         # wait for the response to come back via the service API call
         await invoke.running_op.event.wait()
-        method_response = json.loads(invoke.running_op.result_message.data)[Fields.THIEF]
+        command_response = json.loads(invoke.running_op.result_message.data)[Fields.THIEF]
 
         # verify that the method request arrived correctly
-        assert actual_request.name == method_name
+        assert actual_request.command_name == command_name
+        assert actual_request.component_name == component_name
+
         if request_payload:
             assert actual_request.payload == request_payload
         else:
             assert not actual_request.payload
 
         # and make sure the response came back successfully
-        assert method_response[Fields.METHOD_RESPONSE_STATUS_CODE] == method_response_status
-        assert method_response[Fields.METHOD_RESPONSE_PAYLOAD] == response_payload
+        # assert command_response[Fields.COMMAND_RESPONSE_STATUS_CODE] == command_response_status
+        assert command_response[Fields.COMMAND_RESPONSE_PAYLOAD] == response_payload

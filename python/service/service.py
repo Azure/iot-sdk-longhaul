@@ -177,8 +177,10 @@ class ServiceApp(object):
         method_guid = thief.get(Fields.OPERATION_ID)
         method_name = thief.get(Fields.METHOD_NAME)
 
-        logger.info("------------------------------------------------------------------")
-        logger.info("received method invoke method={}, guid={}".format(method_name, method_guid))
+        logger.info(
+            "received method invoke method={}, guid={}".format(method_name, method_guid),
+            extra=custom_props(device_data.device_id, device_data.run_id),
+        )
 
         request = CloudToDeviceMethod(
             method_name=method_name,
@@ -191,13 +193,22 @@ class ServiceApp(object):
             ),
         )
 
-        logger.info("invoking {}".format(method_guid))
+        logger.info(
+            "invoking {}".format(method_guid),
+            extra=custom_props(device_data.device_id, device_data.run_id),
+        )
         try:
             response = self.registry_manager.invoke_device_method(device_data.device_id, request)
         except Exception as e:
-            logger.error("exception for invoke on {}: {}".format(method_guid, str(e) or type(e)))
+            logger.error(
+                "exception for invoke on {}: {}".format(method_guid, str(e) or type(e)),
+                extra=custom_props(device_data.device_id, device_data.run_id),
+            )
             raise
-        logger.info("invoke complete {}".format(method_guid))
+        logger.info(
+            "invoke complete {}".format(method_guid),
+            extra=custom_props(device_data.device_id, device_data.run_id),
+        )
 
         response_message = json.dumps(
             {
@@ -212,7 +223,89 @@ class ServiceApp(object):
             }
         )
 
-        logger.info("queueing response {}".format(method_guid))
+        logger.info(
+            "queueing method response {}".format(method_guid),
+            extra=custom_props(device_data.device_id, device_data.run_id),
+        )
+
+        self.outgoing_c2d_queue.put(
+            OutgoingC2d(
+                device_id=device_data.device_id,
+                message=response_message,
+                props=Const.JSON_TYPE_AND_ENCODING,
+            )
+        )
+
+    def handle_pnp_command_invoke(self, device_data, event):
+        body = event.body_as_json()
+        thief = body.get(Fields.THIEF, {})
+        command_guid = thief.get(Fields.OPERATION_ID)
+        command_name = thief.get(Fields.COMMAND_NAME)
+        command_component_name = thief.get(Fields.COMMAND_COMPONENT_NAME, None)
+        payload = thief.get(Fields.COMMAND_INVOKE_PAYLOAD, None)
+        response_timeout_in_seconds = thief.get(
+            Fields.COMMAND_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS, None
+        )
+        connect_timeout_in_seconds = thief.get(
+            Fields.COMMAND_INVOKE_CONNECT_TIMEOUT_IN_SECONDS, None
+        )
+
+        logger.info(
+            "received command invoke command={}, componet={},  guid={}".format(
+                command_name, command_component_name, command_guid
+            ),
+            extra=custom_props(device_data.device_id, device_data.run_id),
+        )
+
+        logger.info(
+            "invoking command {}".format(command_guid),
+            extra=custom_props(device_data.device_id, device_data.run_id),
+        )
+        try:
+            if command_component_name:
+                response = self.digital_twin_client.invoke_component_command(
+                    device_data.device_id,
+                    command_component_name,
+                    command_name,
+                    payload,
+                    connect_timeout_in_seconds,
+                    response_timeout_in_seconds,
+                )
+            else:
+                response = self.digital_twin_client.invoke_command(
+                    device_data.device_id,
+                    command_name,
+                    payload,
+                    connect_timeout_in_seconds,
+                    response_timeout_in_seconds,
+                )
+        except Exception as e:
+            logger.error(
+                "exception for invoke on {}: {}".format(command_guid, str(e) or type(e)),
+                extra=custom_props(device_data.device_id, device_data.run_id),
+            )
+            raise
+        logger.info(
+            "invoke complete {}".format(command_guid),
+            extra=custom_props(device_data.device_id, device_data.run_id),
+        )
+
+        response_message = json.dumps(
+            {
+                Fields.THIEF: {
+                    Fields.CMD: Commands.OPERATION_RESPONSE,
+                    Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                    Fields.RUN_ID: device_data.run_id,
+                    Fields.OPERATION_ID: command_guid,
+                    Fields.COMMAND_RESPONSE_PAYLOAD: response,
+                }
+            }
+        )
+
+        logger.info(
+            "queueing response {}".format(command_guid),
+            extra=custom_props(device_data.device_id, device_data.run_id),
+        )
 
         self.outgoing_c2d_queue.put(
             OutgoingC2d(
@@ -323,6 +416,10 @@ class ServiceApp(object):
 
                 elif cmd == Commands.INVOKE_METHOD:
                     self.executor.submit(self.handle_method_invoke, device_data, event)
+                    # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
+
+                elif cmd == Commands.INVOKE_PNP_COMMAND:
+                    self.executor.submit(self.handle_pnp_command_invoke, device_data, event)
                     # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
 
                 elif cmd == Commands.GET_PNP_PROPERTIES:
