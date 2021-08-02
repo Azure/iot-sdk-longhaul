@@ -3,7 +3,6 @@
 # full license information.
 import logging
 import time
-import os
 import queue
 import threading
 import json
@@ -22,17 +21,13 @@ import thief_secrets
 
 faulthandler.enable()
 
-iothub_connection_string = thief_secrets.THIEF_SERVICE_CONNECTION_STRING
-iothub_name = thief_secrets.THIEF_IOTHUB_NAME
-eventhub_connection_string = thief_secrets.THIEF_EVENTHUB_CONNECTION_STRING
-eventhub_consumer_group = thief_secrets.THIEF_EVENTHUB_CONSUMER_GROUP
-service_pool = thief_secrets.THIEF_SERVICE_POOL
+iothub_connection_string = thief_secrets.IOTHUB_CONNECTION_STRING
+iothub_name = thief_secrets.IOTHUB_NAME
+eventhub_connection_string = thief_secrets.EVENTHUB_CONNECTION_STRING
+eventhub_consumer_group = thief_secrets.EVENTHUB_CONSUMER_GROUP
+service_pool = thief_secrets.SERVICE_POOL
 
-# Optional environment variables.
-# run_id can be an environment variable or it can be automatically generated
-service_instance_id = os.getenv("THIEF_SERVICE_INSTANCE_ID")
-if not service_instance_id:
-    service_instance_id = str(uuid.uuid4())
+service_instance_id = str(uuid.uuid4())
 
 # set default logging which will only go to the console
 logging.basicConfig(level=logging.WARNING)
@@ -330,7 +325,7 @@ class ServiceApp(object):
                     self.executor.submit(self.handle_method_invoke, device_data, event)
                     # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
 
-                elif cmd == Commands.GET_DIGITAL_TWIN:
+                elif cmd == Commands.GET_PNP_PROPERTIES:
                     logger.info(
                         "Getting digital twin for {} with operationid {}".format(
                             device_id, received_operation_id
@@ -347,7 +342,7 @@ class ServiceApp(object):
                                 Fields.SERVICE_INSTANCE_ID: service_instance_id,
                                 Fields.RUN_ID: received_run_id,
                                 Fields.OPERATION_ID: received_operation_id,
-                                Fields.DIGITAL_TWIN_CONTENTS: twin,
+                                Fields.PNP_PROPERTIES_CONTENTS: twin,
                             }
                         }
                     )
@@ -360,7 +355,7 @@ class ServiceApp(object):
                         )
                     )
 
-                elif cmd == Commands.UPDATE_DIGITAL_TWIN:
+                elif cmd == Commands.UPDATE_PNP_PROPERTIES:
                     logger.info(
                         "Updating digital twin for {} with operationid {}".format(
                             device_id, received_operation_id
@@ -369,7 +364,7 @@ class ServiceApp(object):
                     )
 
                     self.digital_twin_client.update_digital_twin(
-                        device_id, thief[Fields.DIGITAL_TWIN_UPDATE_PATCH]
+                        device_id, thief[Fields.PNP_PROPERTIES_UPDATE_PATCH]
                     )
 
                     # TODO: send ack for all of these ops, include error if failure

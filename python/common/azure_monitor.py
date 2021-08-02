@@ -8,7 +8,7 @@ from thief_constants import CustomDimensions
 from opencensus.ext.azure.log_exporter import AzureEventHandler
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 
-app_insights_instrumentation_key = thief_secrets.THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY
+app_insights_instrumentation_key = thief_secrets.APP_INSIGHTS_INSTRUMENTATION_KEY
 app_insights_connection_string = "InstrumentationKey={}".format(app_insights_instrumentation_key)
 
 _client_type = None

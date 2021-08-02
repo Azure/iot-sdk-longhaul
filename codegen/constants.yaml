@@ -6,9 +6,9 @@ groups:
   - name: Const
     desc: "Generic constants that don't have another home"
     values:
-      - name: JSON_CONTENT_TYPE 
+      - name: JSON_CONTENT_TYPE
         value: "application/json"
-      - name: JSON_CONTENT_ENCODING 
+      - name: JSON_CONTENT_ENCODING
         value: "utf-8"
       - name: JSON_TYPE_AND_ENCODING
         value:
@@ -20,11 +20,11 @@ groups:
     values:
         - name: THIEF
           value: "thief"
-        - name: PROPERTIES 
+        - name: PROPERTIES
           value: "properties"
-        - name: REPORTED 
+        - name: REPORTED
           value: "reported"
-        - name: DESIRED 
+        - name: DESIRED
           value: "desired"
         - name: RANDOM_CONTENT
           value: "randomContent"
@@ -49,59 +49,59 @@ groups:
             desc: "Reason the text exited"
       - name: Telemetry
         values:
-          - name: CMD 
+          - name: CMD
             value: "cmd"
           - name: FLAGS
             value: "flags"
-          - name: OPERATION_ID 
+          - name: OPERATION_ID
             value: "operationId"
-          - name: SERVICE_INSTANCE_ID 
+          - name: SERVICE_INSTANCE_ID
             value: "serviceInstanceId"
-          - name: RUN_ID 
+          - name: RUN_ID
             value: "runId"
-          - name: DESIRED_PROPERTIES 
+          - name: DESIRED_PROPERTIES
             value: "desiredProperties"
-          - name: REQUESTED_SERVICE_POOL 
+          - name: REQUESTED_SERVICE_POOL
             value: "requestedServicePool"
       - name: ReportedProperties
         desc: "properties.reported.thief"
         values:
-          - name: SYSTEM_PROPERTIES 
+          - name: SYSTEM_PROPERTIES
             value: "systemProperties"
-          - name: SESSION_METRICS 
+          - name: SESSION_METRICS
             value: "sessionMetrics"
-          - name: TEST_METRICS 
+          - name: TEST_METRICS
             value: "testMetrics"
-          - name: SYSTEM_HEALTH_METRICS 
+          - name: SYSTEM_HEALTH_METRICS
             value: "systemHealthMetrics"
-          - name: CONFIG 
+          - name: CONFIG
             value: "config"
-          - name: PAIRING 
+          - name: PAIRING
             value: "pairing"
-          - name: TEST_CONTROL 
+          - name: TEST_CONTROL
             value: "testControl"
-          - name: TEST_CONTENT 
+          - name: TEST_CONTENT
             value: "testContent"
           - name: EXIT_REASON
             value: "exitReason"
       - name: Pairing
         desc: "properties.reported.thief.pairing"
         values:
-          - name: SERVICE_INSTANCE_ID 
+          - name: SERVICE_INSTANCE_ID
             value: "serviceInstanceId"
-          - name: RUN_ID 
+          - name: RUN_ID
             value: "runId"
       - name: TestContent
         desc: "properties.reported.thief.testContent"
         values:
-          - name: REPORTED_PROPERTY_TEST 
+          - name: REPORTED_PROPERTY_TEST
             value: "reportedPropertyTest"
       - name: ReportedPropertyTest
         desc: "properties.reported.thief.testContent.reportedPropertytest"
         values:
-          - name: ADD_OPERATION_ID 
+          - name: ADD_OPERATION_ID
             value: "addOperationId"
-          - name: REMOVE_OPERATION_ID 
+          - name: REMOVE_OPERATION_ID
             value: "removeOperationId"
           - name: E2E_PROPERTY
             value: "prop_e2e"
@@ -109,32 +109,32 @@ groups:
       - name: Desired
         desc: "properties.desired.thief"
         values:
-          - name: PAIRING 
+          - name: PAIRING
             value: "pairing"
-          - name: TEST_CONTENT 
+          - name: TEST_CONTENT
             value: "testContent"
       - name: Pairing
         desc: "propeties.desired.thief.pairing"
         values:
-          - name: SERVICE_INSTANCE_ID 
+          - name: SERVICE_INSTANCE_ID
             value: "serviceInstanceId"
-          - name: RUN_ID 
+          - name: RUN_ID
             value: "runId"
       - name: TestContent
         desc: "propeties.desired.thief.testContent"
         values:
-          - name: TWIN_GUID 
+          - name: TWIN_GUID
             value: "twinGuid"
       - name: C2dFields
         desc: "Names of fields inside c2d messages"
         values:
-          - name: SERVICE_INSTANCE_ID 
+          - name: SERVICE_INSTANCE_ID
             value: "serviceInstanceId"
-          - name: RUN_ID 
+          - name: RUN_ID
             value: "runId"
-          - name: OPERATION_IDS 
+          - name: OPERATION_IDS
             value: "operationIds"
-          - name: CMD 
+          - name: CMD
             value: "cmd"
           - name: TEST_C2D_PAYLOAD
             value: "testC2dPayload"
@@ -163,22 +163,22 @@ groups:
           - name: METHOD_RESPONSE_STATUS_CODE
             value: "methodResponseStatusCode"
             desc: "Status code sent with method response"
-      - name: GetDigitalTwinC2d
+      - name: GetPnpPropertiesC2D
         desc: "Fields inside C2D messages used for testing get_digital_twin functionality"
         values:
-          - name: DIGITAL_TWIN_CONTENTS
-            value: "digitalTwinContents"
-            desc: "Contents of digital twin, as returned by get_digital_twin function"
-      - name: UpdateDigitalTwinTelemetry
+          - name: PNP_PROPERTIES_CONTENTS
+            value: "pnpPropertiesContents"
+            desc: "Contents of PNP properties, as returned by get_digital_twin function"
+      - name: UpdatePnpPropertiesTelemetry
         desc: "Fields inside telemetry messages used for testing update_digital_twin functionality"
         values:
-          - name: DIGITAL_TWIN_UPDATE_PATCH
-            value: "digitalTwinUpdatePatch"
-            desc: "Digital twin patch to send to update_digital_twin"
-          - name: DIGITAL_TWIN_UPDATE_ETAG
-            value: "digitalTwinUpdateEtag"
+          - name: PNP_PROPERTIES_UPDATE_PATCH
+            value: "pnpPropertiesUpdatePatch"
+            desc: "PnP properties update patch to send to update_digital_twin"
+          - name: PNP_PROPERITES_UPDATE_ETAG
+            value: "pnpPropertiesUpdateEtag"
             desc: "ETAG to use when calling update_digital_twin"
-      - name: InvokeDigitalTwinCommandTelemetry
+      - name: InvokePnpCommandTelemetry
         desc: "Fields inside telemetry messages used for testing invoke_command and invoke_component_command functionality"
         values:
           - name: COMMAND_NAME
@@ -196,7 +196,7 @@ groups:
           - name: COMMAND_INVOKE_CONNECT_TIMEOUT_IN_SECONDS
             value: "commandInvokeConnectTimeoutInSeconds"
             desc: "timeout for connecting a client based on a comand invoke"
-      - name: InvokeDigitalTwinCommandC2d
+      - name: InvokePnpCommandC2d
         desc: "Fields inside c2d messages used for testing invoke_command and invoke_component_command functionality"
         values:
           - name: COMMAND_RESPONSE_PAYLOAD
@@ -215,10 +215,10 @@ groups:
           - name: PAIR_WITH_SERVICE_APP
             value: "pairWithServiceApp"
             desc: "Look for service app to pair with"
-          - name: SEND_OPERATION_RESPONSE 
+          - name: SEND_OPERATION_RESPONSE
             value: "sendOperationResponse"
             desc: "Request a operationResponse message from the service"
-          - name: SET_DESIRED_PROPS 
+          - name: SET_DESIRED_PROPS
             value: "setDesiredProps"
             desc: "Apply a the device twin desired properties patch"
           - name: INVOKE_METHOD
@@ -227,15 +227,15 @@ groups:
           - name: SEND_C2D
             value: "sendC2d"
             desc: "Send C2d Message"
-          - name: GET_DIGITAL_TWIN
-            value: "getDigitalTwin"
-            desc: "Get the digital twin"
-          - name: UPDATE_DIGITAL_TWIN
-            value: "updateDigitalTwin"
-            desc: "Update the digital twin"
-          - name: INVOKE_DIGITAL_TWIN_COMMAND
-            value: "invokeDigitalTwinCommand"
-            desc: "Invoke a digital twin command"
+          - name: GET_PNP_PROPERTIES
+            value: "getPnpProperties"
+            desc: "Get Pnp properties"
+          - name: UPDATE_PNP_PROPERTIES
+            value: "updatePnpProperites"
+            desc: "Update Pnp properites"
+          - name: INVOKE_PNP_CPOMMAND
+            value: "invokePnpCommand"
+            desc: "Invoke a PnP command"
 
 
       - name: "C2dCommands"
@@ -244,10 +244,10 @@ groups:
           - name: PAIR_RESPONSE
             value: "pairResponse"
             desc: "Response to pairWithServiceApp request"
-          - name: OPERATION_RESPONSE 
+          - name: OPERATION_RESPONSE
             value: "operationResponse"
             desc: "Response from one or more sendOperationResponse messsages"
-          - name: C2D_RESPONSE 
+          - name: C2D_RESPONSE
             value: "c2dResponse"
             desc: "C2d test messaage - a respnse to a SEND_C2D request"
           - name: METHOD_RESPONSE
@@ -257,19 +257,19 @@ groups:
   - name: Events
     desc: "Names of different Azure Monitor events"
     values:
-      - name: STARTING_RUN 
+      - name: STARTING_RUN
         value: "StartingRun"
         desc: "The test run is starting"
-      - name: ENDING_RUN 
+      - name: ENDING_RUN
         value: "EndingRun"
         desc: "The test run is ending"
-      - name: SENDING_PAIRING_REQUEST 
+      - name: SENDING_PAIRING_REQUEST
         value: "SendingPairingRequest"
         desc: "The device app is sending a pairing request to the service app"
-      - name: RECEIVED_PAIRING_RESPONSE 
+      - name: RECEIVED_PAIRING_RESPONSE
         value: "ReceivedPairingResponse"
         desc: "The device app has received a pairing response from the service app"
-      - name: PAIRING_COMPLETE 
+      - name: PAIRING_COMPLETE
         value: "PairingComplete"
         desc: "The pairing process is complete."
 
@@ -281,7 +281,7 @@ groups:
 
       - desc: "System Health metrics"
         values:
-          - name: PROCESS_CPU_PERCENT 
+          - name: PROCESS_CPU_PERCENT
             value: "processCpuPercent"
             desc: "CPU use for the device app, as a percentage of all cores"
             type: float
@@ -332,17 +332,17 @@ groups:
             desc: "Number of telemetry messages queued for sending"
             type: int
             units: messages
-          - name: SEND_MESSAGE_COUNT_SENT 
+          - name: SEND_MESSAGE_COUNT_SENT
             value: "sendMessageCountSent"
             desc: "Number of telemetry messages sent"
             type: int
             units: messages
-          - name: SEND_MESSAGE_COUNT_VERIFIED 
+          - name: SEND_MESSAGE_COUNT_VERIFIED
             value: "sendMessageCountVerified"
             desc: "Number of telemetry messages sent and verified by the service"
             type: int
             units: messages
-          - name: SEND_MESSAGE_COUNT_TIMED_OUT 
+          - name: SEND_MESSAGE_COUNT_TIMED_OUT
             value: "sendMessageCountTimedOut"
             desc: "Number of telemetry messages that timed out with no response from the service"
             type: int
@@ -350,12 +350,12 @@ groups:
 
       - desc: "Receive c2d metrics"
         values:
-          - name: RECEIVE_C2D_COUNT_RECEIVED 
+          - name: RECEIVE_C2D_COUNT_RECEIVED
             value: "receiveC2dCountReceived"
             desc: "Number of c2d messages received"
             type: int
             units: messages
-          - name: RECEIVE_C2D_COUNT_TIMED_OUT 
+          - name: RECEIVE_C2D_COUNT_TIMED_OUT
             value: "receiveC2dCountTimedOut"
             desc: "Number of c2d messages not received in time"
             type: int
@@ -363,17 +363,17 @@ groups:
 
       - desc: "Reported property metrics"
         values:
-          - name: REPORTED_PROPERTIES_COUNT_ADDED 
+          - name: REPORTED_PROPERTIES_COUNT_ADDED
             value: "reportedPropertiesCountAdded"
             desc: "Number of reported properties which have been added"
             type: int
             units: patches
-          - name: REPORTED_PROPERTIES_COUNT_REMOVED 
+          - name: REPORTED_PROPERTIES_COUNT_REMOVED
             value: "reportedPropertiesCountRemoved"
             desc: "Number of reported properties which have been removed"
             type: int
             units: patches
-          - name: REPORTED_PROPERTIES_COUNT_TIMED_OUT 
+          - name: REPORTED_PROPERTIES_COUNT_TIMED_OUT
             value: "reportedPropertiesCountTimedOut"
             desc: "Number of reported property add & remove operations that timed out"
             type: int
@@ -381,12 +381,12 @@ groups:
 
       - desc: "Get-twin metrics"
         values:
-          - name: GET_TWIN_COUNT_SUCCEEDED 
+          - name: GET_TWIN_COUNT_SUCCEEDED
             value: "getTwinCountSucceeded"
             desc: "Number of times get_twin successfully verified a property update"
             type: int
             units: calls
-          - name: GET_TWIN_COUNT_TIMED_OUT 
+          - name: GET_TWIN_COUNT_TIMED_OUT
             value: "getTwinCountTimedOut"
             desc: "Number of times get_twin was unable to verify a property update"
             type: int
@@ -394,12 +394,12 @@ groups:
 
       - desc: "desired property patch metrics"
         values:
-          - name: DESIRED_PROPERTY_PATCH_COUNT_RECEIVED 
+          - name: DESIRED_PROPERTY_PATCH_COUNT_RECEIVED
             value: "desiredPropertyPatchCountReceived"
             desc: "Count of desired property patches that were successfully received"
             type: int
             units: patches
-          - name: DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT 
+          - name: DESIRED_PROPERTY_PATCH_COUNT_TIMED_OUT
             value: "desiredPropertyPatchCountTimedOut"
             desc: "Count of desired property patches that were not received"
             type: int
@@ -421,7 +421,7 @@ groups:
 
       - desc: "Latency metrics"
         values:
-          - name: LATENCY_QUEUE_MESSAGE_TO_SEND 
+          - name: LATENCY_QUEUE_MESSAGE_TO_SEND
             value: "latencyQueueMessageToSendInMilliseconds"
             desc: "Number of milliseconds between queueing a telemetry message and actually sending it"
             type: float
@@ -458,19 +458,19 @@ groups:
   - name: Settings
     desc: "Names of thief settings which are used to configure the device app for a test run"
     values:
-      - name: MAX_RUN_DURATION_IN_SECONDS 
+      - name: MAX_RUN_DURATION_IN_SECONDS
         value: "maxRunDurationInSeconds"
         desc: "how long should the test run before finishing.  0 = forever"
-      - name: ALLOWED_EXCEPTION_COUNT 
+      - name: ALLOWED_EXCEPTION_COUNT
         value: "allowedExceptionCount"
         desc: "How many exceptions do we allow before we fail the test?"
       - name: INTER_TEST_DELAY_INTERVAL_IN_SECONDS
         value: "interTestDelayIntervalInSeconds"
         desc: "How many seconds between tests"
-      - name: OPERATION_TIMEOUT_IN_SECONDS 
+      - name: OPERATION_TIMEOUT_IN_SECONDS
         value: "operationTimeoutInSeconds"
         desc: "Generic value for operation timeouts"
-      - name: OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT 
+      - name: OPERATION_TIMEOUT_ALLOWED_FAILURE_COUNT
         value: "operationTimeoutAllowedFailureCount"
         desc: "How many timeouts are allowed before the test fails"
       - name: MQTT_KEEP_ALIVE_INTERVAL
@@ -489,16 +489,16 @@ groups:
     subgroups:
       - desc: "pairing settings"
         values:
-          - name: PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS 
+          - name: PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS
             value: "pairingRequestTimeoutIntervalInSeconds"
             desc: "How long to keep trying to pair with a service instance before giving up"
-          - name: PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS 
+          - name: PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS
             value: "pairingRequestSendIntervalInSeconds"
             desc: "How many seconds to wait while pairing before trying to pair again"
 
       - desc: "send_message settings"
         values:
-          - name: SEND_MESSAGE_OPERATIONS_PER_SECOND 
+          - name: SEND_MESSAGE_OPERATIONS_PER_SECOND
             value: "sendMessageOperationsPerSecond"
             desc: "How many times to call send_message per second"
 
@@ -518,43 +518,43 @@ groups:
   - name: CustomDimensions
     desc: "Names of customDimension fields pushed to Azure Monitor"
     values:
-      - name: OS_TYPE 
+      - name: OS_TYPE
         value: "osType"
         desc: "OS type, e.g. Linux, Windows"
-      - name: SDK_LANGUAGE 
+      - name: SDK_LANGUAGE
         value: "sdkLanguage"
         desc: "Language being used.  e.g. Python, Node, dotnet"
-      - name: SDK_LANGUAGE_VERSION 
+      - name: SDK_LANGUAGE_VERSION
         value: "sdkLanguageVersion"
         desc: "Version of language being used.  e.g. 3.8.1"
-      - name: SDK_VERSION 
+      - name: SDK_VERSION
         value: "sdkVersion"
         desc: "Version of the SDK library being tested.  e.g. 2.4.2"
 
-      - name: SERVICE_INSTANCE_ID 
+      - name: SERVICE_INSTANCE_ID
         value: "serviceInstanceId"
         desc: "ServiceInstanceId being used for this test run"
-      - name: RUN_ID 
+      - name: RUN_ID
         value: "runId"
         desc: "RunId for the run.  May be None for service app features that aren't tied to a specific run"
-      - name: POOL_ID 
+      - name: POOL_ID
         value: "poolId"
         desc: "Service app pool being used"
 
-      - name: HUB 
+      - name: HUB
         value: "hub"
         desc: "Hub instance being used, without the .azuredevices.net suffix"
-      - name: DEVICE_ID 
+      - name: DEVICE_ID
         value: "deviceId"
         desc: "Device being tested"
-      - name: TRANSPORT 
+      - name: TRANSPORT
         value: "transport"
         desc: "Transport being used by the device under test"
 
-      - name: RUN_REASON 
+      - name: RUN_REASON
         value: "runReason"
         desc: "Reason the test is running"
-      - name: EXIT_REASON 
+      - name: EXIT_REASON
         value: "exitReason"
         desc: "Reason the test is exiting"
 
@@ -595,97 +595,73 @@ groups:
     generateCodeConstants: false
     generateSecretReading: true
     values:
-      - name: THIEF_KEYVAULT_NAME
-        value: thiefKeyvaultName
+      - name: KEYVAULT_NAME
+        value: keyvaultName
         desc: "Name of keyvault that stores thief secrets"
-      - name: THIEF_DEVICE_ID
-        value: thiefDeviceId
+      - name: DEVICE_ID
+        value: deviceId
         desc: "Device ID used when running thief tests"
-      - name: THIEF_SERVICE_POOL
-        value: thiefServicePool
+      - name: SERVICE_POOL
+        value: servicePool
         desc: "Name of service pool that a specific service app is running under"
-      - name: THIEF_REQUESTED_SERVICE_POOL
-        value: thiefRequestedServicePool
+      - name: REQUESTED_SERVICE_POOL
+        value: requestedServicePool
         desc: "Name of service pool that a specific device app would like to pair with."
-      - name: THIEF_SUBSCRIPTION_ID
-        value: thiefSubscriptionId
-        keyvaultSecretName: THIEF-SUBSCRIPTION-ID
+      - name: SUBSCRIPTION_ID
+        value: subscriptionId
+        keyvaultSecretName: SUBSCRIPTION-ID
         desc: "ID for subscription that holds thief resources"
-      - name: THIEF_SERVICE_CONNECTION_STRING
-        value: thiefServiceConnectionString
-        keyvaultSecretName: THIEF-SERVICE-CONNECTION-STRING
+      - name: IOTHUB_CONNECTION_STRING
+        value: iothubConnectionString
+        keyvaultSecretName: SERVICE-CONNECTION-STRING
         desc: "Connection string for the iothub instance that thief is using for tests"
-      - name: THIEF_DEVICE_PROVISIONING_HOST
-        value: thiefDeviceProvisioningHost
-        keyvaultSecretName: THIEF-DEVICE-PROVISIONING-HOST
+      - name: DEVICE_PROVISIONING_HOST
+        value: deviceProvisioningHost
+        keyvaultSecretName: DEVICE-PROVISIONING-HOST
         desc: "Name of the provisioning host that thief is using for tests"
-      - name: THIEF_DEVICE_ID_SCOPE
-        value: thiefDeviceIdScope
-        keyvaultSecretName: THIEF-DEVICE-ID-SCOPE
+      - name: DEVICE_ID_SCOPE
+        value: deviceIdScope
+        keyvaultSecretName: DEVICE-ID-SCOPE
         desc: "IDScope for the provisioning host that thief is using for tests."
-      - name: THIEF_DEVICE_GROUP_SYMMETRIC_KEY
-        value: thiefDeviceGroupSymmetricKey
-        keyvaultSecretName: THIEF-DEVICE-GROUP-SYMMETRIC-KEY
+      - name: DEVICE_GROUP_SYMMETRIC_KEY
+        value: deviceGroupSymmetricKey
+        keyvaultSecretName: DEVICE-GROUP-SYMMETRIC-KEY
         desc: "Symmetric Key for the provisioning device group that thief is using for tests."
-      - name: THIEF_EVENTHUB_CONNECTION_STRING
-        value: thiefEventhubConnectionString
-        keyvaultSecretName: THIEF-EVENTHUB-CONNECTION-STRING
+      - name: EVENTHUB_CONNECTION_STRING
+        value: eventhubConnectionString
+        keyvaultSecretName: EVENTHUB-CONNECTION-STRING
         desc: "Connection string for the eventhub instance that thief is using"
-      - name: THIEF_EVENTHUB_CONSUMER_GROUP
-        value: thiefEventhubConsumerGroup
-        keyvaultSecretName: THIEF-EVENTHUB-CONSUMER-GROUP
+      - name: EVENTHUB_CONSUMER_GROUP
+        value: eventhubConsumerGroup
+        keyvaultSecretName: EVENTHUB-CONSUMER-GROUP
         desc: "Consumer group that thief is using when monitoring eventhub events"
-      - name: THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY
-        value: thiefAppInsightsInstrumentationKey
-        keyvaultSecretName: THIEF-APP-INSIGHTS-INSTRUMENTATION-KEY
+      - name: APP_INSIGHTS_INSTRUMENTATION_KEY
+        value: appInsightsInstrumentationKey
+        keyvaultSecretName: APP-INSIGHTS-INSTRUMENTATION-KEY
         desc: "App Insights instrumentation key that thief is using for pushing metrics and log events"
-      - name: THIEF_CONTAINER_REGISTRY_HOST
-        value: thiefContainerRegistryHost
-        keyvaultSecretName: THIEF-CONTAINER-REGISTRY-HOST
-        desc: "Host for the ontainer regsitry that thief is using for images under test (DNS name)"
-      - name: THIEF_CONTAINTER_REGISTRY_PASSWORD
-        value: thiefContainerRegistryPassword
-        keyvaultSecretName: THIEF-CONTAINER-REGISTRY-PASSWORD
-        desc: "Password to use when logging into thief container registry"
-      - name: THIEF_CONTAINER_REGISTRY_USER
-        value: thiefContainerRegistryUser
-        keyvaultSecretName: THIEF-CONTAINER-REGISTRY-USER
-        desc: "User name to use when logging into thief container registry"
-      - name: THIEF_CONTAINER_REGISTRY_SHORTNAME
-        value: thiefContainerRegistryShortname
-        keyvaultSecretName: THIEF-CONTAINER-REGISTRY-SHORTNAME
-        desc: "Short name for thief container registry.  Pprobably the DNS name without the .azurecr.io suffix"
-      - name: THIEF_RUNS_RESOURCE_GROUP
-        value: thiefRunsResourceGroup
-        keyvaultSecretName: THIEF-RUNS-RESOURCE-GROUP
-        desc: "Resource group used for holding running thief containers"
-      - name: THIEF_USER_RESOURCE_ID
-        value: thiefUserResourceId
-        keyvaultSecretName: THIEF-USER-RESOURCE-ID
-        desc: "Resource ID for the managed identity that thief uses for containers under test"
-      - name: THIEF_RESOURCE_GROUP
-        value: thiefResourceGroup
-        keyvaultSecretName: THIEF-RESOURCE-GROUP
+      - name: RESOURCE_GROUP
+        value: resourceGroup
+        keyvaultSecretName: RESOURCE-GROUP
         desc: "Resource group used for holding thief resources "
-      - name: THIEF_IOTHUB_NAME
-        value: thiefIothubName
-        keyvaultSecretName: THIEF-IOTHUB-NAME
+      - name: IOTHUB_NAME
+        value: iothubName
+        keyvaultSecretName: IOTHUB-NAME
         desc: "Name of thief iothub.  Probably DNS name for the hub without the azure-devices.net suffix"
-      - name: THIEF_SHARED_KEYVAULT_NAME
-        value: thiefSharedKeyvaultName
-        keyvaultSecretName: THIEF-SHARED-KEYVAULT-NAME
+      - name: SHARED_KEYVAULT_NAME
+        value: sharedKeyvaultName
+        keyvaultSecretName: SHARED-KEYVAULT-NAME
         desc: "Name of keyvault holding secrets for thief shared resources."
-      - name: THIEF_SHARED_SUBSCRIPTION_ID
-        value: thiefSharedSubscriptionId
-        keyvaultSecretName: THIEF-SHARED-SUBSCRIPTION-ID
+      - name: SHARED_SUBSCRIPTION_ID
+        value: sharedSubscriptionId
+        keyvaultSecretName: SHARED-SUBSCRIPTION-ID
         desc: "Subscription ID used for thief shared resources."
-      - name: THIEF_SHARED_RESOURCE_GROUP
-        value: thiefSharedResourceGroup
-        keyvaultSecretName: THIEF-SHARED-RESOURCE-GROUP
+      - name: SHARED_RESOURCE_GROUP
+        value: sharedResourceGroup
+        keyvaultSecretName: SHARED-RESOURCE-GROUP
         desc: "Resource group used for holding thief shared resources."
-      - name: THIEF_DEVICE_CONNECTION_STRING
-        value: thiefDeviceConnectionString
-        keyvaultSecretName: THIEF-DEVICE-CONNECTION-STRING
+      - name: DEVICE_CONNECTION_STRING
+        value: deviceConnectionString
+        keyvaultSecretName: DEVICE-CONNECTION-STRING
         desc: "Connection string for device under test"
 
   - name:  Flags

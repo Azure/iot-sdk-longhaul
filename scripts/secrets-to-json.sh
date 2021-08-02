@@ -6,13 +6,12 @@
 script_dir=$(cd "$(dirname "$0")" && pwd)
 json_file="$(realpath ${script_dir}/..)/_thief_secrets.json"
 
-if [ "${THIEF_SUBSCRIPTION_ID}" == "" ]; then
-    echo "THIEF_SUBSCRIPTION_ID variable needs to be set"
-    exit 1
-fi
+subscription_id=$1
+keyvault_name=$2
 
-if [ "${THIEF_KEYVAULT_NAME}" == "" ]; then
-    THIEF_KEYVAULT_NAME="thief-kv"
+if [ "${subscription_id}" == "" ] || [ ${keyvault_name} == "" ]; then
+    echo "Usage: $0 [subscription_id] [keyvault_name]"
+    exit 1
 fi
 
 JSON="{}"
@@ -30,7 +29,7 @@ function add-secret {
     json_name=$1
     kv_name=$2
     echo "Fetching ${json_name}"
-    value=$(az keyvault secret show --subscription ${THIEF_SUBSCRIPTION_ID} --vault-name ${THIEF_KEYVAULT_NAME} --name ${kv_name} | jq -r ".value")
+    value=$(az keyvault secret show --subscription ${subscription_id} --vault-name ${keyvault_name} --name ${kv_name} | jq -r ".value")
     add-json $json_name "$value"
 
 }
@@ -41,30 +40,24 @@ function add-secret {
 # Since this is a developer workstation, set the device ID and run IDs so the developer runs
 # all communicate with each other instead of accidentally pairing with service apps that are
 # running in the cloud.
-add-json thiefKeyvaultName "${THIEF_KEYVAULT_NAME}"
-add-json thiefSubscriptionId "${THIEF_SUBSCRIPTION_ID}"
-add-json thiefDeviceId "${USER}_test_device"
-add-json thiefServicePool "${USER}_desktop_pool"
-add-json thiefRequestedServicePool "${USER}_desktop_pool"
+add-json keyvaultName "${keyvault_name}"
+add-json subscriptionId "${subscription_id}"
+add-json deviceId "${USER}_test_device"
+add-json servicePool "${USER}_desktop_pool"
+add-json requestedServicePool "${USER}_desktop_pool"
 
-add-secret thiefServiceConnectionString THIEF-SERVICE-CONNECTION-STRING
-add-secret thiefDeviceProvisioningHost THIEF-DEVICE-PROVISIONING-HOST
-add-secret thiefDeviceIdScope THIEF-DEVICE-ID-SCOPE
-add-secret thiefDeviceGroupSymmetricKey THIEF-DEVICE-GROUP-SYMMETRIC-KEY
-add-secret thiefEventhubConnectionString THIEF-EVENTHUB-CONNECTION-STRING
-add-secret thiefEventhubConsumerGroup THIEF-EVENTHUB-CONSUMER-GROUP
-add-secret thiefAppInsightsInstrumentationKey THIEF-APP-INSIGHTS-INSTRUMENTATION-KEY
-add-secret thiefContainerRegistryHost THIEF-CONTAINER-REGISTRY-HOST
-add-secret thiefContainerRegistryPassword THIEF-CONTAINER-REGISTRY-PASSWORD
-add-secret thiefContainerRegistryUser THIEF-CONTAINER-REGISTRY-USER
-add-secret thiefContainerRegistryShortname THIEF-CONTAINER-REGISTRY-SHORTNAME
-add-secret thiefRunsResourceGroup THIEF-RUNS-RESOURCE-GROUP
-add-secret thiefUserResourceId THIEF-USER-RESOURCE-ID
-add-secret thiefResourceGroup THIEF-RESOURCE-GROUP
-add-secret thiefIothubName THIEF-IOTHUB-NAME
-add-secret thiefSharedKeyvaultName THIEF-SHARED-KEYVAULT-NAME
-add-secret thiefSharedSubscriptionId THIEF-SHARED-SUBSCRIPTION-ID
-add-secret thiefSharedResourceGroup THIEF-SHARED-RESOURCE-GROUP
+add-secret iothubConnectionString IOTHUB-CONNECTION-STRING
+add-secret deviceProvisioningHost DEVICE-PROVISIONING-HOST
+add-secret deviceIdScope DEVICE-ID-SCOPE
+add-secret deviceGroupSymmetricKey DEVICE-GROUP-SYMMETRIC-KEY
+add-secret eventhubConnectionString EVENTHUB-CONNECTION-STRING
+add-secret eventhubConsumerGroup EVENTHUB-CONSUMER-GROUP
+add-secret appInsightsInstrumentationKey APP-INSIGHTS-INSTRUMENTATION-KEY
+add-secret resourceGroup RESOURCE-GROUP
+add-secret iothubName IOTHUB-NAME
+add-secret sharedKeyvaultName SHARED-KEYVAULT-NAME
+add-secret sharedSubscriptionId SHARED-SUBSCRIPTION-ID
+add-secret sharedResourceGroup SHARED-RESOURCE-GROUP
 
 
 

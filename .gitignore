@@ -353,4 +353,4 @@ MigrationBackup/
 .vscode
 
 # thief-specific files
-_thief_secrets.json
+_thief*.json

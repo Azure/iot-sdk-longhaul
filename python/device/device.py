@@ -41,19 +41,16 @@ import thief_secrets
 
 faulthandler.enable()
 
-provisioning_host = thief_secrets.THIEF_DEVICE_PROVISIONING_HOST
-id_scope = thief_secrets.THIEF_DEVICE_ID_SCOPE
-group_symmetric_key = thief_secrets.THIEF_DEVICE_GROUP_SYMMETRIC_KEY
-registration_id = thief_secrets.THIEF_DEVICE_ID
-requested_service_pool = thief_secrets.THIEF_REQUESTED_SERVICE_POOL
+provisioning_host = thief_secrets.DEVICE_PROVISIONING_HOST
+id_scope = thief_secrets.DEVICE_ID_SCOPE
+group_symmetric_key = thief_secrets.DEVICE_GROUP_SYMMETRIC_KEY
+registration_id = thief_secrets.DEVICE_ID
+requested_service_pool = thief_secrets.REQUESTED_SERVICE_POOL
 
-# Optional environment variables.
 # run_reason can be an environment variable or is can be passed on the command line.
-run_reason = os.getenv("THIEF_RUN_REASON")
+run_reason = os.getenv("RUN_REASON")
 # run_id can be an environment variable or it can be automatically generated
-run_id = os.getenv("THIEF_RUN_ID")
-if not run_id:
-    run_id = str(uuid.uuid4())
+run_id = str(uuid.uuid4())
 
 # set default logging which will only go to the console
 
@@ -448,9 +445,9 @@ class DeviceApp(object):
             SystemProperties.LANGUAGE: "python",
             SystemProperties.LANGUAGE_VERSION: platform.python_version(),
             SystemProperties.SDK_VERSION: azure.iot.device.constant.VERSION,
-            SystemProperties.SDK_GITHUB_REPO: os.getenv("THIEF_SDK_GIT_REPO"),
-            SystemProperties.SDK_GITHUB_BRANCH: os.getenv("THIEF_SDK_GIT_BRANCH"),
-            SystemProperties.SDK_GITHUB_COMMIT: os.getenv("THIEF_SDK_GIT_COMMIT"),
+            SystemProperties.SDK_GITHUB_REPO: os.getenv("SDK_GIT_REPO"),
+            SystemProperties.SDK_GITHUB_BRANCH: os.getenv("SDK_GIT_BRANCH"),
+            SystemProperties.SDK_GITHUB_COMMIT: os.getenv("SDK_GIT_COMMIT"),
             SystemProperties.OS_TYPE: platform.system(),
             SystemProperties.OS_RELEASE: _get_os_release_based_on_user_agent_standard(),
         }

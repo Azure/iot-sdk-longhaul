@@ -47,14 +47,14 @@ class TestPnpConnect(object):
         assert client._mqtt_pipeline.pipeline_configuration.model_id == pnp_model_id
         assert client.connected
 
-        msg = message_factory({}, cmd=Commands.GET_DIGITAL_TWIN)
+        msg = message_factory({}, cmd=Commands.GET_PNP_PROPERTIES)
         await client.send_message(msg.message)
 
         await msg.running_op.event.wait()
 
         assert (
             json.loads(msg.running_op.result_message.data)[Fields.THIEF][
-                Fields.DIGITAL_TWIN_CONTENTS
+                Fields.PNP_PROPERTIES_CONTENTS
             ]["$metadata"]["$model"]
             == pnp_model_id
         )
