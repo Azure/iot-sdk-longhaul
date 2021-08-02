@@ -65,6 +65,7 @@ SHARED_RESOURCE_GROUP = secrets.get("sharedResourceGroup", None)
 
 # Connection string for device under test
 DEVICE_CONNECTION_STRING = secrets.get("deviceConnectionString", None)
+
 del secrets
 del this_file_path
 del json_file_path
