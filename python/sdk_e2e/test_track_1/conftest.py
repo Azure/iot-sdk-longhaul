@@ -59,7 +59,7 @@ def client_kwargs():
 @pytest.fixture(scope="class")
 def client(client_kwargs):
     return IoTHubDeviceClient.create_from_connection_string(
-        thief_secrets.THIEF_DEVICE_CONNECTION_STRING, **client_kwargs
+        thief_secrets.DEVICE_CONNECTION_STRING, **client_kwargs
     )
 
 

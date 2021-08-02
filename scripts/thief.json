@@ -16,44 +16,12 @@
         "description": "Prefix string to add to all resource names.  For example, if prefix is \"bob\", then this will deploy resources with names that start with \"bob\""
       }
     },
-    "thief_runs_resource_group": {
-      "type": "string",
-      "minLength": 3,
-      "maxLength": 90,
-      "metadata": {
-        "description": "Name of the (already created) resource group that we plan to deploy container instances into."
-      }
-    },
-    "thief_app_insights_instrumentation_key": {
+    "app_insights_instrumentation_key": {
       "type": "string",
       "minLength": 36,
       "maxLength": 36,
       "metadata": {
         "description": "App Insights instrumentation key that we plan to use for monitoring.  Inherited from shared resources."
-      }
-    },
-    "thief_container_registry_host": {
-      "type": "string",
-      "metadata": {
-        "description": "Host name for the container registry that we plan to use.  Inherited from shared resources."
-      }
-    },
-    "thief_container_registry_password": {
-      "type": "string",
-      "metadata": {
-        "description": "Password for the container registry that we plan to use.  Inherited from shared resources."
-      }
-    },
-    "thief_container_registry_shortname": {
-      "type": "string",
-      "metadata": {
-        "description": "short name for the container registry that we plan to use (probably the hostname without the azurecr.io suffix).  Inherited from shared resources."
-      }
-    },
-    "thief_container_registry_user": {
-      "type": "string",
-      "metadata": {
-        "description": "User name for the container registry that we plan to use.  Inherited from shared resources."
       }
     },
     "user_principal_id": {
@@ -64,7 +32,7 @@
         "description": "Principal ID for the person making the deployment.  Used to give that permission access to the keyvault that we create"
       }
     },
-    "thief_shared_subscription_id": {
+    "shared_subscription_id": {
       "type": "string",
       "minLength": 36,
       "maxLength": 36,
@@ -72,7 +40,7 @@
         "description": "Subscription ID containing all of our shared resources.  Inherited from shared resources."
       }
     },
-    "thief_shared_keyvault_name": {
+    "shared_keyvault_name": {
       "type": "string",
       "minLength": 3,
       "maxLength": 24,
@@ -80,30 +48,12 @@
         "description": "Name of keyvault that contains all of our shared resources.  Inherited from shared resources."
       }
     },
-    "thief_shared_resource_group": {
+    "shared_resource_group": {
       "type": "string",
       "minLength": 3,
       "maxLength": 90,
       "metadata": {
         "description": "Name of resource group that holds all of our shared resources.  Inherited from shared resources."
-      }
-    },
-    "thief_shared_log_storage_account_name": {
-      "type": "string",
-      "metadata": {
-        "description": "Azure storage account name for log storage"
-      }
-    },
-    "thief_shared_log_storage_account_key": {
-      "type": "string",
-      "metadata": {
-        "description": "Azure storage account key for log storage"
-      }
-    },
-    "thief_shared_log_storage_share_name": {
-      "type": "string",
-      "metadata": {
-        "description": "Azure storage share name for log storage"
       }
     }
   },
@@ -187,15 +137,6 @@
         "accessPolicies": [
           {
             "tenantId": "[subscription().tenantId]",
-            "objectId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'thief-container-identity')).principalId]",
-            "permissions": {
-              "secrets": [
-                "get"
-              ]
-            }
-          },
-          {
-            "tenantId": "[subscription().tenantId]",
             "objectId": "[parameters('user_principal_id')]",
             "permissions": {
               "keys": [
@@ -210,23 +151,14 @@
             }
           }
         ]
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'thief-container-identity')]"
-      ]
-    },
-    {
-      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-      "apiVersion": "2018-11-30",
-      "name": "thief-container-identity",
-      "location": "[parameters('location')]"
+      }
     },
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-APP-INSIGHTS-INSTRUMENTATION-KEY', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/APP-INSIGHTS-INSTRUMENTATION-KEY', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
-        "value": "[parameters('thief_app_insights_instrumentation_key')]",
+        "value": "[parameters('app_insights_instrumentation_key')]",
         "attributes": {
           "enabled": true
         }
@@ -238,63 +170,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-CONTAINER-REGISTRY-HOST', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_container_registry_host')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-CONTAINER-REGISTRY-PASSWORD', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_container_registry_password')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-CONTAINER-REGISTRY-SHORTNAME', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_container_registry_shortname')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-CONTAINER-REGISTRY-USER', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_container_registry_user')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-DEVICE-GROUP-SYMMETRIC-KEY', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/DEVICE-GROUP-SYMMETRIC-KEY', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "Incomplete deployment. This value should be populated by create-thief-instance.sh",
         "attributes": {
@@ -308,7 +184,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-DEVICE-ID-SCOPE', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/DEVICE-ID-SCOPE', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "[reference(resourceId('Microsoft.Devices/provisioningServices', format('{0}-thief-dps', parameters('prefix')))).idScope]",
         "attributes": {
@@ -323,7 +199,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-DEVICE-PROVISIONING-HOST', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/DEVICE-PROVISIONING-HOST', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "[reference(resourceId('Microsoft.Devices/provisioningServices', format('{0}-thief-dps', parameters('prefix')))).deviceProvisioningHostName]",
         "attributes": {
@@ -338,7 +214,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-EVENTHUB-CONNECTION-STRING', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/EVENTHUB-CONNECTION-STRING', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "[format('Endpoint={0};SharedAccessKeyName={1};SharedAccessKey={2};EntityPath={3}', reference(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix')))).eventHubEndpoints.events.endpoint, listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].keyName, listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].primaryKey, reference(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix')))).eventHubEndpoints.events.path)]",
         "attributes": {
@@ -353,7 +229,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-EVENTHUB-CONSUMER-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/EVENTHUB-CONSUMER-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "$default",
         "attributes": {
@@ -367,7 +243,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-IOTHUB-NAME', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/IOTHUB-NAME', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "[format('{0}-thief-hub', parameters('prefix'))]",
         "attributes": {
@@ -382,7 +258,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "[resourceGroup().name]",
         "attributes": {
@@ -396,21 +272,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-RUNS-RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_runs_resource_group')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-SERVICE-CONNECTION-STRING', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/IOTHUB-CONNECTION-STRING', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "[format('HostName={0}.azure-devices.net;SharedAccessKeyName={1};SharedAccessKey={2}', format('{0}-thief-hub', parameters('prefix')), listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].keyName, listKeys(resourceId('Microsoft.Devices/IotHubs', format('{0}-thief-hub', parameters('prefix'))), '2020-04-01').value[0].primaryKey)]",
         "attributes": {
@@ -425,7 +287,7 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-SUBSCRIPTION-ID', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/SUBSCRIPTION-ID', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
         "value": "[subscription().subscriptionId]",
         "attributes": {
@@ -439,24 +301,9 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-USER-RESOURCE-ID', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/SHARED-SUBSCRIPTION-ID', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
-        "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'thief-container-identity')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'thief-container-identity')]",
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-SHARED-SUBSCRIPTION-ID', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_shared_subscription_id')]",
+        "value": "[parameters('shared_subscription_id')]",
         "attributes": {
           "enabled": true
         }
@@ -468,9 +315,9 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-SHARED-KEYVAULT-NAME', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/SHARED-KEYVAULT-NAME', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
-        "value": "[parameters('thief_shared_keyvault_name')]",
+        "value": "[parameters('shared_keyvault_name')]",
         "attributes": {
           "enabled": true
         }
@@ -482,51 +329,9 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-SHARED-RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
+      "name": "[format('{0}/SHARED-RESOURCE-GROUP', format('{0}-thief-kv', parameters('prefix')))]",
       "properties": {
-        "value": "[parameters('thief_shared_resource_group')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-SHARED-LOG-STORAGE-ACCOUNT-NAME', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_shared_log_storage_account_name')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-SHARED-LOG-STORAGE-ACCOUNT-KEY', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_shared_log_storage_account_key')]",
-        "attributes": {
-          "enabled": true
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', format('{0}-thief-kv', parameters('prefix')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "apiVersion": "2016-10-01",
-      "name": "[format('{0}/THIEF-SHARED-LOG-STORAGE-SHARE-NAME', format('{0}-thief-kv', parameters('prefix')))]",
-      "properties": {
-        "value": "[parameters('thief_shared_log_storage_share_name')]",
+        "value": "[parameters('shared_resource_group')]",
         "attributes": {
           "enabled": true
         }
@@ -537,19 +342,19 @@
     }
   ],
   "outputs": {
-    "thief_subscription_id": {
+    "subscription_id": {
       "type": "string",
       "value": "[subscription().subscriptionId]"
     },
-    "thief_iothub_name": {
+    "iothub_name": {
       "type": "string",
       "value": "[format('{0}-thief-hub', parameters('prefix'))]"
     },
-    "thief_dps_instance_name": {
+    "dps_instance_name": {
       "type": "string",
       "value": "[format('{0}-thief-dps', parameters('prefix'))]"
     },
-    "thief_keyvault_name": {
+    "keyvault_name": {
       "type": "string",
       "value": "[format('{0}-thief-kv', parameters('prefix'))]"
     }

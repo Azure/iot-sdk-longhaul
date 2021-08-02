@@ -81,8 +81,7 @@ fi
 #############################
 # set variables based on args
 #############################
-thief_resource_group=${prefix}_thief_rg
-thief_runs_resource_group=${prefix}_thief_runs_rg
+resource_group=${prefix}_thief_rg
 
 # warn the user
 
@@ -97,8 +96,7 @@ if $show_output; then
     echo_detail \* ${location}
     echo_detail 
     echo_detail Under the following resource groups:
-    echo_detail \* ${thief_resource_group}
-    echo_detail \* ${thief_runs_resource_group}
+    echo_detail \* ${resource_group}
     echo_detail
     echo_detail "(Use 'az account list' and 'az account set' to change the subscription.)"
     echo_detail
@@ -120,15 +118,9 @@ fi
 ########################
 # create resource groups
 ########################
-echo_detail "Creating ${thief_resource_group}"
+echo_detail "Creating ${resource_group}"
 az group create \
-    -n ${thief_resource_group} \
-    --location ${location} \
-> /dev/null
-
-echo_detail "Creating ${thief_runs_resource_group}"
-az group create \
-    -n ${thief_runs_resource_group} \
+    -n ${resource_group} \
     --location ${location} \
 > /dev/null
 
@@ -138,38 +130,30 @@ az group create \
 # TODO: use bicep parameter that reads the keyvault instead of passing the value as a parameter.
 # This is blocked by https://github.com/Azure/bicep/issues/1028
 deployment_name=thief-${RANDOM}
-echo_detail "Running deployment ${deployment_name} on ${thief_resource_group}"
+echo_detail "Running deployment ${deployment_name} on ${resource_group}"
 outputs=$(az deployment group create \
     -f ${script_dir}/thief.json \
-    -g ${thief_resource_group} \
+    -g ${resource_group} \
     --name ${deployment_name} \
     --query properties.outputs \
     --parameters \
         location=${location} \
         prefix=${prefix} \
         user_principal_id=${user_principal_id} \
-        thief_runs_resource_group=${thief_runs_resource_group} \
-        thief_app_insights_instrumentation_key=${THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY} \
-        thief_container_registry_host=${THIEF_CONTAINER_REGISTRY_HOST} \
-        thief_container_registry_password=${THIEF_CONTAINER_REGISTRY_PASSWORD} \
-        thief_container_registry_shortname=${THIEF_CONTAINER_REGISTRY_SHORTNAME} \
-        thief_container_registry_user=${THIEF_CONTAINER_REGISTRY_USER} \
-        thief_shared_subscription_id=${THIEF_SHARED_SUBSCRIPTION_ID} \
-        thief_shared_keyvault_name=${THIEF_SHARED_KEYVAULT_NAME} \
-        thief_shared_resource_group=${THIEF_SHARED_RESOURCE_GROUP} \
-        thief_shared_log_storage_account_name=${THIEF_SHARED_LOG_STORAGE_ACCOUNT_NAME} \
-        thief_shared_log_storage_account_key=${THIEF_SHARED_LOG_STORAGE_ACCOUNT_KEY} \
-        thief_shared_log_storage_share_name=${THIEF_SHARED_LOG_STORAGE_SHARE_NAME} \
+        app_insights_instrumentation_key=${APP_INSIGHTS_INSTRUMENTATION_KEY} \
+        shared_subscription_id=${SHARED_SUBSCRIPTION_ID} \
+        shared_keyvault_name=${SHARED_KEYVAULT_NAME} \
+        shared_resource_group=${SHARED_RESOURCE_GROUP} \
     )
 
 ####################################
 # capture output for post-processing
 ####################################
-thief_enrollment_id=${prefix}-thief-enrollment
-thief_subscription_id=$(echo ${outputs} | jq -r .thief_subscription_id.value)
-thief_iothub_name=$(echo ${outputs} | jq -r .thief_iothub_name.value)
-thief_dps_instance_name=$(echo ${outputs} | jq -r .thief_dps_instance_name.value)
-thief_keyvault_name=$(echo ${outputs} | jq -r .thief_keyvault_name.value)
+enrollment_id=${prefix}-thief-enrollment
+subscription_id=$(echo ${outputs} | jq -r .subscription_id.value)
+iothub_name=$(echo ${outputs} | jq -r .iothub_name.value)
+dps_instance_name=$(echo ${outputs} | jq -r .dps_instance_name.value)
+keyvault_name=$(echo ${outputs} | jq -r .keyvault_name.value)
 
 ###################
 # create DPS groups
@@ -177,19 +161,19 @@ thief_keyvault_name=$(echo ${outputs} | jq -r .thief_keyvault_name.value)
 echo_detail Creating symmetric key deployment group
 # OK for this to fail in case the enrollment group already exists
 az iot dps enrollment-group create \
-    --resource-group ${thief_resource_group} \
-    --subscription ${thief_subscription_id} \
-    --iot-hub-host-name ${thief_iothub_name}.azure-devices.net \
-    --dps-name ${thief_dps_instance_name} \
-    --enrollment-id ${thief_enrollment_id} > /dev/null || echo 
+    --resource-group ${resource_group} \
+    --subscription ${subscription_id} \
+    --iot-hub-host-name ${iothub_name}.azure-devices.net \
+    --dps-name ${dps_instance_name} \
+    --enrollment-id ${enrollment_id} > /dev/null || echo 
 
 echo_detail Fetching deployment group key
-thief_device_group_symmetric_key="$(\
+device_group_symmetric_key="$(\
     az iot dps enrollment-group show \
-        --resource-group ${thief_resource_group} \
-        --subscription ${thief_subscription_id} \
-        --dps-name ${thief_dps_instance_name} \
-        --enrollment-id ${thief_enrollment_id} \
+        --resource-group ${resource_group} \
+        --subscription ${subscription_id} \
+        --dps-name ${dps_instance_name} \
+        --enrollment-id ${enrollment_id} \
         --show-keys \
         -o tsv \
         --query attestation.symmetricKey.primaryKey \
@@ -197,18 +181,16 @@ thief_device_group_symmetric_key="$(\
 
 echo_detail Saving deployment group key to keyvault
 az keyvault secret set \
-    --subscription ${thief_subscription_id} \
-    --vault-name ${thief_keyvault_name} \
-    --name THIEF-DEVICE-GROUP-SYMMETRIC-KEY \
-    --value "${thief_device_group_symmetric_key}" > /dev/null
+    --subscription ${subscription_id} \
+    --vault-name ${keyvault_name} \
+    --name DEVICE-GROUP-SYMMETRIC-KEY \
+    --value "${device_group_symmetric_key}" > /dev/null
 
 ################
 #success message
 ################
 echo_detail Deployment ${deployment_name} success
-echo_detail To activate this environment, run:
-echo export THIEF_SUBSCRIPTION_ID=\"${thief_subscription_id}\" \&\& \\
-echo export THIEF_KEYVAULT_NAME=\"${thief_keyvault_name}\" \&\& \\
-echo source \"${script_dir}/../scripts/fetch-secrets.sh\"
+echo_detail To load variables into _thief_secrets.json, run
+echo \"${script_dir}/../scripts/secrets-to-json.sh ${subscription_id} ${keyvault_name}\"
 
 

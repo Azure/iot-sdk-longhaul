@@ -38,7 +38,7 @@ class TestPnpSetProperties(object):
         await client.update_client_properties(patch)
 
         while True:
-            msg = message_factory({}, cmd=Commands.GET_DIGITAL_TWIN)
+            msg = message_factory({}, cmd=Commands.GET_PNP_PROPERTIES)
             await client.send_message(msg.message)
 
             await msg.running_op.event.wait()
@@ -46,7 +46,7 @@ class TestPnpSetProperties(object):
             if (
                 json.loads(msg.running_op.result_message.data)
                 .get(Fields.THIEF, {})
-                .get(Fields.DIGITAL_TWIN_CONTENTS, {})
+                .get(Fields.PNP_PROPERTIES_CONTENTS, {})
                 .get(random_key, None)
                 == random_content
             ):
@@ -93,8 +93,8 @@ class TestPnpSetProperties(object):
             message_factory(
                 {
                     Fields.THIEF: {
-                        Fields.CMD: Commands.UPDATE_DIGITAL_TWIN,
-                        Fields.DIGITAL_TWIN_UPDATE_PATCH: [
+                        Fields.CMD: Commands.UPDATE_PNP_PROPERTIES,
+                        Fields.PNP_PROPERTIES_UPDATE_PATCH: [
                             {"op": "add", "path": "/" + random_key, "value": random_content}
                         ],
                     }

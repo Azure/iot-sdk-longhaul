@@ -26,7 +26,7 @@ def run_id():
 
 @pytest.fixture(scope="session")
 def requested_service_pool():
-    return thief_secrets.THIEF_REQUESTED_SERVICE_POOL
+    return thief_secrets.REQUESTED_SERVICE_POOL
 
 
 @pytest.fixture(scope="module")

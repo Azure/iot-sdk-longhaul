@@ -14,7 +14,7 @@ stats = stats_module.stats
 view_manager = stats.view_manager
 stats_recorder = stats.stats_recorder
 
-app_insights_instrumentation_key = thief_secrets.THIEF_APP_INSIGHTS_INSTRUMENTATION_KEY
+app_insights_instrumentation_key = thief_secrets.APP_INSIGHTS_INSTRUMENTATION_KEY
 app_insights_connection_string = "InstrumentationKey={}".format(app_insights_instrumentation_key)
 
 

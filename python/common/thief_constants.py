@@ -143,18 +143,18 @@ class Fields(object):
     # Fields inside C2D messages used for testing get_digital_twin functionality
     # --------------------------------------------------------------------------
 
-    # Contents of digital twin, as returned by get_digital_twin function
-    DIGITAL_TWIN_CONTENTS = "digitalTwinContents"
+    # Contents of PNP properties, as returned by get_digital_twin function
+    PNP_PROPERTIES_CONTENTS = "pnpPropertiesContents"
 
     # -----------------------------------------------------------------------------------
     # Fields inside telemetry messages used for testing update_digital_twin functionality
     # -----------------------------------------------------------------------------------
 
-    # Digital twin patch to send to update_digital_twin
-    DIGITAL_TWIN_UPDATE_PATCH = "digitalTwinUpdatePatch"
+    # PnP properties update patch to send to update_digital_twin
+    PNP_PROPERTIES_UPDATE_PATCH = "pnpPropertiesUpdatePatch"
 
     # ETAG to use when calling update_digital_twin
-    DIGITAL_TWIN_UPDATE_ETAG = "digitalTwinUpdateEtag"
+    PNP_PROPERITES_UPDATE_ETAG = "pnpPropertiesUpdateEtag"
 
     # -----------------------------------------------------------------------------------------------------------
     # Fields inside telemetry messages used for testing invoke_command and invoke_component_command functionality
@@ -210,14 +210,14 @@ class Commands(object):
     # Send C2d Message
     SEND_C2D = "sendC2d"
 
-    # Get the digital twin
-    GET_DIGITAL_TWIN = "getDigitalTwin"
+    # Get Pnp properties
+    GET_PNP_PROPERTIES = "getPnpProperties"
 
-    # Update the digital twin
-    UPDATE_DIGITAL_TWIN = "updateDigitalTwin"
+    # Update Pnp properites
+    UPDATE_PNP_PROPERTIES = "updatePnpProperites"
 
-    # Invoke a digital twin command
-    INVOKE_DIGITAL_TWIN_COMMAND = "invokeDigitalTwinCommand"
+    # Invoke a PnP command
+    INVOKE_PNP_CPOMMAND = "invokePnpCommand"
 
     # ------------------------------------------------
     # Values for the command field inside c2d messages
