@@ -12,6 +12,7 @@ json_file_path = os.path.realpath(os.path.join(this_file_path, "../../_thief_sec
 
 with open(json_file_path, "r") as f:
     secrets = json.load(f)
+
 # Name of keyvault that stores thief secrets
 KEYVAULT_NAME = secrets.get("keyvaultName", None)
 
@@ -65,6 +66,15 @@ SHARED_RESOURCE_GROUP = secrets.get("sharedResourceGroup", None)
 
 # Connection string for device under test
 DEVICE_CONNECTION_STRING = secrets.get("deviceConnectionString", None)
+
+# Set default values
+if not EVENTHUB_CONSUMER_GROUP:
+    EVENTHUB_CONSUMER_GROUP = "$default"
+if not SERVICE_POOL:
+    SERVICE_POOL = "{}_desktop_pool".format(os.environ["USER"])
+if not REQUESTED_SERVICE_POOL:
+    REQUESTED_SERVICE_POOL = SERVICE_POOL
+
 
 del secrets
 del this_file_path
