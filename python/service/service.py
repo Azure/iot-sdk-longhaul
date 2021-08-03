@@ -251,7 +251,7 @@ class ServiceApp(object):
         )
 
         logger.info(
-            "received command invoke command={}, componet={},  guid={}".format(
+            "received command invoke command={}, component={},  guid={}".format(
                 command_name, command_component_name, command_guid
             ),
             extra=custom_props(device_data.device_id, device_data.run_id),
