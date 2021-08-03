@@ -29,6 +29,7 @@ def command_response_status():
     return 299
 
 
+@pytest.mark.pnp
 @pytest.mark.describe("Pnp Commands")
 class TestPnpCommands(object):
     @pytest.mark.it("Can handle a simple command")
@@ -55,7 +56,7 @@ class TestPnpCommands(object):
     )
     async def test_handle_method_call(
         self,
-        paired_client,
+        client,
         message_factory,
         random_content_factory,
         event_loop,
@@ -66,8 +67,6 @@ class TestPnpCommands(object):
         include_request_payload,
         include_response_payload,
     ):
-        client = paired_client.client
-
         actual_request = None
 
         if include_request_payload:

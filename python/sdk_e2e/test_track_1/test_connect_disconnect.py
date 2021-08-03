@@ -14,10 +14,10 @@ pytestmark = pytest.mark.asyncio
 @pytest.mark.describe("Device Client")
 class TestConnectDisconnect(object):
     @pytest.mark.it("Successfully pairs with thief service app")
-    async def test_pairing(self, paired_client):
-        assert paired_client.client
-        assert paired_client.client.connected
-        assert paired_client.service_instance_id
+    async def test_pairing(self, client, service_instance_id):
+        assert client
+        assert client.connected
+        assert service_instance_id
         logger.info("paired")
 
     @pytest.mark.it("Can disconnect and reconnect")
@@ -33,6 +33,14 @@ class TestConnectDisconnect(object):
 
         await client.connect()
         assert client.connected
+
+
+@pytest.mark.dropped_connection
+@pytest.mark.describe("Device Client with dropped connection")
+class TestConnectDisconnectDroppedConnection(object):
+    @pytest.fixture(scope="class")
+    def client_kwargs(self):
+        return {"keep_alive": 10}
 
     @pytest.mark.it("disconnects when network drops all outgoing packets")
     async def test_disconnect_on_drop_outgoing(self, connected_client, dropper):

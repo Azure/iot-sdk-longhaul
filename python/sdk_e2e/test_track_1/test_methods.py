@@ -43,7 +43,7 @@ class TestMethods(object):
     )
     async def test_handle_method_call(
         self,
-        paired_client,
+        client,
         message_factory,
         random_content_factory,
         event_loop,
@@ -52,8 +52,6 @@ class TestMethods(object):
         include_request_payload,
         include_response_payload,
     ):
-        client = paired_client.client
-
         actual_request = None
 
         if include_request_payload:
