@@ -327,5 +327,4 @@ class TestPnpSetProperties(object):
         assert metadata["desiredValue"] == random_property_value
 
 
-# TODO: test to verify __t: c gets set on sending and received when receiving
 # TODO: etag tests, version tests
