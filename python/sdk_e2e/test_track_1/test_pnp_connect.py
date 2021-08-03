@@ -22,6 +22,7 @@ def client_kwargs(pnp_model_id):
     return {"model_id": pnp_model_id}
 
 
+@pytest.mark.pnp
 @pytest.mark.describe("Device Client PNP Connection")
 class TestPnpConnect(object):
     @pytest.mark.it("Can connect and disconnect with model_id set")
@@ -41,8 +42,7 @@ class TestPnpConnect(object):
         assert client.connected
 
     @pytest.mark.it("Shows up as a PNP device in the service client")
-    async def test_model_id_in_service_client(self, paired_client, pnp_model_id, message_factory):
-        client = paired_client.client
+    async def test_model_id_in_service_client(self, client, pnp_model_id, message_factory):
 
         assert client._mqtt_pipeline.pipeline_configuration.model_id == pnp_model_id
         assert client.connected

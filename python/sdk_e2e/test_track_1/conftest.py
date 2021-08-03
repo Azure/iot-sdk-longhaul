@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 
 PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS = 180
-PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS = 10
+PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS = 20
 
 
 def create_message_from_dict(payload, service_instance_id, run_id):
@@ -53,21 +53,21 @@ def event_loop():
 
 @pytest.fixture(scope="class")
 def client_kwargs():
-    return {"keep_alive": 10}
+    return {}
 
 
 @pytest.fixture(scope="class")
-def client(client_kwargs):
+def brand_new_client(client_kwargs):
     return IoTHubDeviceClient.create_from_connection_string(
         thief_secrets.DEVICE_CONNECTION_STRING, **client_kwargs
     )
 
 
 @pytest.fixture(scope="class")
-async def connected_client(client):
-    await client.connect()
-    yield client
-    await client.shutdown()
+async def connected_client(brand_new_client):
+    await brand_new_client.connect()
+    yield brand_new_client
+    await brand_new_client.shutdown()
 
 
 @pytest.fixture(scope="class")
@@ -153,13 +153,34 @@ async def paired_client(
     assert False
 
 
+@pytest.fixture(scope="function")
+async def client(paired_client):
+    yield paired_client.client
+
+    # clean up all old handlers from this test.
+    # Do not clean up on_message_received.  That will break c2d_waiter and the pairing process
+    if paired_client.client.on_twin_desired_properties_patch_received:
+        paired_client.client.on_twin_desired_properties_patch_received = None
+    if paired_client.client.on_method_request_received:
+        paired_client.client.on_method_request_received = None
+
+    try:
+        if paired_client.client.on_writable_property_update_request_received:
+            paired_client.client.on_writable_property_update_request_received = None
+        if paired_client.client.on_command_request_received:
+            paired_client.client.on_command_request_received = None
+    except AttributeError:
+        # PNP properties aren't in this build yet.
+        pass
+
+
 @pytest.fixture(scope="class")
 def service_instance_id(paired_client):
     return paired_client.service_instance_id
 
 
 @pytest.fixture(scope="class")
-def message_factory(run_id, paired_client, op_factory):
+def message_factory(run_id, service_instance_id, op_factory):
     def wrapper_function(payload, cmd=None):
         running_op = op_factory()
 
@@ -170,7 +191,7 @@ def message_factory(run_id, paired_client, op_factory):
         if cmd:
             payload[Fields.THIEF][Fields.CMD] = cmd
 
-        message = create_message_from_dict(payload, paired_client.service_instance_id, run_id)
+        message = create_message_from_dict(payload, service_instance_id, run_id)
 
         return collections.namedtuple("WrappedMessage", "message running_op")(message, running_op)
 

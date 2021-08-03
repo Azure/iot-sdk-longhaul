@@ -27,15 +27,13 @@ def test_message(message_factory):
 @pytest.mark.describe("Device Client send_message method")
 class TestSendMessage(object):
     @pytest.mark.it("Can send a simple message")
-    async def test_send_message(self, paired_client, test_message):
-        client = paired_client.client
+    async def test_send_message(self, client, test_message):
 
         await client.send_message(test_message.message)
         await test_message.running_op.event.wait()
 
     @pytest.mark.it("Connects the transport if necessary")
-    async def test_connect_if_necessary(self, paired_client, test_message):
-        client = paired_client.client
+    async def test_connect_if_necessary(self, client, test_message):
 
         await client.disconnect()
         assert not client.connected
@@ -45,9 +43,16 @@ class TestSendMessage(object):
 
         await test_message.running_op.event.wait()
 
+
+@pytest.mark.dropped_connection
+@pytest.mark.describe("Device Client send_message method with dropped connections")
+class TestSendMessageDroppedConnection(object):
+    @pytest.fixture(scope="class")
+    def client_kwargs(self):
+        return {"keep_alive": 10}
+
     @pytest.mark.it("Sends if connection drops before sending")
-    async def test_sends_if_drop_before_sending(self, paired_client, test_message, dropper):
-        client = paired_client.client
+    async def test_sends_if_drop_before_sending(self, client, test_message, dropper):
 
         assert client.connected
 
@@ -67,8 +72,7 @@ class TestSendMessage(object):
         await test_message.running_op.event.wait()
 
     @pytest.mark.it("Sends if connection rejects send")
-    async def test_sends_if_reject_before_sending(self, paired_client, test_message, dropper):
-        client = paired_client.client
+    async def test_sends_if_reject_before_sending(self, client, test_message, dropper):
 
         assert client.connected
 

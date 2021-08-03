@@ -46,8 +46,7 @@ async def clean_reported_properties(client):
 @pytest.mark.describe("Device Client Reported Properties")
 class TestReportedProperties(object):
     @pytest.mark.it("Can set a simple reported property")
-    async def test_simple_patch(self, paired_client, running_op, reported_props):
-        client = paired_client.client
+    async def test_simple_patch(self, client, running_op, reported_props):
 
         await client.patch_twin_reported_properties(reported_props)
         await running_op.event.wait()
@@ -58,8 +57,7 @@ class TestReportedProperties(object):
         await clean_reported_properties(client)
 
     @pytest.mark.it("Connects the transport if necessary")
-    async def test_connect_if_necessary(self, paired_client, running_op, reported_props):
-        client = paired_client.client
+    async def test_connect_if_necessary(self, client, running_op, reported_props):
 
         await client.disconnect()
 
@@ -73,11 +71,16 @@ class TestReportedProperties(object):
 
         await clean_reported_properties(client)
 
+
+@pytest.mark.dropped_connection
+@pytest.mark.describe("Device Client Reported Properties with dropped connection")
+class TestReportedPropertiesDroppedConnection(object):
+    @pytest.fixture(scope="class")
+    def client_kwargs(self):
+        return {"keep_alive": 10}
+
     @pytest.mark.it("Sends if connection drops before sending")
-    async def test_sends_if_drop_before_sending(
-        self, paired_client, running_op, reported_props, dropper
-    ):
-        client = paired_client.client
+    async def test_sends_if_drop_before_sending(self, client, running_op, reported_props, dropper):
 
         assert client.connected
         dropper.drop_outgoing()
@@ -99,9 +102,8 @@ class TestReportedProperties(object):
 
     @pytest.mark.it("Sends if connection rejects send")
     async def test_sends_if_reject_before_sending(
-        self, paired_client, running_op, reported_props, dropper
+        self, client, running_op, reported_props, dropper
     ):
-        client = paired_client.client
 
         assert client.connected
         dropper.reject_outgoing()
@@ -125,8 +127,8 @@ class TestReportedProperties(object):
 @pytest.mark.describe("Device Client Desired Properties")
 class TestDesiredProperties(object):
     @pytest.mark.it("Receives a patch for a simple desired property")
-    async def test_simple_patch(self, paired_client, message_factory, random_content, event_loop):
-        client = paired_client.client
+    async def test_simple_patch(self, client, message_factory, random_content, event_loop):
+
         received_patch = None
         received = asyncio.Event()
 

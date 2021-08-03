@@ -20,15 +20,13 @@ def client_kwargs(pnp_model_id):
     return {"model_id": pnp_model_id}
 
 
+@pytest.mark.pnp
 @pytest.mark.describe("Device Client PNP properties")
 class TestPnpSetProperties(object):
     @pytest.mark.it(
         "Can set a root reported property value and retrieve it via the service get_digital_twin function"
     )
-    async def test_set_reported_property(
-        self, paired_client, message_factory, random_key, random_content
-    ):
-        client = paired_client.client
+    async def test_set_reported_property(self, client, message_factory, random_key, random_content):
         assert client.connected
 
         patch = ClientPropertyCollection()
@@ -57,8 +55,7 @@ class TestPnpSetProperties(object):
             await asyncio.sleep(5)
 
     @pytest.mark.it("Can retrieve a root reported property via the get_client_properties function")
-    async def test_get_reported_property(self, paired_client, random_key, random_content):
-        client = paired_client.client
+    async def test_get_reported_property(self, client, random_key, random_content):
         assert client.connected
 
         patch = ClientPropertyCollection()
@@ -73,9 +70,8 @@ class TestPnpSetProperties(object):
 
     @pytest.mark.it("Can retrieve a root desired property via the get_client_properties function")
     async def test_receive_desired_property_patch(
-        self, event_loop, paired_client, random_key, random_content, message_factory
+        self, event_loop, client, random_key, random_content, message_factory
     ):
-        client = paired_client.client
         received_patch = None
         received = asyncio.Event()
 
