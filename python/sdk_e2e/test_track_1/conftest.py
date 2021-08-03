@@ -9,6 +9,7 @@ import time
 import collections
 import uuid
 import random
+import string
 from azure.iot.device.iothub import Message
 from azure.iot.device.iothub.aio import IoTHubDeviceClient
 from thief_constants import Fields, Commands, Const
@@ -207,7 +208,7 @@ def op_factory(running_operation_list):
 
 
 @pytest.fixture(scope="class")
-def reported_props_factory(run_id, service_instance_id, random_content_factory):
+def reported_props_factory(run_id, service_instance_id, random_dict_factory):
     def factory_function(running_op):
         return {
             Fields.THIEF: {
@@ -217,7 +218,7 @@ def reported_props_factory(run_id, service_instance_id, random_content_factory):
                     Fields.REPORTED_PROPERTY_TEST: {
                         Fields.E2E_PROPERTY: {
                             Fields.ADD_OPERATION_ID: running_op.id,
-                            Fields.RANDOM_CONTENT: random_content_factory(),
+                            Fields.RANDOM_CONTENT: random_dict_factory(),
                         }
                     }
                 },
@@ -237,13 +238,26 @@ def reported_props(reported_props_factory, running_op):
     return reported_props_factory(running_op)
 
 
-@pytest.fixture(scope="class")
-def random_content_factory():
+@pytest.fixture(scope="session")
+def random_string_factory():
+    def factory_function(length=64):
+        return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+
+    return factory_function
+
+
+@pytest.fixture(scope="function")
+def random_string(random_string_factory):
+    return random_string_factory()
+
+
+@pytest.fixture(scope="session")
+def random_dict_factory(random_string_factory):
     def factory_function():
         return {
             "random_guid": str(uuid.uuid4()),
             "sub_object": {
-                "string_value": str(uuid.uuid4()),
+                "string_value": random_string_factory(),
                 "bool_value": random.random() > 0.5,
                 "int_value": random.randint(-65535, 65535),
             },
@@ -253,8 +267,8 @@ def random_content_factory():
 
 
 @pytest.fixture(scope="function")
-def random_content(random_content_factory):
-    return random_content_factory()
+def random_dict(random_dict_factory):
+    return random_dict_factory()
 
 
 @pytest.fixture(scope="session")
@@ -262,14 +276,36 @@ def pnp_model_id():
     return "dtmi:com:example:TemperatureController;2"
 
 
-@pytest.fixture(scope="session")
-def random_key_factory():
-    def factory_function():
-        return "prop{}".format(random.choice([4]))
-
-    return factory_function
+@pytest.fixture
+def pnp_command_name():
+    return "this_is_my_command_name"
 
 
-@pytest.fixture(scope="function")
-def random_key(random_key_factory):
-    return random_key_factory()
+@pytest.fixture
+def pnp_component_name():
+    return "this_is_my_component_name"
+
+
+@pytest.fixture
+def pnp_command_response_status():
+    return 299
+
+
+@pytest.fixture
+def pnp_writable_property_name():
+    return "writable_property_2"
+
+
+@pytest.fixture
+def pnp_read_only_property_name():
+    return "read_only_property"
+
+
+@pytest.fixture
+def pnp_ack_code():
+    return 266
+
+
+@pytest.fixture
+def pnp_ack_description():
+    return "this is an ack description"

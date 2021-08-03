@@ -14,21 +14,6 @@ logger.setLevel(level=logging.INFO)
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.fixture
-def command_name():
-    return "this_is_my_command_name"
-
-
-@pytest.fixture
-def component_name():
-    return "this_is_my_component_name"
-
-
-@pytest.fixture
-def command_response_status():
-    return 299
-
-
 @pytest.mark.pnp
 @pytest.mark.describe("Pnp Commands")
 class TestPnpCommands(object):
@@ -58,11 +43,11 @@ class TestPnpCommands(object):
         self,
         client,
         message_factory,
-        random_content_factory,
+        random_dict_factory,
         event_loop,
-        command_name,
-        component_name,
-        command_response_status,
+        pnp_command_name,
+        pnp_component_name,
+        pnp_command_response_status,
         include_component_name,
         include_request_payload,
         include_response_payload,
@@ -70,12 +55,12 @@ class TestPnpCommands(object):
         actual_request = None
 
         if include_request_payload:
-            request_payload = random_content_factory()
+            request_payload = random_dict_factory()
         else:
             request_payload = ""
 
         if include_response_payload:
-            response_payload = random_content_factory()
+            response_payload = random_dict_factory()
         else:
             response_payload = None
 
@@ -90,7 +75,7 @@ class TestPnpCommands(object):
             logger.info("Sending response")
             await client.send_command_response(
                 CommandResponse.create_from_command_request(
-                    request, command_response_status, response_payload
+                    request, pnp_command_response_status, response_payload
                 )
             )
 
@@ -102,8 +87,8 @@ class TestPnpCommands(object):
             {
                 Fields.THIEF: {
                     Fields.CMD: Commands.INVOKE_PNP_COMMAND,
-                    Fields.COMMAND_NAME: command_name,
-                    Fields.COMMAND_COMPONENT_NAME: component_name,
+                    Fields.COMMAND_NAME: pnp_command_name,
+                    Fields.COMMAND_COMPONENT_NAME: pnp_component_name,
                     Fields.COMMAND_INVOKE_PAYLOAD: request_payload,
                 }
             }
@@ -115,8 +100,8 @@ class TestPnpCommands(object):
         command_response = json.loads(invoke.running_op.result_message.data)[Fields.THIEF]
 
         # verify that the method request arrived correctly
-        assert actual_request.command_name == command_name
-        assert actual_request.component_name == component_name
+        assert actual_request.command_name == pnp_command_name
+        assert actual_request.component_name == pnp_component_name
 
         if request_payload:
             assert actual_request.payload == request_payload

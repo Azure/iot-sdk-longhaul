@@ -127,7 +127,7 @@ class TestReportedPropertiesDroppedConnection(object):
 @pytest.mark.describe("Device Client Desired Properties")
 class TestDesiredProperties(object):
     @pytest.mark.it("Receives a patch for a simple desired property")
-    async def test_simple_patch(self, client, message_factory, random_content, event_loop):
+    async def test_simple_patch(self, client, message_factory, random_dict, event_loop):
 
         received_patch = None
         received = asyncio.Event()
@@ -146,7 +146,7 @@ class TestDesiredProperties(object):
                     Fields.THIEF: {
                         Fields.CMD: Commands.SET_DESIRED_PROPS,
                         Fields.DESIRED_PROPERTIES: {
-                            Fields.THIEF: {Fields.RANDOM_CONTENT: random_content}
+                            Fields.THIEF: {Fields.RANDOM_CONTENT: random_dict}
                         },
                     }
                 }
@@ -156,12 +156,12 @@ class TestDesiredProperties(object):
         await asyncio.wait_for(received.wait(), 10)
         logger.info("got it")
 
-        assert received_patch.get(Fields.THIEF, {}).get(Fields.RANDOM_CONTENT, {}) == random_content
+        assert received_patch.get(Fields.THIEF, {}).get(Fields.RANDOM_CONTENT, {}) == random_dict
 
         twin = await client.get_twin()
         assert (
             twin.get(Fields.DESIRED, {}).get(Fields.THIEF, {}).get(Fields.RANDOM_CONTENT, {})
-            == random_content
+            == random_dict
         )
 
 
