@@ -45,7 +45,7 @@ class TestMethods(object):
         self,
         client,
         message_factory,
-        random_content_factory,
+        random_dict_factory,
         event_loop,
         method_name,
         method_response_status,
@@ -55,12 +55,12 @@ class TestMethods(object):
         actual_request = None
 
         if include_request_payload:
-            request_payload = random_content_factory()
+            request_payload = random_dict_factory()
         else:
             request_payload = None
 
         if include_response_payload:
-            response_payload = random_content_factory()
+            response_payload = random_dict_factory()
         else:
             response_payload = None
 
