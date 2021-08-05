@@ -4,8 +4,7 @@
 import pytest
 import logging
 import asyncio
-import json
-from thief_constants import Fields, Commands
+from thief_constants import Fields
 from azure.iot.device.iothub import CommandResponse
 
 logger = logging.getLogger(__name__)
@@ -39,10 +38,9 @@ class TestPnpCommands(object):
             pytest.param(False, id="without component name"),
         ],
     )
-    async def test_handle_method_call(
+    async def test_handle_pnp_commmand(
         self,
         client,
-        message_factory,
         random_dict_factory,
         event_loop,
         pnp_command_name,
@@ -51,6 +49,7 @@ class TestPnpCommands(object):
         include_component_name,
         include_request_payload,
         include_response_payload,
+        pnp_service_app,
     ):
         actual_request = None
 
@@ -82,22 +81,10 @@ class TestPnpCommands(object):
         client.on_command_request_received = handle_on_command_request_received
         await asyncio.sleep(1)  # wait for subscribe, etc, to complete
 
-        # invoke the method call
-        invoke = message_factory(
-            {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.INVOKE_PNP_COMMAND,
-                    Fields.COMMAND_NAME: pnp_command_name,
-                    Fields.COMMAND_COMPONENT_NAME: pnp_component_name,
-                    Fields.COMMAND_INVOKE_PAYLOAD: request_payload,
-                }
-            }
+        # invoke the command
+        command_response = await pnp_service_app.invoke_pnp_command(
+            pnp_command_name, pnp_component_name, request_payload
         )
-        await client.send_message(invoke.message)
-
-        # wait for the response to come back via the service API call
-        await invoke.running_op.event.wait()
-        command_response = json.loads(invoke.running_op.result_message.data)[Fields.THIEF]
 
         # verify that the method request arrived correctly
         assert actual_request.command_name == pnp_command_name

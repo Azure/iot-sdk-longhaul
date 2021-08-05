@@ -3,10 +3,8 @@
 # license information.
 import pytest
 import logging
-import json
 import asyncio
 import pprint
-from thief_constants import Commands, Fields
 from azure.iot.device.iothub import ClientPropertyCollection, generate_writable_property_response
 
 logger = logging.getLogger(__name__)
@@ -18,32 +16,6 @@ pytestmark = pytest.mark.asyncio
 @pytest.fixture(scope="class")
 def client_kwargs(pnp_model_id):
     return {"model_id": pnp_model_id}
-
-
-def make_desired_property_patch(component_name, property_name, property_value):
-    logger.info("Setting {} to {}".format(property_name, property_value))
-    if component_name:
-        return {
-            Fields.THIEF: {
-                Fields.CMD: Commands.UPDATE_PNP_PROPERTIES,
-                Fields.PNP_PROPERTIES_UPDATE_PATCH: [
-                    {
-                        "op": "add",
-                        "path": "/{}".format(component_name),
-                        "value": {property_name: property_value, "$metadata": {}},
-                    }
-                ],
-            }
-        }
-    else:
-        return {
-            Fields.THIEF: {
-                Fields.CMD: Commands.UPDATE_PNP_PROPERTIES,
-                Fields.PNP_PROPERTIES_UPDATE_PATCH: [
-                    {"op": "add", "path": "/{}".format(property_name), "value": property_value}
-                ],
-            }
-        }
 
 
 @pytest.mark.pnp
@@ -59,11 +31,11 @@ class TestPnpSetProperties(object):
     async def test_set_reported_property(
         self,
         client,
-        message_factory,
         pnp_read_only_property_name,
         pnp_component_name,
         is_component_property,
         random_property_value,
+        pnp_service_app,
     ):
         assert client.connected
 
@@ -79,25 +51,14 @@ class TestPnpSetProperties(object):
         await client.update_client_properties(patch)
 
         while True:
-            msg = message_factory({}, cmd=Commands.GET_PNP_PROPERTIES)
-            await client.send_message(msg.message)
-            await msg.running_op.event.wait()
+            properties = await pnp_service_app.get_pnp_properties()
 
             if is_component_property:
-                actual_value = (
-                    json.loads(msg.running_op.result_message.data)
-                    .get(Fields.THIEF, {})
-                    .get(Fields.PNP_PROPERTIES_CONTENTS, {})
-                    .get(pnp_component_name, {})
-                    .get(pnp_read_only_property_name, None)
+                actual_value = properties.get(pnp_component_name, {}).get(
+                    pnp_read_only_property_name, None
                 )
             else:
-                actual_value = (
-                    json.loads(msg.running_op.result_message.data)
-                    .get(Fields.THIEF, {})
-                    .get(Fields.PNP_PROPERTIES_CONTENTS, {})
-                    .get(pnp_read_only_property_name, None)
-                )
+                actual_value = properties.get(pnp_read_only_property_name, None)
 
             if actual_value == random_property_value:
                 return
@@ -111,7 +72,7 @@ class TestPnpSetProperties(object):
 
             logger.warning(
                 "digital_twin_client.get_digital_twin returned {}".format(
-                    pprint.pformat(json.loads(msg.running_op.result_message.data))
+                    pprint.pformat(properties)
                 )
             )
 
@@ -161,11 +122,11 @@ class TestPnpSetProperties(object):
         self,
         event_loop,
         client,
-        message_factory,
         pnp_component_name,
         pnp_writable_property_name,
         random_property_value,
         is_component_property,
+        pnp_service_app,
     ):
         received = asyncio.Event()
 
@@ -177,14 +138,11 @@ class TestPnpSetProperties(object):
         client.on_writable_property_update_request_received = handle_on_patch_received
         await asyncio.sleep(1)
 
-        patch = message_factory(
-            make_desired_property_patch(
-                pnp_component_name if is_component_property else None,
-                pnp_writable_property_name,
-                random_property_value,
-            )
+        await pnp_service_app.update_pnp_properties(
+            pnp_component_name if is_component_property else None,
+            pnp_writable_property_name,
+            random_property_value,
         )
-        await client.send_message(patch.message)
 
         # wait for the desired property patch to arrive at the client
         # We don't actually check the contents of the patch, but the
@@ -218,13 +176,13 @@ class TestPnpSetProperties(object):
         self,
         event_loop,
         client,
-        message_factory,
         pnp_component_name,
         pnp_writable_property_name,
         random_property_value,
         is_component_property,
         pnp_ack_code,
         pnp_ack_description,
+        pnp_service_app,
     ):
         received_patch = None
         received = asyncio.Event()
@@ -239,15 +197,11 @@ class TestPnpSetProperties(object):
         await asyncio.sleep(1)
 
         # patch desired properites
-        patch = message_factory(
-            make_desired_property_patch(
-                pnp_component_name if is_component_property else None,
-                pnp_writable_property_name,
-                random_property_value,
-            )
+        await pnp_service_app.update_pnp_properties(
+            pnp_component_name if is_component_property else None,
+            pnp_writable_property_name,
+            random_property_value,
         )
-        logger.info("sending patch")
-        await client.send_message(patch.message)
         logger.info("patch sent. Waiting for desired proprety")
 
         # wait for the desired property patch to arrive at the client
@@ -283,13 +237,7 @@ class TestPnpSetProperties(object):
         await client.update_client_properties(update_patch)
 
         # verify that the reported value via digital_twin_client.get_digital_twin()
-        msg = message_factory({}, cmd=Commands.GET_PNP_PROPERTIES)
-        await client.send_message(msg.message)
-        await msg.running_op.event.wait()
-
-        props = json.loads(msg.running_op.result_message.data)[Fields.THIEF][
-            Fields.PNP_PROPERTIES_CONTENTS
-        ]
+        props = await pnp_service_app.get_pnp_properties()
         if is_component_property:
             props = props[pnp_component_name]
 
