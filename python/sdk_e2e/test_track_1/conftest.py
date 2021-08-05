@@ -15,6 +15,7 @@ from client_fixtures import (
     client,
     service_instance_id,
 )
+from service_app_fixtures import service_app, pnp_service_app
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("paho").setLevel(level=logging.DEBUG)

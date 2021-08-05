@@ -4,7 +4,7 @@
 import asyncio
 import pytest
 import logging
-from thief_constants import Fields, Commands
+from thief_constants import Fields
 
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
@@ -127,7 +127,7 @@ class TestReportedPropertiesDroppedConnection(object):
 @pytest.mark.describe("Device Client Desired Properties")
 class TestDesiredProperties(object):
     @pytest.mark.it("Receives a patch for a simple desired property")
-    async def test_simple_patch(self, client, message_factory, random_dict, event_loop):
+    async def test_simple_patch(self, client, random_dict, event_loop, service_app):
 
         received_patch = None
         received = asyncio.Event()
@@ -140,18 +140,7 @@ class TestDesiredProperties(object):
 
         client.on_twin_desired_properties_patch_received = handle_on_patch_received
 
-        await client.send_message(
-            message_factory(
-                {
-                    Fields.THIEF: {
-                        Fields.CMD: Commands.SET_DESIRED_PROPS,
-                        Fields.DESIRED_PROPERTIES: {
-                            Fields.THIEF: {Fields.RANDOM_CONTENT: random_dict}
-                        },
-                    }
-                }
-            ).message
-        )
+        await service_app.set_desired_props({Fields.THIEF: {Fields.RANDOM_CONTENT: random_dict}})
 
         await asyncio.wait_for(received.wait(), 10)
         logger.info("got it")

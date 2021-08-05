@@ -4,8 +4,7 @@
 import pytest
 import logging
 import asyncio
-import json
-from thief_constants import Fields, Commands
+from thief_constants import Fields
 from azure.iot.device.iothub import MethodResponse
 
 logger = logging.getLogger(__name__)
@@ -44,13 +43,13 @@ class TestMethods(object):
     async def test_handle_method_call(
         self,
         client,
-        message_factory,
         random_dict_factory,
         event_loop,
         method_name,
         method_response_status,
         include_request_payload,
         include_response_payload,
+        service_app,
     ):
         actual_request = None
 
@@ -79,20 +78,7 @@ class TestMethods(object):
         await asyncio.sleep(1)  # wait for subscribe, etc, to complete
 
         # invoke the method call
-        invoke = message_factory(
-            {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.INVOKE_METHOD,
-                    Fields.METHOD_NAME: method_name,
-                    Fields.METHOD_INVOKE_PAYLOAD: request_payload,
-                }
-            }
-        )
-        await client.send_message(invoke.message)
-
-        # wait for the response to come back via the service API call
-        await invoke.running_op.event.wait()
-        method_response = json.loads(invoke.running_op.result_message.data)[Fields.THIEF]
+        method_response = await service_app.invoke_method(method_name, request_payload)
 
         # verify that the method request arrived correctly
         assert actual_request.name == method_name
