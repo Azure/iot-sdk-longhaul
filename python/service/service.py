@@ -50,6 +50,22 @@ OperationResponse = collections.namedtuple("OperationResponse", "device_id opera
 OutgoingC2d = collections.namedtuple("OutgoingC2d", "device_id message props")
 
 
+def convert_binary_dict_to_string_dict(src):
+    def binary_to_string(x):
+        if isinstance(x, bytes):
+            return x.decode("utf-8")
+        else:
+            return x
+
+    if src:
+        dest = {}
+        for key, value in src.items():
+            dest[binary_to_string(key)] = binary_to_string(value)
+        return dest
+    else:
+        return src
+
+
 def custom_props(device_id, run_id=None):
     """
     helper function for adding customDimensions to logger calls at execution time
@@ -399,12 +415,46 @@ class ServiceApp(object):
                         ),
                         extra=custom_props(device_id, device_data.run_id),
                     )
-                    self.outgoing_operation_response_queue.put(
-                        OperationResponse(device_id=device_id, operation_id=received_operation_id,)
-                    )
+                    if Flags.RETURN_EVENTHUB_MESSAGE_CONTENTS in thief.get(Fields.FLAGS, []):
+                        payload = {
+                            Fields.THIEF: {
+                                Fields.CMD: Commands.OPERATION_RESPONSE,
+                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                                Fields.RUN_ID: received_run_id,
+                                Fields.OPERATION_ID: received_operation_id,
+                                Fields.EVENTHUB_MESSAGE_CONTENTS: {
+                                    Fields.EVENTHUB_MESSAGE_BODY: body,
+                                    Fields.EVENTHUB_CONTENT_TYPE: event.content_type,
+                                    Fields.EVENTHUB_CORRELATION_ID: event.correlation_id,
+                                    Fields.EVENTHUB_MESSAGE_ID: event.message_id,
+                                    Fields.EVENTHUB_SYSTEM_PROPERTIES: convert_binary_dict_to_string_dict(
+                                        event.system_properties
+                                    ),
+                                    Fields.EVENTHUB_PROPERTIES: convert_binary_dict_to_string_dict(
+                                        event.properties
+                                    ),
+                                },
+                            }
+                        }
+                        message = json.dumps(payload)
 
-                    if Flags.RESPOND_IMMEDIATELY in thief.get(Fields.FLAGS, []):
-                        self.force_send_operation_response.set()
+                        self.outgoing_c2d_queue.put(
+                            OutgoingC2d(
+                                device_id=device_id,
+                                message=message,
+                                props=Const.JSON_TYPE_AND_ENCODING,
+                            )
+                        )
+
+                    else:
+                        self.outgoing_operation_response_queue.put(
+                            OperationResponse(
+                                device_id=device_id, operation_id=received_operation_id,
+                            )
+                        )
+
+                        if Flags.RESPOND_IMMEDIATELY in thief.get(Fields.FLAGS, []):
+                            self.force_send_operation_response.set()
 
                 elif cmd == Commands.SET_DESIRED_PROPS:
                     desired = thief.get(Fields.DESIRED_PROPERTIES, {})

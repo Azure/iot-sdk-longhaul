@@ -139,6 +139,10 @@ groups:
           - name: TEST_C2D_PAYLOAD
             value: "testC2dPayload"
             desc: "payload used for testing C2d Messages"
+          - name: EVENTHUB_MESSAGE_CONTENTS
+            value: "eventhubMessageContents"
+            desc: "Details on the eventhub message that this C2d message is acknowledging"
+
       - name: MethodTestTelemetry
         desc: "Fields inside telemetry messages for testing methods"
         values:
@@ -205,6 +209,33 @@ groups:
           - name: COMMAND_RESPONSE_STATUS_CODE
             value: "commandResponseStatusCode"
             desc: "Status code sent with command response"
+      - name: EventHubMessageC2d
+        desc: "Fields inside c2d messages used when acknowledging eventhub messages. Included when the returnEventhubMessageContents flag  is set"
+        values:
+          - name: EVENTHUB_MESSAGE_BODY
+            value: eventhubMessageBody
+            desc: "body of the eventhub message"
+          - name: EVENTHUB_CONTENT_TYPE
+            value: "eventhubContentType"
+            desc: "content type of the eventhub message"
+          - name: EVENTHUB_CORRELATION_ID
+            value: "eventhubCorrelationId"
+            desc: "correlation id of the eventhub message"
+          - name: EVENTHUB_MESSAGE_ID
+            value: "eventhubMessageId"
+            desc: "message ID of the eventhub message"
+          - name: EVENTHUB_SYSTEM_PROPERTIES
+            value: "eventhubSystemProperties"
+            desc: "system properties of the eventhub message"
+          - name: EVENTHUB_PROPERTIES
+            value: "eventhubProperties"
+            desc: "properties of the eventhub message"
+          - name: EVENTHUB_SYSPROP_CONTENT_TYPE
+            value: "content-type"
+          - name: EVENTHUB_SYSPROP_CONTENT_ENCODING
+            value: "content-encoding"
+          - name: EVENTHUB_SYSPROP_DT_DATASCHEMA
+            value: "dt-dataschema"
 
   - name: Commands
     desc: "Names for different command/message types"
@@ -672,3 +703,6 @@ groups:
           - name: RESPOND_IMMEDIATELY
             value: "respondImmediately"
             desc: "Send response immediately rather than waiting for next interval"
+          - name: RETURN_EVENTHUB_MESSAGE_CONTENTS
+            value: "returnEventhubMessageContents"
+            desc: "include contents of eventhub message when responding"
