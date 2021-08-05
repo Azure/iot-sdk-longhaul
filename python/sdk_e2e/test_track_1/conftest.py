@@ -3,8 +3,10 @@
 # license information.
 import pytest
 import logging
+import copy
 import collections
-from thief_constants import Fields
+import json
+from thief_constants import Fields, Const
 from client_fixtures import (
     create_message_from_dict,
     client_kwargs,
@@ -16,6 +18,7 @@ from client_fixtures import (
     service_instance_id,
 )
 from service_app_fixtures import service_app, pnp_service_app
+from azure.iot.device.iothub import Message
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("paho").setLevel(level=logging.DEBUG)
@@ -27,19 +30,28 @@ logger.setLevel(level=logging.INFO)
 
 @pytest.fixture(scope="class")
 def message_factory(run_id, service_instance_id, op_factory):  # noqa: F811
-    def wrapper_function(payload, cmd=None):
+    def wrapper_function(original_payload, cmd=None):
         running_op = op_factory()
 
+        payload = copy.deepcopy(original_payload)
         if Fields.THIEF not in payload:
             payload[Fields.THIEF] = {}
-        payload[Fields.THIEF][Fields.OPERATION_ID] = running_op.id
 
+        thief = payload[Fields.THIEF]
+
+        thief[Fields.OPERATION_ID] = running_op.id
+        thief[Fields.SERVICE_INSTANCE_ID] = service_instance_id
+        thief[Fields.RUN_ID] = run_id
         if cmd:
-            payload[Fields.THIEF][Fields.CMD] = cmd
+            thief[Fields.CMD] = cmd
 
-        message = create_message_from_dict(payload, service_instance_id, run_id)
+        message = Message(json.dumps(payload))
+        message.content_type = Const.JSON_CONTENT_TYPE
+        message.content_encoding = Const.JSON_CONTENT_ENCODING
 
-        return collections.namedtuple("WrappedMessage", "message running_op")(message, running_op)
+        return collections.namedtuple("WrappedMessage", "message running_op payload")(
+            message, running_op, payload
+        )
 
     return wrapper_function
 

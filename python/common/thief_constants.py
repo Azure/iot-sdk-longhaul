@@ -113,6 +113,9 @@ class Fields(object):
     # payload used for testing C2d Messages
     TEST_C2D_PAYLOAD = "testC2dPayload"
 
+    # Details on the eventhub message that this C2d message is acknowledging
+    EVENTHUB_MESSAGE_CONTENTS = "eventhubMessageContents"
+
     # ----------------------------------------------------
     # Fields inside telemetry messages for testing methods
     # ----------------------------------------------------
@@ -184,6 +187,31 @@ class Fields(object):
 
     # Status code sent with command response
     COMMAND_RESPONSE_STATUS_CODE = "commandResponseStatusCode"
+
+    # ----------------------------------------------------------------------------------------------------------------------------------
+    # Fields inside c2d messages used when acknowledging eventhub messages. Included when the returnEventhubMessageContents flag  is set
+    # ----------------------------------------------------------------------------------------------------------------------------------
+
+    # body of the eventhub message
+    EVENTHUB_MESSAGE_BODY = "eventhubMessageBody"
+
+    # content type of the eventhub message
+    EVENTHUB_CONTENT_TYPE = "eventhubContentType"
+
+    # correlation id of the eventhub message
+    EVENTHUB_CORRELATION_ID = "eventhubCorrelationId"
+
+    # message ID of the eventhub message
+    EVENTHUB_MESSAGE_ID = "eventhubMessageId"
+
+    # system properties of the eventhub message
+    EVENTHUB_SYSTEM_PROPERTIES = "eventhubSystemProperties"
+
+    # properties of the eventhub message
+    EVENTHUB_PROPERTIES = "eventhubProperties"
+    EVENTHUB_SYSPROP_CONTENT_TYPE = "content-type"
+    EVENTHUB_SYSPROP_CONTENT_ENCODING = "content-encoding"
+    EVENTHUB_SYSPROP_DT_DATASCHEMA = "dt-dataschema"
 
 
 class Commands(object):
@@ -553,3 +581,6 @@ class Flags(object):
 
     # Send response immediately rather than waiting for next interval
     RESPOND_IMMEDIATELY = "respondImmediately"
+
+    # include contents of eventhub message when responding
+    RETURN_EVENTHUB_MESSAGE_CONTENTS = "returnEventhubMessageContents"

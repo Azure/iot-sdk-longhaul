@@ -118,9 +118,14 @@ async def paired_client(
                 Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
                 Fields.OPERATION_ID: running_op.id,
                 Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
+                Fields.RUN_ID: run_id,
             }
         }
-        msg = create_message_from_dict(pairing_payload, None, run_id)
+
+        msg = Message(json.dumps(pairing_payload))
+        msg.content_type = Const.JSON_CONTENT_TYPE
+        msg.content_encoding = Const.JSON_CONTENT_ENCODING
+
         await connected_client.send_message(msg)
 
         logger.info("Waiting for pairing response")
