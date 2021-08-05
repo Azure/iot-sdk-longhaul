@@ -137,7 +137,7 @@ async def paired_client(
                 connected_client, msg[Fields.THIEF][Fields.SERVICE_INSTANCE_ID]
             )
 
-    assert False
+    raise Exception("Service app did not respond in time")
 
 
 @pytest.fixture(scope="function")
