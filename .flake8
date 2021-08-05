@@ -6,3 +6,6 @@ ignore = E501,W503,E203
 exclude =
     .git,
     __pycache__,
+per-file-ignores =
+    python/sdk_e2e/conftest.py:F401
+    python/sdk_e2e/test_track_1/conftest.py:F401

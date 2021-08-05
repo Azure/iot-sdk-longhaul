@@ -6,8 +6,6 @@ import logging
 import json
 import asyncio
 import pprint
-import random
-import uuid
 from thief_constants import Commands, Fields
 from azure.iot.device.iothub import ClientPropertyCollection, generate_writable_property_response
 
@@ -20,29 +18,6 @@ pytestmark = pytest.mark.asyncio
 @pytest.fixture(scope="class")
 def client_kwargs(pnp_model_id):
     return {"model_id": pnp_model_id}
-
-
-@pytest.fixture(
-    params=[
-        pytest.param("int", id="integer value"),
-        pytest.param("bool", id="boolean value"),
-        pytest.param("str", id="string value"),
-        pytest.param("dict", id="complex value"),
-        pytest.param("guid", id="guid value"),
-    ]
-)
-def random_property_value(request, random_dict_factory, random_string_factory):
-    param = request.param
-    if param == "int":
-        return random.randint(-65535, 65535)
-    elif param == "bool":
-        return random.random() > 0.5
-    elif param == "str":
-        return random_string_factory()
-    elif param == "dict":
-        return random_dict_factory()
-    elif param == "guid":
-        return str(uuid.uuid4())
 
 
 def make_desired_property_patch(component_name, property_name, property_value):
