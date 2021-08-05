@@ -20,7 +20,7 @@ def client_kwargs(pnp_model_id):
 
 @pytest.mark.pnp
 @pytest.mark.describe("Pnp Telemetry")
-class TestPnpCommands(object):
+class TestPnpTelemetry(object):
     @pytest.mark.it("Can send a telemetry message")
     async def test_send_pnp_telemetry(self, client, message_factory, pnp_model_id):
         telemetry = message_factory(
