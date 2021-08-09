@@ -4,26 +4,26 @@
 import pytest
 import asyncio
 import uuid
-from running_operation_list import RunningOperationList
+from operation_tickets import OperationTicketList
 import thief_secrets
 
 
 @pytest.fixture(scope="module")
-def op_ticket_list():
-    return RunningOperationList()
+def operation_ticket_list():
+    return OperationTicketList()
 
 
 @pytest.fixture(scope="class")
-def op_ticket_factory(op_ticket_list):
+def operation_ticket_factory(operation_ticket_list):
     def factory_function():
-        return op_ticket_list.make_event_based_operation(event_module=asyncio)
+        return operation_ticket_list.make_event_based_operation_ticket(event_module=asyncio)
 
     return factory_function
 
 
 @pytest.fixture(scope="function")
-def op_ticket(op_ticket_factory):
-    return op_ticket_factory()
+def operation_ticket(operation_ticket_factory):
+    return operation_ticket_factory()
 
 
 @pytest.fixture(scope="module")

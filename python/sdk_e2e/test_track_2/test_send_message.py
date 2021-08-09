@@ -33,7 +33,7 @@ class TestSendMessage(object):
             test_message.message.get_payload(),
             qos=1,
         )
-        test_message.op_ticket.event.wait()
+        test_message.operation_ticket.event.wait()
 
     @pytest.mark.it("sends if disconnected after sending and manually reconnected")
     def test_sends_if_disconencted(self, client, test_message, connection_status, auth, keep_alive):
@@ -46,7 +46,7 @@ class TestSendMessage(object):
             qos=1,
         )
 
-        assert not test_message.op_ticket.event.is_set()
+        assert not test_message.operation_ticket.event.is_set()
 
         # TODO: this test fails badly if we add this sleep here.  It's not just that it fails,
         # it's also that paho is in a bad state, can't reconnect, can't restart loop.
@@ -57,7 +57,7 @@ class TestSendMessage(object):
         client.reconnect()
         connection_status.wait_for_connected()
 
-        test_message.op_ticket.event.wait()
+        test_message.operation_ticket.event.wait()
 
     @pytest.mark.it("Sends if connection drops before sending")
     def test_sends_if_drop_before_sending(self, client, test_message, dropper, connection_status):
@@ -74,10 +74,10 @@ class TestSendMessage(object):
         connection_status.wait_for_disconnected()
         logger.info("disconnected")
 
-        assert not test_message.op_ticket.event.is_set()
+        assert not test_message.operation_ticket.event.is_set()
 
         dropper.restore_all()
         logger.info("Waiting for reconnection")
         connection_status.wait_for_connected()
 
-        test_message.op_ticket.event.wait()
+        test_message.operation_ticket.event.wait()

@@ -9,7 +9,7 @@ import logging
 logger = logging.getLogger("thief.{}".format(__name__))
 
 
-class OperationBase(object):
+class OperationTicketBase(object):
     """
     Base class for running operations
     """
@@ -19,7 +19,7 @@ class OperationBase(object):
 
     def remove_from_owning_list(self, in_dunder_del=False):
         """
-        remove an operation fron the RunningOperationList which owns it.
+        remove an operation fron the OperationTicketList which owns it.
         """
         owner = self.owner_weakref and self.owner_weakref()
         if owner:
@@ -29,7 +29,7 @@ class OperationBase(object):
             self.owner_weakref = None
 
 
-class EventBasedOperation(OperationBase):
+class EventBasedOperationTicket(OperationTicketBase):
     """
     Running operation which sets an event when it is complete.
     """
@@ -43,7 +43,7 @@ class EventBasedOperation(OperationBase):
     def complete(self):
         """
         Mark a running operation as complete.  This sets the operation's event and removes
-        the operation from the RunningOperationList which owns it.
+        the operation from the OperationTicketList which owns it.
         """
         if self.event:
             self.event.set()
@@ -52,7 +52,7 @@ class EventBasedOperation(OperationBase):
             logger.warning("Attempt to complete already completed operation: id={}".format(self.id))
 
 
-class CallbackBasedOperation(OperationBase):
+class CallbackBasedOperation(OperationTicketBase):
     """
     Running operation which calls a callback when it is complete.
     """
@@ -67,7 +67,7 @@ class CallbackBasedOperation(OperationBase):
     def complete(self):
         """
         Mark a running operation as complete.  This calls the operation's callback and removes
-        the operation from the RunningOperationList which owns it.
+        the operation from the OperationTicketList which owns it.
         """
         if self.callback:
             self.callback(self.id, self.user_data)
@@ -77,7 +77,7 @@ class CallbackBasedOperation(OperationBase):
             logger.warning("Attempt to complete already completed operation: id={}".format(self.id))
 
 
-class RunningOperationList(object):
+class OperationTicketList(object):
     """
     Object which keeps tracks of operations which are running (in progress, not yet complete.)
 
@@ -94,16 +94,16 @@ class RunningOperationList(object):
         self.lock = threading.Lock()
         self.list = {}
 
-    def make_event_based_operation(self, event_module=threading):
+    def make_event_based_operation_ticket(self, event_module=threading):
         """
         Make and return a running opreation object which fires an event when it is complete.
         """
-        operation = EventBasedOperation(self, event_module=event_module)
+        operation = EventBasedOperationTicket(self, event_module=event_module)
         with self.lock:
             self.list[operation.id] = operation
         return operation
 
-    def make_callback_based_operation(self, callback, user_data):
+    def make_callback_operation_ticket(self, callback, user_data):
         """
         Make and return a running opreation object which calls a callback when it is complete.
         """
