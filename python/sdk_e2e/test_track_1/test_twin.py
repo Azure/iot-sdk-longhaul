@@ -29,7 +29,7 @@ def validate_patch_reported(twin, patch):
     assert twin_prop == patch_prop
 
 
-# TODO: rename running_op to op_ticket?
+# TODO: rename op_ticket to op_ticket?
 # TODO: tests with drop_incoming and reject_incoming
 
 
@@ -46,10 +46,10 @@ async def clean_reported_properties(client):
 @pytest.mark.describe("Device Client Reported Properties")
 class TestReportedProperties(object):
     @pytest.mark.it("Can set a simple reported property")
-    async def test_simple_patch(self, client, running_op, reported_props):
+    async def test_simple_patch(self, client, op_ticket, reported_props):
 
         await client.patch_twin_reported_properties(reported_props)
-        await running_op.event.wait()
+        await op_ticket.event.wait()
 
         twin = await client.get_twin()
         validate_patch_reported(twin, reported_props)
@@ -57,14 +57,14 @@ class TestReportedProperties(object):
         await clean_reported_properties(client)
 
     @pytest.mark.it("Connects the transport if necessary")
-    async def test_connect_if_necessary(self, client, running_op, reported_props):
+    async def test_connect_if_necessary(self, client, op_ticket, reported_props):
 
         await client.disconnect()
 
         assert not client.connected
         await client.patch_twin_reported_properties(reported_props)
         assert client.connected
-        await running_op.event.wait()
+        await op_ticket.event.wait()
 
         twin = await client.get_twin()
         validate_patch_reported(twin, reported_props)
@@ -80,7 +80,7 @@ class TestReportedPropertiesDroppedConnection(object):
         return {"keep_alive": 10}
 
     @pytest.mark.it("Sends if connection drops before sending")
-    async def test_sends_if_drop_before_sending(self, client, running_op, reported_props, dropper):
+    async def test_sends_if_drop_before_sending(self, client, op_ticket, reported_props, dropper):
 
         assert client.connected
         dropper.drop_outgoing()
@@ -96,14 +96,12 @@ class TestReportedPropertiesDroppedConnection(object):
             await asyncio.sleep(1)
 
         await send_task
-        await running_op.event.wait()
+        await op_ticket.event.wait()
 
         await clean_reported_properties(client)
 
     @pytest.mark.it("Sends if connection rejects send")
-    async def test_sends_if_reject_before_sending(
-        self, client, running_op, reported_props, dropper
-    ):
+    async def test_sends_if_reject_before_sending(self, client, op_ticket, reported_props, dropper):
 
         assert client.connected
         dropper.reject_outgoing()
@@ -119,7 +117,7 @@ class TestReportedPropertiesDroppedConnection(object):
             await asyncio.sleep(1)
 
         await send_task
-        await running_op.event.wait()
+        await op_ticket.event.wait()
 
         await clean_reported_properties(client)
 

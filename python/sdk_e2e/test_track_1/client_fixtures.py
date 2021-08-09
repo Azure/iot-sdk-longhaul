@@ -58,7 +58,7 @@ async def connected_client(brand_new_client):
 
 
 @pytest.fixture(scope="class")
-async def c2d_waiter(event_loop, connected_client, running_operation_list, run_id):
+async def c2d_waiter(event_loop, connected_client, op_ticket_list, run_id):
     async def handle_c2d(msg):
         thief = json.loads(msg.data.decode()).get(Fields.THIEF, {})
         logger.info("Received {}".format(thief))
@@ -94,11 +94,11 @@ async def c2d_waiter(event_loop, connected_client, running_operation_list, run_i
         logger.info("Received {} message with {}".format(thief[Fields.CMD], operation_ids))
 
         for operation_id in operation_ids:
-            running_op = running_operation_list.get(operation_id)
-            if running_op:
+            op_ticket = op_ticket_list.get(operation_id)
+            if op_ticket:
                 logger.info("setting event for message {}".format(operation_id))
-                running_op.result_message = msg
-                event_loop.call_soon_threadsafe(running_op.complete)
+                op_ticket.result_message = msg
+                event_loop.call_soon_threadsafe(op_ticket.complete)
             else:
                 logger.warning("Received unknown operationId: {}:".format(operation_id))
 
@@ -107,16 +107,16 @@ async def c2d_waiter(event_loop, connected_client, running_operation_list, run_i
 
 @pytest.fixture(scope="class")
 async def paired_client(
-    connected_client, running_operation_list, c2d_waiter, run_id, requested_service_pool
+    connected_client, op_ticket_list, c2d_waiter, run_id, requested_service_pool
 ):
     start_time = time.time()
     while time.time() - start_time <= PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS:
-        running_op = running_operation_list.make_event_based_operation(event_module=asyncio)
+        op_ticket = op_ticket_list.make_event_based_operation(event_module=asyncio)
 
         pairing_payload = {
             Fields.THIEF: {
                 Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
-                Fields.OPERATION_ID: running_op.id,
+                Fields.OPERATION_ID: op_ticket.id,
                 Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
                 Fields.RUN_ID: run_id,
             }
@@ -130,14 +130,12 @@ async def paired_client(
 
         logger.info("Waiting for pairing response")
         try:
-            await asyncio.wait_for(
-                running_op.event.wait(), PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS
-            )
+            await asyncio.wait_for(op_ticket.event.wait(), PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS)
         except asyncio.TimeoutError:
             pass
         else:
             logger.info("pairing response received")
-            msg = json.loads(running_op.result_message.data.decode())
+            msg = json.loads(op_ticket.result_message.data.decode())
             return collections.namedtuple("ConnectedClient", "client service_instance_id")(
                 connected_client, msg[Fields.THIEF][Fields.SERVICE_INSTANCE_ID]
             )

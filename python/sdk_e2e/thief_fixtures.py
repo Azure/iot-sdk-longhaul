@@ -9,21 +9,21 @@ import thief_secrets
 
 
 @pytest.fixture(scope="module")
-def running_operation_list():
+def op_ticket_list():
     return RunningOperationList()
 
 
 @pytest.fixture(scope="class")
-def op_factory(running_operation_list):
+def op_ticket_factory(op_ticket_list):
     def factory_function():
-        return running_operation_list.make_event_based_operation(event_module=asyncio)
+        return op_ticket_list.make_event_based_operation(event_module=asyncio)
 
     return factory_function
 
 
 @pytest.fixture(scope="function")
-def running_op(op_factory):
-    return op_factory()
+def op_ticket(op_ticket_factory):
+    return op_ticket_factory()
 
 
 @pytest.fixture(scope="module")

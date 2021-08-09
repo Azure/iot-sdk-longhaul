@@ -154,7 +154,7 @@ def c2d_subscription(
     connected_mqtt_client,
     incoming_subacks,
     incoming_message_list,
-    running_operation_list,
+    op_ticket_list,
     executor,
     executor_shutdown_event,
     run_id,
@@ -202,11 +202,11 @@ def c2d_subscription(
                     )
 
                     for operation_id in operation_ids:
-                        running_op = running_operation_list.get(operation_id)
-                        if running_op:
+                        op_ticket = op_ticket_list.get(operation_id)
+                        if op_ticket:
                             logger.info("setting event for message {}".format(operation_id))
-                            running_op.result_message = msg
-                            running_op.complete()
+                            op_ticket.result_message = msg
+                            op_ticket.complete()
                         else:
                             logger.warning("Received unknown operationId: {}:".format(operation_id))
 
@@ -219,17 +219,17 @@ def c2d_subscription(
 
 @pytest.fixture(scope="module")
 def paired_client(
-    connected_mqtt_client, running_operation_list, c2d_subscription, run_id, requested_service_pool
+    connected_mqtt_client, op_ticket_list, c2d_subscription, run_id, requested_service_pool
 ):
     logger.info("Starting pairing")
     start_time = time.time()
     while time.time() - start_time <= PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS:
-        running_op = running_operation_list.make_event_based_operation()
+        op_ticket = op_ticket_list.make_event_based_operation()
 
         pairing_payload = {
             Fields.THIEF: {
                 Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
-                Fields.OPERATION_ID: running_op.id,
+                Fields.OPERATION_ID: op_ticket.id,
                 Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
             }
         }
@@ -243,10 +243,10 @@ def paired_client(
         )
 
         logger.info("Waiting for pairing response")
-        response = running_op.event.wait(timeout=PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS)
+        response = op_ticket.event.wait(timeout=PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS)
         if response:
             logger.info("pairing response received")
-            msg = json.loads(running_op.result_message.payload.decode())
+            msg = json.loads(op_ticket.result_message.payload.decode())
             return collections.namedtuple("ConnectedClient", "mqtt_client service_instance_id")(
                 connected_mqtt_client, msg[Fields.THIEF][Fields.SERVICE_INSTANCE_ID]
             )
@@ -264,19 +264,19 @@ def client(paired_client, dropper, connection_status, auth, keep_alive):
 
 
 @pytest.fixture(scope="module")
-def message_wrapper(running_operation_list, run_id, paired_client, c2d_subscription):
+def message_wrapper(op_ticket_list, run_id, paired_client, c2d_subscription):
     def wrapper_function(payload, cmd=None):
-        running_op = running_operation_list.make_event_based_operation()
+        op_ticket = op_ticket_list.make_event_based_operation()
 
         if Fields.THIEF not in payload:
             payload[Fields.THIEF] = {}
-        payload[Fields.THIEF][Fields.OPERATION_ID] = running_op.id
+        payload[Fields.THIEF][Fields.OPERATION_ID] = op_ticket.id
 
         if cmd:
             payload[Fields.THIEF][Fields.CMD] = cmd
 
         message = create_message_from_dict(payload, paired_client.service_instance_id, run_id)
 
-        return collections.namedtuple("WrappedMessage", "message running_op")(message, running_op)
+        return collections.namedtuple("WrappedMessage", "message op_ticket")(message, op_ticket)
 
     return wrapper_function

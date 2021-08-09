@@ -196,7 +196,7 @@ class DeviceApp(object):
         self.service_instance_id = None
         self.system_health_telemetry = SystemHealthTelemetry()
         # for running operations
-        self.running_operation_list = RunningOperationList()
+        self.op_ticket_list = RunningOperationList()
         # for metrics
         self.reporter_lock = threading.Lock()
         self.reporter = MetricsReporter()
@@ -498,11 +498,11 @@ class DeviceApp(object):
         while (time.time() - pairing_start_time) < self.config[
             Settings.PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS
         ]:
-            running_op = self.running_operation_list.make_event_based_operation()
+            op_ticket = self.op_ticket_list.make_event_based_operation()
             pairing_payload = {
                 Fields.THIEF: {
                     Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
-                    Fields.OPERATION_ID: running_op.id,
+                    Fields.OPERATION_ID: op_ticket.id,
                     Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
                 }
             }
@@ -511,11 +511,11 @@ class DeviceApp(object):
             logger.info("Sending pairing request: {}".format(pprint.pformat(pairing_payload)))
             event_logger.info(Events.SENDING_PAIRING_REQUEST)
 
-            running_op.event.wait(
+            op_ticket.event.wait(
                 timeout=self.config[Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS]
             )
-            if running_op.event.isSet():
-                msg = json.loads(running_op.result_message.data.decode())
+            if op_ticket.event.isSet():
+                msg = json.loads(op_ticket.result_message.data.decode())
 
                 logger.info("Received pairing response: {}".format(pprint.pformat(msg)))
                 event_logger.info(Events.RECEIVED_PAIRING_RESPONSE)
@@ -576,12 +576,12 @@ class DeviceApp(object):
             to run in it's own thread.  Returns after the service acknowledges receipt of
             the message.
             """
-            running_op = self.running_operation_list.make_event_based_operation()
+            op_ticket = self.op_ticket_list.make_event_based_operation()
 
             payload = {
                 Fields.THIEF: {
                     Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
-                    Fields.OPERATION_ID: running_op.id,
+                    Fields.OPERATION_ID: op_ticket.id,
                     Fields.SESSION_METRICS: self.get_session_metrics(),
                     Fields.TEST_METRICS: self.get_test_metrics(),
                     Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
@@ -589,14 +589,14 @@ class DeviceApp(object):
             }
 
             msg = self.create_message_from_dict(payload)
-            self.send_message_with_metrics(msg, running_op.id)
+            self.send_message_with_metrics(msg, op_ticket.id)
 
-            if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
-                logger.info("Telemetry op {} arrived at service".format(running_op.id))
+            if op_ticket.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+                logger.info("Telemetry op {} arrived at service".format(op_ticket.id))
                 self.metrics.send_message_count_verified.increment()
 
             else:
-                logger.warning("Telemetry op {} did not arrive at service".format(running_op.id))
+                logger.warning("Telemetry op {} did not arrive at service".format(op_ticket.id))
                 self.metrics.send_message_count_timed_out.increment()
 
         while not self.done.isSet():
@@ -648,7 +648,7 @@ class DeviceApp(object):
 
             # Make RunningOperation objects for all of our messages.
             all_ops = [
-                self.running_operation_list.make_event_based_operation()
+                self.op_ticket_list.make_event_based_operation()
                 for x in range(
                     random.randint(1, self.config[Settings.SEND_MESSAGE_FLOOD_MAX_MESSAGE_COUNT])
                 )
@@ -747,10 +747,10 @@ class DeviceApp(object):
         logger.info("Received {} message with {}".format(thief[Fields.CMD], operation_ids))
 
         for operation_id in operation_ids:
-            running_op = self.running_operation_list.get(operation_id)
-            if running_op:
-                running_op.result_message = msg
-                running_op.complete()
+            op_ticket = self.op_ticket_list.get(operation_id)
+            if op_ticket:
+                op_ticket.result_message = msg
+                op_ticket.complete()
             else:
                 logger.warning("Received unknown operationId: {}:".format(operation_id))
 
@@ -810,8 +810,8 @@ class DeviceApp(object):
                 }
             }
 
-        add_operation = self.running_operation_list.make_event_based_operation()
-        remove_operation = self.running_operation_list.make_event_based_operation()
+        add_operation = self.op_ticket_list.make_event_based_operation()
+        remove_operation = self.op_ticket_list.make_event_based_operation()
 
         prop_name = "prop_{}".format(self.reported_property_index)
         self.reported_property_index += 1
@@ -952,7 +952,7 @@ class DeviceApp(object):
         }
 
     def test_method_invoke(self, method):
-        running_op = self.running_operation_list.make_event_based_operation()
+        op_ticket = self.op_ticket_list.make_event_based_operation()
 
         if method.include_payload:
             payload = self.make_random_payload()
@@ -962,25 +962,25 @@ class DeviceApp(object):
         command_payload = {
             Fields.THIEF: {
                 Fields.CMD: Commands.INVOKE_METHOD,
-                Fields.OPERATION_ID: running_op.id,
+                Fields.OPERATION_ID: op_ticket.id,
                 Fields.METHOD_NAME: method.method_name,
                 Fields.METHOD_INVOKE_PAYLOAD: payload,
             }
         }
         msg = self.create_message_from_dict(command_payload)
-        logger.info("sending method invoke with guid={}".format(running_op.id))
+        logger.info("sending method invoke with guid={}".format(op_ticket.id))
         self.client.send_message(msg)
 
-        if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+        if op_ticket.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
             logger.info(
-                "method with guid {} returned {}".format(running_op.id, running_op.result_message)
+                "method with guid {} returned {}".format(op_ticket.id, op_ticket.result_message)
             )
-            thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
+            thief = json.loads(op_ticket.result_message.data.decode())[Fields.THIEF]
             fail = False
             if thief[Fields.METHOD_RESPONSE_STATUS_CODE] != method.expected_status_code:
                 logger.error(
                     "Unexpected method status: id={}, received {} expected {}".format(
-                        running_op.id,
+                        op_ticket.id,
                         thief[Fields.METHOD_RESPONSE_STATUS_CODE],
                         method.expected_status_code,
                     )
@@ -989,7 +989,7 @@ class DeviceApp(object):
             if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
                 logger.error(
                     "Unexpected payload: id={}, received {} expected {}".format(
-                        running_op.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
+                        op_ticket.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
                     )
                 )
                 fail = True
@@ -1000,40 +1000,40 @@ class DeviceApp(object):
                 logger.info("Method call check succeeded")
 
         else:
-            logger.error("method with guid {} never completed".format(running_op.id))
+            logger.error("method with guid {} never completed".format(op_ticket.id))
             self.metrics.method_invoke_count_request_timed_out = ThreadSafeCounter()
 
     def test_c2d(self):
 
-        running_op = self.running_operation_list.make_event_based_operation()
+        op_ticket = self.op_ticket_list.make_event_based_operation()
 
         sent_test_payload = self.make_random_payload()
 
         command_payload = {
             Fields.THIEF: {
                 Fields.CMD: Commands.SEND_C2D,
-                Fields.OPERATION_ID: running_op.id,
+                Fields.OPERATION_ID: op_ticket.id,
                 Fields.TEST_C2D_PAYLOAD: sent_test_payload,
             }
         }
 
-        logger.info("Requesting C2D for operationId {}".format(running_op.id))
+        logger.info("Requesting C2D for operationId {}".format(op_ticket.id))
         self.client.send_message(self.create_message_from_dict(command_payload))
 
-        if running_op.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
-            logger.info("C2D received for operationId {}".format(running_op.id))
+        if op_ticket.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
+            logger.info("C2D received for operationId {}".format(op_ticket.id))
             self.metrics.receive_c2d_count_received.increment()
 
-            thief = json.loads(running_op.result_message.data.decode())[Fields.THIEF]
+            thief = json.loads(op_ticket.result_message.data.decode())[Fields.THIEF]
             if thief[Fields.TEST_C2D_PAYLOAD] != sent_test_payload:
                 logger.warning(
                     "C2D payload for operationId {}  does not match.  Expected={}, Received={}".format(
-                        running_op.id, sent_test_payload, thief[Fields.TEST_C2D_PAYLOAD]
+                        op_ticket.id, sent_test_payload, thief[Fields.TEST_C2D_PAYLOAD]
                     )
                 )
                 raise ThiefFatalException("C2D payload mismatch")
         else:
-            logger.info("C2D timed out for operationId {}".format(running_op.id))
+            logger.info("C2D timed out for operationId {}".format(op_ticket.id))
             self.metrics.receive_c2d_count_timed_out.increment()
 
     def wrap_handler(self, func):

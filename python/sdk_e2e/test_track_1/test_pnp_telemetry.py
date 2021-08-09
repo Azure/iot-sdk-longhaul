@@ -32,9 +32,9 @@ class TestPnpTelemetry(object):
             }
         )
         await client.send_telemetry(telemetry.payload)
-        await telemetry.running_op.event.wait()
+        await telemetry.op_ticket.event.wait()
 
-        response = json.loads(telemetry.running_op.result_message.data)
+        response = json.loads(telemetry.op_ticket.result_message.data)
         logger.info(pprint.pformat(response))
 
         eventhub_message_contents = response[Fields.THIEF][Fields.EVENTHUB_MESSAGE_CONTENTS]
