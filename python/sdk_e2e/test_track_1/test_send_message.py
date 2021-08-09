@@ -30,7 +30,7 @@ class TestSendMessage(object):
     async def test_send_message(self, client, test_message):
 
         await client.send_message(test_message.message)
-        await test_message.running_op.event.wait()
+        await test_message.operation_ticket.event.wait()
 
     @pytest.mark.it("Connects the transport if necessary")
     async def test_connect_if_necessary(self, client, test_message):
@@ -41,7 +41,7 @@ class TestSendMessage(object):
         await client.send_message(test_message.message)
         assert client.connected
 
-        await test_message.running_op.event.wait()
+        await test_message.operation_ticket.event.wait()
 
 
 @pytest.mark.dropped_connection
@@ -69,7 +69,7 @@ class TestSendMessageDroppedConnection(object):
             await asyncio.sleep(1)
 
         await send_task
-        await test_message.running_op.event.wait()
+        await test_message.operation_ticket.event.wait()
 
     @pytest.mark.it("Sends if connection rejects send")
     async def test_sends_if_reject_before_sending(self, client, test_message, dropper):
@@ -89,4 +89,4 @@ class TestSendMessageDroppedConnection(object):
             await asyncio.sleep(1)
 
         await send_task
-        await test_message.running_op.event.wait()
+        await test_message.operation_ticket.event.wait()

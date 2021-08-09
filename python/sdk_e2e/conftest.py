@@ -8,9 +8,9 @@ import asyncio
 
 from drop_fixtures import dropper
 from thief_fixtures import (
-    running_operation_list,
-    op_factory,
-    running_op,
+    operation_ticket_list,
+    operation_ticket_factory,
+    operation_ticket,
     run_id,
     requested_service_pool,
 )

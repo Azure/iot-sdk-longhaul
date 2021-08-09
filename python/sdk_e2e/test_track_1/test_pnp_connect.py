@@ -50,10 +50,10 @@ class TestPnpConnect(object):
         msg = message_factory({}, cmd=Commands.GET_PNP_PROPERTIES)
         await client.send_message(msg.message)
 
-        await msg.running_op.event.wait()
+        await msg.operation_ticket.event.wait()
 
         assert (
-            json.loads(msg.running_op.result_message.data)[Fields.THIEF][
+            json.loads(msg.operation_ticket.result_message.data)[Fields.THIEF][
                 Fields.PNP_PROPERTIES_CONTENTS
             ]["$metadata"]["$model"]
             == pnp_model_id

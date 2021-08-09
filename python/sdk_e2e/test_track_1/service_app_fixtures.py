@@ -38,8 +38,8 @@ def service_app(client, message_factory):
             await client.send_message(invoke.message)
 
             # wait for the response to come back via the service API call
-            await invoke.running_op.event.wait()
-            method_response = json.loads(invoke.running_op.result_message.data)[Fields.THIEF]
+            await invoke.operation_ticket.event.wait()
+            method_response = json.loads(invoke.operation_ticket.result_message.data)[Fields.THIEF]
 
             return method_response
 
@@ -89,18 +89,18 @@ def pnp_service_app(client, message_factory):
             await client.send_message(invoke.message)
 
             # wait for the response to come back via the service API call
-            await invoke.running_op.event.wait()
-            command_response = json.loads(invoke.running_op.result_message.data)[Fields.THIEF]
+            await invoke.operation_ticket.event.wait()
+            command_response = json.loads(invoke.operation_ticket.result_message.data)[Fields.THIEF]
 
             return command_response
 
         async def get_pnp_properties(self):
             msg = message_factory({}, cmd=Commands.GET_PNP_PROPERTIES)
             await client.send_message(msg.message)
-            await msg.running_op.event.wait()
+            await msg.operation_ticket.event.wait()
 
             return (
-                json.loads(msg.running_op.result_message.data)
+                json.loads(msg.operation_ticket.result_message.data)
                 .get(Fields.THIEF, {})
                 .get(Fields.PNP_PROPERTIES_CONTENTS, {})
             )
