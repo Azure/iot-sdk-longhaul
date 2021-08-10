@@ -16,7 +16,7 @@ registry_manager = IoTHubRegistryManager.from_connection_string(
 )
 
 while True:
-    os.system("cls" if os.name == "nt" else "clear")
+    os.system("cls" if os.name == "nt" else "clear -x")
     twin = registry_manager.get_twin(thief_secrets.DEVICE_ID)
     json_object = {
         Fields.SESSION_METRICS: twin.properties.reported.get(Fields.THIEF, {}).get(
