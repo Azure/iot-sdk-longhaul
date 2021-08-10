@@ -25,20 +25,18 @@ class TestPnpTelemetry(object):
     async def test_send_pnp_telemetry(self, client, message_factory, pnp_model_id):
         telemetry = message_factory(
             {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
-                    Fields.FLAGS: [Flags.RETURN_EVENTHUB_MESSAGE_CONTENTS],
-                },
-            }
+                Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
+                Fields.FLAGS: [Flags.RETURN_EVENTHUB_MESSAGE_CONTENTS],
+            },
         )
-        await client.send_telemetry(telemetry.payload)
+        await client.send_telemetry(telemetry.body)
         await telemetry.operation_ticket.event.wait()
 
         response = json.loads(telemetry.operation_ticket.result_message.data)
         logger.info(pprint.pformat(response))
 
-        eventhub_message_contents = response[Fields.THIEF][Fields.EVENTHUB_MESSAGE_CONTENTS]
-        assert eventhub_message_contents[Fields.EVENTHUB_MESSAGE_BODY] == telemetry.payload
+        eventhub_message_contents = response[Fields.EVENTHUB_MESSAGE_CONTENTS]
+        assert eventhub_message_contents[Fields.EVENTHUB_MESSAGE_BODY] == telemetry.body
 
         system_props = eventhub_message_contents[Fields.EVENTHUB_SYSTEM_PROPERTIES]
         assert system_props[Fields.EVENTHUB_SYSPROP_DT_DATASCHEMA] == pnp_model_id

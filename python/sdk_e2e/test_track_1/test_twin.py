@@ -15,14 +15,12 @@ pytestmark = pytest.mark.asyncio
 def validate_patch_reported(twin, patch):
     twin_prop = (
         twin.get(Fields.REPORTED, {})
-        .get(Fields.THIEF, {})
         .get(Fields.TEST_CONTENT, {})
         .get(Fields.REPORTED_PROPERTY_TEST, {})
         .get(Fields.E2E_PROPERTY, {})
     )
     patch_prop = (
-        patch.get(Fields.THIEF, {})
-        .get(Fields.TEST_CONTENT, {})
+        patch.get(Fields.TEST_CONTENT, {})
         .get(Fields.REPORTED_PROPERTY_TEST, {})
         .get(Fields.E2E_PROPERTY, {})
     )
@@ -34,11 +32,7 @@ def validate_patch_reported(twin, patch):
 
 async def clean_reported_properties(client):
     await client.patch_twin_reported_properties(
-        {
-            Fields.THIEF: {
-                Fields.TEST_CONTENT: {Fields.REPORTED_PROPERTY_TEST: {Fields.E2E_PROPERTY: None}}
-            }
-        }
+        {Fields.TEST_CONTENT: {Fields.REPORTED_PROPERTY_TEST: {Fields.E2E_PROPERTY: None}}}
     )
 
 
@@ -141,18 +135,15 @@ class TestDesiredProperties(object):
 
         client.on_twin_desired_properties_patch_received = handle_on_patch_received
 
-        await service_app.set_desired_props({Fields.THIEF: {Fields.RANDOM_CONTENT: random_dict}})
+        await service_app.set_desired_props({Fields.RANDOM_CONTENT: random_dict})
 
         await asyncio.wait_for(received.wait(), 10)
         logger.info("got it")
 
-        assert received_patch.get(Fields.THIEF, {}).get(Fields.RANDOM_CONTENT, {}) == random_dict
+        assert received_patch.get(Fields.RANDOM_CONTENT, {}) == random_dict
 
         twin = await client.get_twin()
-        assert (
-            twin.get(Fields.DESIRED, {}).get(Fields.THIEF, {}).get(Fields.RANDOM_CONTENT, {})
-            == random_dict
-        )
+        assert twin.get(Fields.DESIRED, {}).get(Fields.RANDOM_CONTENT, {}) == random_dict
 
 
 # TODO: etag tests, version tests

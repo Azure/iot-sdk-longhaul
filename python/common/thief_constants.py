@@ -18,7 +18,6 @@ class Fields(object):
     Names of fields inside telemetry messages and twins
     """
 
-    THIEF = "thief"
     PROPERTIES = "properties"
     REPORTED = "reported"
     DESIRED = "desired"
@@ -54,9 +53,9 @@ class Fields(object):
     DESIRED_PROPERTIES = "desiredProperties"
     REQUESTED_SERVICE_POOL = "requestedServicePool"
 
-    # -------------------------
-    # properties.reported.thief
-    # -------------------------
+    # -------------------
+    # properties.reported
+    # -------------------
     SYSTEM_PROPERTIES = "systemProperties"
     SESSION_METRICS = "sessionMetrics"
     TEST_METRICS = "testMetrics"
@@ -67,39 +66,39 @@ class Fields(object):
     TEST_CONTENT = "testContent"
     EXIT_REASON = "exitReason"
 
-    # ---------------------------------
-    # properties.reported.thief.pairing
-    # ---------------------------------
+    # ---------------------------
+    # properties.reported.pairing
+    # ---------------------------
     SERVICE_INSTANCE_ID = "serviceInstanceId"
     RUN_ID = "runId"
 
-    # -------------------------------------
-    # properties.reported.thief.testContent
-    # -------------------------------------
+    # -------------------------------
+    # properties.reported.testContent
+    # -------------------------------
     REPORTED_PROPERTY_TEST = "reportedPropertyTest"
 
-    # ----------------------------------------------------------
-    # properties.reported.thief.testContent.reportedPropertytest
-    # ----------------------------------------------------------
+    # ----------------------------------------------------
+    # properties.reported.testContent.reportedPropertytest
+    # ----------------------------------------------------
     ADD_OPERATION_ID = "addOperationId"
     REMOVE_OPERATION_ID = "removeOperationId"
     E2E_PROPERTY = "prop_e2e"
 
-    # ------------------------
-    # properties.desired.thief
-    # ------------------------
+    # ------------------
+    # properties.desired
+    # ------------------
     PAIRING = "pairing"
     TEST_CONTENT = "testContent"
 
-    # -------------------------------
-    # propeties.desired.thief.pairing
-    # -------------------------------
+    # -------------------------
+    # propeties.desired.pairing
+    # -------------------------
     SERVICE_INSTANCE_ID = "serviceInstanceId"
     RUN_ID = "runId"
 
-    # -----------------------------------
-    # propeties.desired.thief.testContent
-    # -----------------------------------
+    # -----------------------------
+    # propeties.desired.testContent
+    # -----------------------------
     TWIN_GUID = "twinGuid"
 
     # -----------------------------------

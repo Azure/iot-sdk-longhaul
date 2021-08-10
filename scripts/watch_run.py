@@ -19,13 +19,9 @@ while True:
     os.system("cls" if os.name == "nt" else "clear -x")
     twin = registry_manager.get_twin(thief_secrets.DEVICE_ID)
     json_object = {
-        Fields.SESSION_METRICS: twin.properties.reported.get(Fields.THIEF, {}).get(
-            Fields.SESSION_METRICS, None
-        ),
-        Fields.TEST_METRICS: twin.properties.reported.get(Fields.THIEF, {}).get(
-            Fields.TEST_METRICS, None
-        ),
-        Fields.SYSTEM_HEALTH_METRICS: twin.properties.reported.get(Fields.THIEF, {}).get(
+        Fields.SESSION_METRICS: twin.properties.reported.get(Fields.SESSION_METRICS, None),
+        Fields.TEST_METRICS: twin.properties.reported.get(Fields.TEST_METRICS, None),
+        Fields.SYSTEM_HEALTH_METRICS: twin.properties.reported.get(
             Fields.SYSTEM_HEALTH_METRICS, None
         ),
     }

@@ -101,6 +101,6 @@ class TestPnpCommands(object):
             assert not actual_request.payload
 
         # and make sure the response came back successfully
-        # There is currently no way to check the command response status code.
+        # Currently no way to check the command response status code.
         # assert command_response[Fields.COMMAND_RESPONSE_STATUS_CODE] == command_response_status
         assert command_response[Fields.COMMAND_RESPONSE_PAYLOAD] == response_payload

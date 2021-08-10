@@ -53,8 +53,8 @@ class TestPnpConnect(object):
         await msg.operation_ticket.event.wait()
 
         assert (
-            json.loads(msg.operation_ticket.result_message.data)[Fields.THIEF][
-                Fields.PNP_PROPERTIES_CONTENTS
-            ]["$metadata"]["$model"]
+            json.loads(msg.operation_ticket.result_message.data)[Fields.PNP_PROPERTIES_CONTENTS][
+                "$metadata"
+            ]["$model"]
             == pnp_model_id
         )
