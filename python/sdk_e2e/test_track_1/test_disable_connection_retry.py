@@ -30,12 +30,28 @@ class TestSendMessageRetryDisabled(object):
         await client.send_message(test_message.message)
         await test_message.operation_ticket.event.wait()
 
-    @pytest.mark.it("Connects the transport if necessary")
+    @pytest.mark.it("Automatically connects if transport manually disconnected before sending")
     async def test_connect_if_necessary(self, client, test_message):
 
         await client.disconnect()
         assert not client.connected
 
+        await client.send_message(test_message.message)
+        assert client.connected
+
+        await test_message.operation_ticket.event.wait()
+
+    @pytest.mark.it("Automatically connects if transport automatically disconnected before sending")
+    async def test_connects_after_automatic_disconnect(self, client, test_message, dropper):
+
+        assert client.connected
+
+        dropper.drop_outgoing()
+        while client.connected:
+            await asyncio.sleep(1)
+
+        assert not client.connected
+        dropper.restore_all()
         await client.send_message(test_message.message)
         assert client.connected
 
@@ -61,17 +77,6 @@ class TestSendMessageRetryDisabled(object):
         assert client.connected
 
         dropper.drop_outgoing()
-        with pytest.raises(OperationCancelled):
-            await client.send_message(test_message.message)
-
-        assert not client.connected
-
-    @pytest.mark.it("Fails if connection cejects send")
-    async def test_sends_if_reject_before_sending(self, client, test_message, dropper):
-
-        assert client.connected
-
-        dropper.reject_outgoing()
         with pytest.raises(OperationCancelled):
             await client.send_message(test_message.message)
 
