@@ -331,6 +331,73 @@ class ServiceApp(object):
             )
         )
 
+    def update_pairing(self, device_id, thief):
+        # Handle the case where a device is looking for someone to pair with
+        if thief.get(Fields.CMD, "") == Commands.PAIR_WITH_SERVICE_APP:
+            if thief.get(Fields.REQUESTED_SERVICE_POOL, None) == service_pool:
+                received_operation_id = thief.get(Fields.OPERATION_ID)
+                received_run_id = thief.get(Fields.RUN_ID)
+
+                logger.info(
+                    "Device {} attempting to pair with operation ID {}".format(
+                        device_id, received_operation_id
+                    ),
+                    extra=custom_props(device_id, received_run_id),
+                )
+
+                message = json.dumps(
+                    {
+                        Fields.THIEF: {
+                            Fields.CMD: Commands.PAIR_RESPONSE,
+                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                            Fields.RUN_ID: received_run_id,
+                            Fields.OPERATION_ID: received_operation_id,
+                        }
+                    }
+                )
+
+                self.outgoing_c2d_queue.put(
+                    OutgoingC2d(
+                        device_id=device_id, message=message, props=Const.JSON_TYPE_AND_ENCODING,
+                    )
+                )
+
+                # don't add device_id to self.device_list until we get a message with our
+                # service_instance_id
+
+        elif Fields.RUN_ID in thief and Fields.SERVICE_INSTANCE_ID in thief:
+            received_service_instance_id = thief.get(Fields.SERVICE_INSTANCE_ID, None)
+            received_run_id = thief[Fields.RUN_ID]
+
+            device_data = self.device_list.try_get(device_id)
+
+            # Handle the case where a device pairs with us
+            if not device_data and received_service_instance_id == service_instance_id:
+                device_data = PerDeviceData(device_id, received_run_id)
+                self.device_list.add(device_id, device_data)
+
+            # Handle the case where we used to be paired and we're not anymore
+            elif device_data and not received_service_instance_id == service_instance_id:
+                logger.info(
+                    "Device {} deviced to pair with service instance {}.".format(
+                        device_id, received_service_instance_id
+                    ),
+                    extra=custom_props(device_id, received_run_id),
+                )
+                self.device_list.remove(device_id)
+                device_data = None
+
+            elif (
+                device_data
+                and received_service_instance_id == service_instance_id
+                and received_run_id != device_data.run_id
+            ):
+                logger.info(
+                    "Device {} has a new run_id.  updating.{}.".format(device_id, received_run_id),
+                    extra=custom_props(device_id, received_run_id),
+                )
+                device_data.run_id = received_run_id
+
     def dispatch_incoming_message(self, event):
         """
         Function to dispatch incoming EventHub messages.  A different thread receives the messages
@@ -341,199 +408,59 @@ class ServiceApp(object):
 
         body = event.body_as_json()
 
+        # added `or {}` because thief might be `None`
         if get_message_source_from_event(event) == "twinChangeEvents":
-            thief = body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {}).get(Fields.THIEF, {})
+            thief = (
+                body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {}).get(Fields.THIEF, {}) or {}
+            )
         else:
-            thief = body.get(Fields.THIEF, {})
+            thief = body.get(Fields.THIEF, {}) or {}
 
-        received_service_instance_id = thief.get(Fields.SERVICE_INSTANCE_ID, None)
-        received_run_id = thief.get(Fields.RUN_ID, None)
-        received_operation_id = thief.get(Fields.OPERATION_ID, None)
-
+        self.update_pairing(device_id, thief)
         device_data = self.device_list.try_get(device_id)
 
-        if not device_data and received_service_instance_id == service_instance_id:
-            # The device app wants to pair with us
-            device_data = PerDeviceData(device_id, received_run_id)
-            self.device_list.add(device_id, device_data)
-        elif device_data and not received_service_instance_id == service_instance_id:
-            # previously paired, but not any more
-            logger.info(
-                "Device {} deviced to pair with service instance {}.".format(
-                    device_id, received_service_instance_id
-                ),
-                extra=custom_props(device_id, received_run_id),
-            )
-            self.device_list.remove(device_id)
-
-        if device_data:
-            device_data.run_id = received_run_id
+        if not device_data:
+            return
 
         if get_message_source_from_event(event) == "twinChangeEvents":
-            if device_data:
-                self.incoming_twin_changes.put(event)
-
-        elif received_run_id:
+            self.incoming_twin_changes.put(event)
+        else:
             cmd = thief.get(Fields.CMD, None)
+            received_operation_id = thief.get(Fields.OPERATION_ID, None)
+            received_run_id = thief.get(Fields.RUN_ID, None)
 
             if cmd == Commands.PAIR_WITH_SERVICE_APP:
-                if thief.get(Fields.REQUESTED_SERVICE_POOL, None) == service_pool:
-                    logger.info(
-                        "Device {} attempting to pair with operation ID {}".format(
-                            device_id, received_operation_id
-                        ),
-                        extra=custom_props(device_id, received_run_id),
-                    )
-
-                    message = json.dumps(
-                        {
-                            Fields.THIEF: {
-                                Fields.CMD: Commands.PAIR_RESPONSE,
-                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.RUN_ID: received_run_id,
-                                Fields.OPERATION_ID: received_operation_id,
-                            }
+                # handled in the update_pairing() function above
+                pass
+            elif cmd == Commands.SEND_OPERATION_RESPONSE:
+                logger.info(
+                    "Received telemetry sendOperationResponse from {} with operationId {}".format(
+                        device_id, received_operation_id,
+                    ),
+                    extra=custom_props(device_id, device_data.run_id),
+                )
+                if Flags.RETURN_EVENTHUB_MESSAGE_CONTENTS in thief.get(Fields.FLAGS, []):
+                    payload = {
+                        Fields.THIEF: {
+                            Fields.CMD: Commands.OPERATION_RESPONSE,
+                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                            Fields.RUN_ID: received_run_id,
+                            Fields.OPERATION_ID: received_operation_id,
+                            Fields.EVENTHUB_MESSAGE_CONTENTS: {
+                                Fields.EVENTHUB_MESSAGE_BODY: body,
+                                Fields.EVENTHUB_CONTENT_TYPE: event.content_type,
+                                Fields.EVENTHUB_CORRELATION_ID: event.correlation_id,
+                                Fields.EVENTHUB_MESSAGE_ID: event.message_id,
+                                Fields.EVENTHUB_SYSTEM_PROPERTIES: convert_binary_dict_to_string_dict(
+                                    event.system_properties
+                                ),
+                                Fields.EVENTHUB_PROPERTIES: convert_binary_dict_to_string_dict(
+                                    event.properties
+                                ),
+                            },
                         }
-                    )
-
-                    self.outgoing_c2d_queue.put(
-                        OutgoingC2d(
-                            device_id=device_id,
-                            message=message,
-                            props=Const.JSON_TYPE_AND_ENCODING,
-                        )
-                    )
-
-                    # don't add device_id to self.device_list until we get a message with our
-                    # service_instance_id
-
-            elif received_service_instance_id == service_instance_id:
-                if cmd == Commands.SEND_OPERATION_RESPONSE:
-                    logger.info(
-                        "Received telemetry sendOperationResponse from {} with operationId {}".format(
-                            device_id, received_operation_id,
-                        ),
-                        extra=custom_props(device_id, device_data.run_id),
-                    )
-                    if Flags.RETURN_EVENTHUB_MESSAGE_CONTENTS in thief.get(Fields.FLAGS, []):
-                        payload = {
-                            Fields.THIEF: {
-                                Fields.CMD: Commands.OPERATION_RESPONSE,
-                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.RUN_ID: received_run_id,
-                                Fields.OPERATION_ID: received_operation_id,
-                                Fields.EVENTHUB_MESSAGE_CONTENTS: {
-                                    Fields.EVENTHUB_MESSAGE_BODY: body,
-                                    Fields.EVENTHUB_CONTENT_TYPE: event.content_type,
-                                    Fields.EVENTHUB_CORRELATION_ID: event.correlation_id,
-                                    Fields.EVENTHUB_MESSAGE_ID: event.message_id,
-                                    Fields.EVENTHUB_SYSTEM_PROPERTIES: convert_binary_dict_to_string_dict(
-                                        event.system_properties
-                                    ),
-                                    Fields.EVENTHUB_PROPERTIES: convert_binary_dict_to_string_dict(
-                                        event.properties
-                                    ),
-                                },
-                            }
-                        }
-                        message = json.dumps(payload)
-
-                        self.outgoing_c2d_queue.put(
-                            OutgoingC2d(
-                                device_id=device_id,
-                                message=message,
-                                props=Const.JSON_TYPE_AND_ENCODING,
-                            )
-                        )
-
-                    else:
-                        self.outgoing_operation_response_queue.put(
-                            OperationResponse(
-                                device_id=device_id, operation_id=received_operation_id,
-                            )
-                        )
-
-                        if Flags.RESPOND_IMMEDIATELY in thief.get(Fields.FLAGS, []):
-                            self.force_send_operation_response.set()
-
-                elif cmd == Commands.SET_DESIRED_PROPS:
-                    desired = thief.get(Fields.DESIRED_PROPERTIES, {})
-                    if desired:
-                        logger.info("Updating desired props: {}".format(desired))
-                        self.registry_manager.update_twin(
-                            device_id, Twin(properties=TwinProperties(desired=desired)), "*"
-                        )
-
-                elif cmd == Commands.INVOKE_METHOD:
-                    self.executor.submit(self.handle_method_invoke, device_data, event)
-                    # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
-
-                elif cmd == Commands.INVOKE_PNP_COMMAND:
-                    self.executor.submit(self.handle_pnp_command_invoke, device_data, event)
-                    # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
-
-                elif cmd == Commands.GET_PNP_PROPERTIES:
-                    logger.info(
-                        "Getting digital twin for {} with operationid {}".format(
-                            device_id, received_operation_id
-                        ),
-                        extra=custom_props(device_id, device_data.run_id),
-                    )
-
-                    twin = self.digital_twin_client.get_digital_twin(device_id)
-
-                    message = json.dumps(
-                        {
-                            Fields.THIEF: {
-                                Fields.CMD: Commands.OPERATION_RESPONSE,
-                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.RUN_ID: received_run_id,
-                                Fields.OPERATION_ID: received_operation_id,
-                                Fields.PNP_PROPERTIES_CONTENTS: twin,
-                            }
-                        }
-                    )
-
-                    self.outgoing_c2d_queue.put(
-                        OutgoingC2d(
-                            device_id=device_id,
-                            message=message,
-                            props=Const.JSON_TYPE_AND_ENCODING,
-                        )
-                    )
-
-                elif cmd == Commands.UPDATE_PNP_PROPERTIES:
-                    logger.info(
-                        "Updating digital twin for {} with operationid {}".format(
-                            device_id, received_operation_id
-                        ),
-                        extra=custom_props(device_id, device_data.run_id),
-                    )
-
-                    self.digital_twin_client.update_digital_twin(
-                        device_id, thief[Fields.PNP_PROPERTIES_UPDATE_PATCH]
-                    )
-
-                    # TODO: send ack for all of these ops, include error if failure
-
-                elif cmd == Commands.SEND_C2D:
-                    logger.info(
-                        "Sending C2D to {} with operationId {}".format(
-                            device_id, received_operation_id,
-                        ),
-                        extra=custom_props(device_id, device_data.run_id),
-                    )
-                    message = json.dumps(
-                        {
-                            Fields.THIEF: {
-                                Fields.CMD: Commands.C2D_RESPONSE,
-                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.RUN_ID: device_data.run_id,
-                                Fields.OPERATION_ID: received_operation_id,
-                                Fields.TEST_C2D_PAYLOAD: thief[Fields.TEST_C2D_PAYLOAD],
-                            }
-                        }
-                    )
+                    }
+                    message = json.dumps(payload)
 
                     self.outgoing_c2d_queue.put(
                         OutgoingC2d(
@@ -544,10 +471,101 @@ class ServiceApp(object):
                     )
 
                 else:
-                    logger.info(
-                        "Unknown command received from {}: {}".format(device_id, body),
-                        extra=custom_props(device_id, device_data.run_id),
+                    self.outgoing_operation_response_queue.put(
+                        OperationResponse(device_id=device_id, operation_id=received_operation_id,)
                     )
+
+                    if Flags.RESPOND_IMMEDIATELY in thief.get(Fields.FLAGS, []):
+                        self.force_send_operation_response.set()
+
+            elif cmd == Commands.SET_DESIRED_PROPS:
+                desired = thief.get(Fields.DESIRED_PROPERTIES, {})
+                if desired:
+                    logger.info("Updating desired props: {}".format(desired))
+                    self.registry_manager.update_twin(
+                        device_id, Twin(properties=TwinProperties(desired=desired)), "*"
+                    )
+
+            elif cmd == Commands.INVOKE_METHOD:
+                self.executor.submit(self.handle_method_invoke, device_data, event)
+                # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
+
+            elif cmd == Commands.INVOKE_PNP_COMMAND:
+                self.executor.submit(self.handle_pnp_command_invoke, device_data, event)
+                # TODO: add_done_callback -- code to handle this is in the device app, needs to be done here too, so we can count exceptions in non-critical threads
+
+            elif cmd == Commands.GET_PNP_PROPERTIES:
+                logger.info(
+                    "Getting digital twin for {} with operationid {}".format(
+                        device_id, received_operation_id
+                    ),
+                    extra=custom_props(device_id, device_data.run_id),
+                )
+
+                twin = self.digital_twin_client.get_digital_twin(device_id)
+
+                message = json.dumps(
+                    {
+                        Fields.THIEF: {
+                            Fields.CMD: Commands.OPERATION_RESPONSE,
+                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                            Fields.RUN_ID: received_run_id,
+                            Fields.OPERATION_ID: received_operation_id,
+                            Fields.PNP_PROPERTIES_CONTENTS: twin,
+                        }
+                    }
+                )
+
+                self.outgoing_c2d_queue.put(
+                    OutgoingC2d(
+                        device_id=device_id, message=message, props=Const.JSON_TYPE_AND_ENCODING,
+                    )
+                )
+
+            elif cmd == Commands.UPDATE_PNP_PROPERTIES:
+                logger.info(
+                    "Updating digital twin for {} with operationid {}".format(
+                        device_id, received_operation_id
+                    ),
+                    extra=custom_props(device_id, device_data.run_id),
+                )
+
+                self.digital_twin_client.update_digital_twin(
+                    device_id, thief[Fields.PNP_PROPERTIES_UPDATE_PATCH]
+                )
+
+                # TODO: send ack for all of these ops, include error if failure
+
+            elif cmd == Commands.SEND_C2D:
+                logger.info(
+                    "Sending C2D to {} with operationId {}".format(
+                        device_id, received_operation_id,
+                    ),
+                    extra=custom_props(device_id, device_data.run_id),
+                )
+                message = json.dumps(
+                    {
+                        Fields.THIEF: {
+                            Fields.CMD: Commands.C2D_RESPONSE,
+                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                            Fields.RUN_ID: received_run_id,
+                            Fields.OPERATION_ID: received_operation_id,
+                            Fields.TEST_C2D_PAYLOAD: thief[Fields.TEST_C2D_PAYLOAD],
+                        }
+                    }
+                )
+
+                self.outgoing_c2d_queue.put(
+                    OutgoingC2d(
+                        device_id=device_id, message=message, props=Const.JSON_TYPE_AND_ENCODING,
+                    )
+                )
+
+            else:
+                logger.info(
+                    "Unknown command received from {}: {}".format(device_id, body),
+                    extra=custom_props(device_id, device_data.run_id),
+                )
 
     def receive_incoming_messages_thread(self):
         """
@@ -721,7 +739,8 @@ class ServiceApp(object):
                             device_data.reported_property_values[property_name] = property_value
                     else:
                         if (
-                            Fields.REMOVE_OPERATION_ID
+                            property_name in device_data.reported_property_values
+                            and Fields.REMOVE_OPERATION_ID
                             in device_data.reported_property_values[property_name]
                         ):
                             operation_id = device_data.reported_property_values[property_name][
