@@ -189,9 +189,8 @@ class ServiceApp(object):
 
     def handle_method_invoke(self, device_data, event):
         body = event.body_as_json()
-        thief = body.get(Fields.THIEF, {})
-        method_guid = thief.get(Fields.OPERATION_ID)
-        method_name = thief.get(Fields.METHOD_NAME)
+        method_guid = body.get(Fields.OPERATION_ID)
+        method_name = body.get(Fields.METHOD_NAME)
 
         logger.info(
             "received method invoke method={}, guid={}".format(method_name, method_guid),
@@ -200,11 +199,11 @@ class ServiceApp(object):
 
         request = CloudToDeviceMethod(
             method_name=method_name,
-            payload=thief.get(Fields.METHOD_INVOKE_PAYLOAD, None),
-            response_timeout_in_seconds=thief.get(
+            payload=body.get(Fields.METHOD_INVOKE_PAYLOAD, None),
+            response_timeout_in_seconds=body.get(
                 Fields.METHOD_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS, None
             ),
-            connect_timeout_in_seconds=thief.get(
+            connect_timeout_in_seconds=body.get(
                 Fields.METHOD_INVOKE_CONNECT_TIMEOUT_IN_SECONDS, None
             ),
         )
@@ -228,14 +227,12 @@ class ServiceApp(object):
 
         response_message = json.dumps(
             {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.METHOD_RESPONSE,
-                    Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                    Fields.RUN_ID: device_data.run_id,
-                    Fields.OPERATION_ID: method_guid,
-                    Fields.METHOD_RESPONSE_PAYLOAD: response.payload,
-                    Fields.METHOD_RESPONSE_STATUS_CODE: response.status,
-                }
+                Fields.CMD: Commands.METHOD_RESPONSE,
+                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                Fields.RUN_ID: device_data.run_id,
+                Fields.OPERATION_ID: method_guid,
+                Fields.METHOD_RESPONSE_PAYLOAD: response.payload,
+                Fields.METHOD_RESPONSE_STATUS_CODE: response.status,
             }
         )
 
@@ -254,15 +251,14 @@ class ServiceApp(object):
 
     def handle_pnp_command_invoke(self, device_data, event):
         body = event.body_as_json()
-        thief = body.get(Fields.THIEF, {})
-        command_guid = thief.get(Fields.OPERATION_ID)
-        command_name = thief.get(Fields.COMMAND_NAME)
-        command_component_name = thief.get(Fields.COMMAND_COMPONENT_NAME, None)
-        payload = thief.get(Fields.COMMAND_INVOKE_PAYLOAD, None)
-        response_timeout_in_seconds = thief.get(
+        command_guid = body.get(Fields.OPERATION_ID)
+        command_name = body.get(Fields.COMMAND_NAME)
+        command_component_name = body.get(Fields.COMMAND_COMPONENT_NAME, None)
+        payload = body.get(Fields.COMMAND_INVOKE_PAYLOAD, None)
+        response_timeout_in_seconds = body.get(
             Fields.COMMAND_INVOKE_RESPONSE_TIMEOUT_IN_SECONDS, None
         )
-        connect_timeout_in_seconds = thief.get(
+        connect_timeout_in_seconds = body.get(
             Fields.COMMAND_INVOKE_CONNECT_TIMEOUT_IN_SECONDS, None
         )
 
@@ -308,13 +304,11 @@ class ServiceApp(object):
 
         response_message = json.dumps(
             {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.OPERATION_RESPONSE,
-                    Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                    Fields.RUN_ID: device_data.run_id,
-                    Fields.OPERATION_ID: command_guid,
-                    Fields.COMMAND_RESPONSE_PAYLOAD: response,
-                }
+                Fields.CMD: Commands.OPERATION_RESPONSE,
+                Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                Fields.RUN_ID: device_data.run_id,
+                Fields.OPERATION_ID: command_guid,
+                Fields.COMMAND_RESPONSE_PAYLOAD: response,
             }
         )
 
@@ -331,12 +325,12 @@ class ServiceApp(object):
             )
         )
 
-    def update_pairing(self, device_id, thief):
+    def update_pairing(self, device_id, body):
         # Handle the case where a device is looking for someone to pair with
-        if thief.get(Fields.CMD, "") == Commands.PAIR_WITH_SERVICE_APP:
-            if thief.get(Fields.REQUESTED_SERVICE_POOL, None) == service_pool:
-                received_operation_id = thief.get(Fields.OPERATION_ID)
-                received_run_id = thief.get(Fields.RUN_ID)
+        if body.get(Fields.CMD, "") == Commands.PAIR_WITH_SERVICE_APP:
+            if body.get(Fields.REQUESTED_SERVICE_POOL, None) == service_pool:
+                received_operation_id = body.get(Fields.OPERATION_ID)
+                received_run_id = body.get(Fields.RUN_ID)
 
                 logger.info(
                     "Device {} attempting to pair with operation ID {}".format(
@@ -347,12 +341,10 @@ class ServiceApp(object):
 
                 message = json.dumps(
                     {
-                        Fields.THIEF: {
-                            Fields.CMD: Commands.PAIR_RESPONSE,
-                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                            Fields.RUN_ID: received_run_id,
-                            Fields.OPERATION_ID: received_operation_id,
-                        }
+                        Fields.CMD: Commands.PAIR_RESPONSE,
+                        Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                        Fields.RUN_ID: received_run_id,
+                        Fields.OPERATION_ID: received_operation_id,
                     }
                 )
 
@@ -365,9 +357,9 @@ class ServiceApp(object):
                 # don't add device_id to self.device_list until we get a message with our
                 # service_instance_id
 
-        elif Fields.RUN_ID in thief and Fields.SERVICE_INSTANCE_ID in thief:
-            received_service_instance_id = thief.get(Fields.SERVICE_INSTANCE_ID, None)
-            received_run_id = thief[Fields.RUN_ID]
+        elif Fields.RUN_ID in body and Fields.SERVICE_INSTANCE_ID in body:
+            received_service_instance_id = body.get(Fields.SERVICE_INSTANCE_ID, None)
+            received_run_id = body[Fields.RUN_ID]
 
             device_data = self.device_list.try_get(device_id)
 
@@ -408,15 +400,10 @@ class ServiceApp(object):
 
         body = event.body_as_json()
 
-        # added `or {}` because thief might be `None`
         if get_message_source_from_event(event) == "twinChangeEvents":
-            thief = (
-                body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {}).get(Fields.THIEF, {}) or {}
-            )
-        else:
-            thief = body.get(Fields.THIEF, {}) or {}
+            body = body.get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {})
 
-        self.update_pairing(device_id, thief)
+        self.update_pairing(device_id, body)
         device_data = self.device_list.try_get(device_id)
 
         if not device_data:
@@ -425,9 +412,9 @@ class ServiceApp(object):
         if get_message_source_from_event(event) == "twinChangeEvents":
             self.incoming_twin_changes.put(event)
         else:
-            cmd = thief.get(Fields.CMD, None)
-            received_operation_id = thief.get(Fields.OPERATION_ID, None)
-            received_run_id = thief.get(Fields.RUN_ID, None)
+            cmd = body.get(Fields.CMD, None)
+            received_operation_id = body.get(Fields.OPERATION_ID, None)
+            received_run_id = body.get(Fields.RUN_ID, None)
 
             if cmd == Commands.PAIR_WITH_SERVICE_APP:
                 # handled in the update_pairing() function above
@@ -439,26 +426,24 @@ class ServiceApp(object):
                     ),
                     extra=custom_props(device_id, device_data.run_id),
                 )
-                if Flags.RETURN_EVENTHUB_MESSAGE_CONTENTS in thief.get(Fields.FLAGS, []):
+                if Flags.RETURN_EVENTHUB_MESSAGE_CONTENTS in body.get(Fields.FLAGS, []):
                     payload = {
-                        Fields.THIEF: {
-                            Fields.CMD: Commands.OPERATION_RESPONSE,
-                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                            Fields.RUN_ID: received_run_id,
-                            Fields.OPERATION_ID: received_operation_id,
-                            Fields.EVENTHUB_MESSAGE_CONTENTS: {
-                                Fields.EVENTHUB_MESSAGE_BODY: body,
-                                Fields.EVENTHUB_CONTENT_TYPE: event.content_type,
-                                Fields.EVENTHUB_CORRELATION_ID: event.correlation_id,
-                                Fields.EVENTHUB_MESSAGE_ID: event.message_id,
-                                Fields.EVENTHUB_SYSTEM_PROPERTIES: convert_binary_dict_to_string_dict(
-                                    event.system_properties
-                                ),
-                                Fields.EVENTHUB_PROPERTIES: convert_binary_dict_to_string_dict(
-                                    event.properties
-                                ),
-                            },
-                        }
+                        Fields.CMD: Commands.OPERATION_RESPONSE,
+                        Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                        Fields.RUN_ID: received_run_id,
+                        Fields.OPERATION_ID: received_operation_id,
+                        Fields.EVENTHUB_MESSAGE_CONTENTS: {
+                            Fields.EVENTHUB_MESSAGE_BODY: body,
+                            Fields.EVENTHUB_CONTENT_TYPE: event.content_type,
+                            Fields.EVENTHUB_CORRELATION_ID: event.correlation_id,
+                            Fields.EVENTHUB_MESSAGE_ID: event.message_id,
+                            Fields.EVENTHUB_SYSTEM_PROPERTIES: convert_binary_dict_to_string_dict(
+                                event.system_properties
+                            ),
+                            Fields.EVENTHUB_PROPERTIES: convert_binary_dict_to_string_dict(
+                                event.properties
+                            ),
+                        },
                     }
                     message = json.dumps(payload)
 
@@ -475,11 +460,11 @@ class ServiceApp(object):
                         OperationResponse(device_id=device_id, operation_id=received_operation_id,)
                     )
 
-                    if Flags.RESPOND_IMMEDIATELY in thief.get(Fields.FLAGS, []):
+                    if Flags.RESPOND_IMMEDIATELY in body.get(Fields.FLAGS, []):
                         self.force_send_operation_response.set()
 
             elif cmd == Commands.SET_DESIRED_PROPS:
-                desired = thief.get(Fields.DESIRED_PROPERTIES, {})
+                desired = body.get(Fields.DESIRED_PROPERTIES, {})
                 if desired:
                     logger.info("Updating desired props: {}".format(desired))
                     self.registry_manager.update_twin(
@@ -506,13 +491,11 @@ class ServiceApp(object):
 
                 message = json.dumps(
                     {
-                        Fields.THIEF: {
-                            Fields.CMD: Commands.OPERATION_RESPONSE,
-                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                            Fields.RUN_ID: received_run_id,
-                            Fields.OPERATION_ID: received_operation_id,
-                            Fields.PNP_PROPERTIES_CONTENTS: twin,
-                        }
+                        Fields.CMD: Commands.OPERATION_RESPONSE,
+                        Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                        Fields.RUN_ID: received_run_id,
+                        Fields.OPERATION_ID: received_operation_id,
+                        Fields.PNP_PROPERTIES_CONTENTS: twin,
                     }
                 )
 
@@ -531,7 +514,7 @@ class ServiceApp(object):
                 )
 
                 self.digital_twin_client.update_digital_twin(
-                    device_id, thief[Fields.PNP_PROPERTIES_UPDATE_PATCH]
+                    device_id, body[Fields.PNP_PROPERTIES_UPDATE_PATCH]
                 )
 
                 # TODO: send ack for all of these ops, include error if failure
@@ -545,13 +528,11 @@ class ServiceApp(object):
                 )
                 message = json.dumps(
                     {
-                        Fields.THIEF: {
-                            Fields.CMD: Commands.C2D_RESPONSE,
-                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                            Fields.RUN_ID: received_run_id,
-                            Fields.OPERATION_ID: received_operation_id,
-                            Fields.TEST_C2D_PAYLOAD: thief[Fields.TEST_C2D_PAYLOAD],
-                        }
+                        Fields.CMD: Commands.C2D_RESPONSE,
+                        Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                        Fields.RUN_ID: received_run_id,
+                        Fields.OPERATION_ID: received_operation_id,
+                        Fields.TEST_C2D_PAYLOAD: body[Fields.TEST_C2D_PAYLOAD],
                     }
                 )
 
@@ -685,12 +666,10 @@ class ServiceApp(object):
 
                     message = json.dumps(
                         {
-                            Fields.THIEF: {
-                                Fields.CMD: Commands.OPERATION_RESPONSE,
-                                Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                                Fields.RUN_ID: device_data.run_id,
-                                Fields.OPERATION_IDS: operation_ids[device_id],
-                            }
+                            Fields.CMD: Commands.OPERATION_RESPONSE,
+                            Fields.SERVICE_INSTANCE_ID: service_instance_id,
+                            Fields.RUN_ID: device_data.run_id,
+                            Fields.OPERATION_IDS: operation_ids[device_id],
                         }
                     )
 
@@ -723,7 +702,6 @@ class ServiceApp(object):
             event.body_as_json()
             .get(Fields.PROPERTIES, {})
             .get(Fields.REPORTED, {})
-            .get(Fields.THIEF, {})
             .get(Fields.TEST_CONTENT, {})
         )
         reported_property_test = test_content.get(Fields.REPORTED_PROPERTY_TEST)
@@ -770,30 +748,23 @@ class ServiceApp(object):
                 continue
 
             device_id = get_device_id_from_event(event)
-            thief = (
-                event.body_as_json()
-                .get(Fields.PROPERTIES, {})
-                .get(Fields.REPORTED, {})
-                .get(Fields.THIEF, {})
-            )
-            if not thief:
-                thief = {}
+            body = event.body_as_json().get(Fields.PROPERTIES, {}).get(Fields.REPORTED, {})
 
             device_data = self.device_list.try_get(device_id)
             if device_data:
                 run_id = device_data.run_id
             else:
-                run_id = thief.get(Fields.PAIRING, {}).get(Fields.RUN_ID, None)
+                run_id = body.get(Fields.PAIRING, {}).get(Fields.RUN_ID, None)
 
             logger.info(
                 "Twin change for {}: {}".format(device_id, event.body_as_json()),
                 extra=custom_props(device_id, run_id),
             )
 
-            if thief.get(Fields.TEST_CONTENT):
+            if body.get(Fields.TEST_CONTENT):
                 self.respond_to_test_content_properties(event)
 
-            run_state = thief.get(Fields.SESSION_METRICS, {}).get("runState")
+            run_state = body.get(Fields.SESSION_METRICS, {}).get("runState")
             if run_state and run_state != RunStates.RUNNING:
                 logger.info(
                     "Device {} no longer running.".format(device_id),

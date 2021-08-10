@@ -18,8 +18,6 @@ groups:
   - name: Fields
     desc: "Names of fields inside telemetry messages and twins"
     values:
-        - name: THIEF
-          value: "thief"
         - name: PROPERTIES
           value: "properties"
         - name: REPORTED
@@ -64,7 +62,7 @@ groups:
           - name: REQUESTED_SERVICE_POOL
             value: "requestedServicePool"
       - name: ReportedProperties
-        desc: "properties.reported.thief"
+        desc: "properties.reported"
         values:
           - name: SYSTEM_PROPERTIES
             value: "systemProperties"
@@ -85,19 +83,19 @@ groups:
           - name: EXIT_REASON
             value: "exitReason"
       - name: Pairing
-        desc: "properties.reported.thief.pairing"
+        desc: "properties.reported.pairing"
         values:
           - name: SERVICE_INSTANCE_ID
             value: "serviceInstanceId"
           - name: RUN_ID
             value: "runId"
       - name: TestContent
-        desc: "properties.reported.thief.testContent"
+        desc: "properties.reported.testContent"
         values:
           - name: REPORTED_PROPERTY_TEST
             value: "reportedPropertyTest"
       - name: ReportedPropertyTest
-        desc: "properties.reported.thief.testContent.reportedPropertytest"
+        desc: "properties.reported.testContent.reportedPropertytest"
         values:
           - name: ADD_OPERATION_ID
             value: "addOperationId"
@@ -107,21 +105,21 @@ groups:
             value: "prop_e2e"
 
       - name: Desired
-        desc: "properties.desired.thief"
+        desc: "properties.desired"
         values:
           - name: PAIRING
             value: "pairing"
           - name: TEST_CONTENT
             value: "testContent"
       - name: Pairing
-        desc: "propeties.desired.thief.pairing"
+        desc: "propeties.desired.pairing"
         values:
           - name: SERVICE_INSTANCE_ID
             value: "serviceInstanceId"
           - name: RUN_ID
             value: "runId"
       - name: TestContent
-        desc: "propeties.desired.thief.testContent"
+        desc: "propeties.desired.testContent"
         values:
           - name: TWIN_GUID
             value: "twinGuid"

@@ -16,10 +16,8 @@ def service_app(client, message_factory):
             await client.send_message(
                 message_factory(
                     {
-                        Fields.THIEF: {
-                            Fields.CMD: Commands.SET_DESIRED_PROPS,
-                            Fields.DESIRED_PROPERTIES: desired_props,
-                        }
+                        Fields.CMD: Commands.SET_DESIRED_PROPS,
+                        Fields.DESIRED_PROPERTIES: desired_props,
                     }
                 ).message
             )
@@ -28,18 +26,16 @@ def service_app(client, message_factory):
             # invoke the method call
             invoke = message_factory(
                 {
-                    Fields.THIEF: {
-                        Fields.CMD: Commands.INVOKE_METHOD,
-                        Fields.METHOD_NAME: method_name,
-                        Fields.METHOD_INVOKE_PAYLOAD: method_payload,
-                    }
+                    Fields.CMD: Commands.INVOKE_METHOD,
+                    Fields.METHOD_NAME: method_name,
+                    Fields.METHOD_INVOKE_PAYLOAD: method_payload,
                 }
             )
             await client.send_message(invoke.message)
 
             # wait for the response to come back via the service API call
             await invoke.operation_ticket.event.wait()
-            method_response = json.loads(invoke.operation_ticket.result_message.data)[Fields.THIEF]
+            method_response = json.loads(invoke.operation_ticket.result_message.data)
 
             return method_response
 
@@ -50,25 +46,21 @@ def make_desired_property_patch(component_name, property_name, property_value):
     logger.info("Setting {} to {}".format(property_name, property_value))
     if component_name:
         return {
-            Fields.THIEF: {
-                Fields.CMD: Commands.UPDATE_PNP_PROPERTIES,
-                Fields.PNP_PROPERTIES_UPDATE_PATCH: [
-                    {
-                        "op": "add",
-                        "path": "/{}".format(component_name),
-                        "value": {property_name: property_value, "$metadata": {}},
-                    }
-                ],
-            }
+            Fields.CMD: Commands.UPDATE_PNP_PROPERTIES,
+            Fields.PNP_PROPERTIES_UPDATE_PATCH: [
+                {
+                    "op": "add",
+                    "path": "/{}".format(component_name),
+                    "value": {property_name: property_value, "$metadata": {}},
+                }
+            ],
         }
     else:
         return {
-            Fields.THIEF: {
-                Fields.CMD: Commands.UPDATE_PNP_PROPERTIES,
-                Fields.PNP_PROPERTIES_UPDATE_PATCH: [
-                    {"op": "add", "path": "/{}".format(property_name), "value": property_value}
-                ],
-            }
+            Fields.CMD: Commands.UPDATE_PNP_PROPERTIES,
+            Fields.PNP_PROPERTIES_UPDATE_PATCH: [
+                {"op": "add", "path": "/{}".format(property_name), "value": property_value}
+            ],
         }
 
 
@@ -78,19 +70,17 @@ def pnp_service_app(client, message_factory):
         async def invoke_pnp_command(self, pnp_command_name, pnp_component_name, request_payload):
             invoke = message_factory(
                 {
-                    Fields.THIEF: {
-                        Fields.CMD: Commands.INVOKE_PNP_COMMAND,
-                        Fields.COMMAND_NAME: pnp_command_name,
-                        Fields.COMMAND_COMPONENT_NAME: pnp_component_name,
-                        Fields.COMMAND_INVOKE_PAYLOAD: request_payload,
-                    }
+                    Fields.CMD: Commands.INVOKE_PNP_COMMAND,
+                    Fields.COMMAND_NAME: pnp_command_name,
+                    Fields.COMMAND_COMPONENT_NAME: pnp_component_name,
+                    Fields.COMMAND_INVOKE_PAYLOAD: request_payload,
                 }
             )
             await client.send_message(invoke.message)
 
             # wait for the response to come back via the service API call
             await invoke.operation_ticket.event.wait()
-            command_response = json.loads(invoke.operation_ticket.result_message.data)[Fields.THIEF]
+            command_response = json.loads(invoke.operation_ticket.result_message.data)
 
             return command_response
 
@@ -99,10 +89,8 @@ def pnp_service_app(client, message_factory):
             await client.send_message(msg.message)
             await msg.operation_ticket.event.wait()
 
-            return (
-                json.loads(msg.operation_ticket.result_message.data)
-                .get(Fields.THIEF, {})
-                .get(Fields.PNP_PROPERTIES_CONTENTS, {})
+            return json.loads(msg.operation_ticket.result_message.data).get(
+                Fields.PNP_PROPERTIES_CONTENTS, {}
             )
 
         async def update_pnp_properties(

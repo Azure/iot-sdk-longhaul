@@ -8,7 +8,6 @@ import collections
 import json
 from thief_constants import Fields, Const
 from client_fixtures import (
-    create_message_from_dict,
     client_kwargs,
     brand_new_client,
     connected_client,
@@ -30,27 +29,23 @@ logger.setLevel(level=logging.INFO)
 
 @pytest.fixture(scope="class")
 def message_factory(run_id, service_instance_id, operation_ticket_factory):  # noqa: F811
-    def wrapper_function(original_payload, cmd=None):
+    def wrapper_function(original_body, cmd=None):
         operation_ticket = operation_ticket_factory()
 
-        payload = copy.deepcopy(original_payload)
-        if Fields.THIEF not in payload:
-            payload[Fields.THIEF] = {}
+        body = copy.deepcopy(original_body)
 
-        thief = payload[Fields.THIEF]
-
-        thief[Fields.OPERATION_ID] = operation_ticket.id
-        thief[Fields.SERVICE_INSTANCE_ID] = service_instance_id
-        thief[Fields.RUN_ID] = run_id
+        body[Fields.OPERATION_ID] = operation_ticket.id
+        body[Fields.SERVICE_INSTANCE_ID] = service_instance_id
+        body[Fields.RUN_ID] = run_id
         if cmd:
-            thief[Fields.CMD] = cmd
+            body[Fields.CMD] = cmd
 
-        message = Message(json.dumps(payload))
+        message = Message(json.dumps(body))
         message.content_type = Const.JSON_CONTENT_TYPE
         message.content_encoding = Const.JSON_CONTENT_ENCODING
 
-        return collections.namedtuple("WrappedMessage", "message operation_ticket payload")(
-            message, operation_ticket, payload
+        return collections.namedtuple("WrappedMessage", "message operation_ticket body")(
+            message, operation_ticket, body
         )
 
     return wrapper_function
@@ -60,18 +55,16 @@ def message_factory(run_id, service_instance_id, operation_ticket_factory):  # n
 def reported_props_factory(run_id, service_instance_id, random_dict_factory):  # noqa: F811
     def factory_function(operation_ticket):
         return {
-            Fields.THIEF: {
-                Fields.RUN_ID: run_id,
-                Fields.SERVICE_INSTANCE_ID: service_instance_id,
-                Fields.TEST_CONTENT: {
-                    Fields.REPORTED_PROPERTY_TEST: {
-                        Fields.E2E_PROPERTY: {
-                            Fields.ADD_OPERATION_ID: operation_ticket.id,
-                            Fields.RANDOM_CONTENT: random_dict_factory(),
-                        }
+            Fields.RUN_ID: run_id,
+            Fields.SERVICE_INSTANCE_ID: service_instance_id,
+            Fields.TEST_CONTENT: {
+                Fields.REPORTED_PROPERTY_TEST: {
+                    Fields.E2E_PROPERTY: {
+                        Fields.ADD_OPERATION_ID: operation_ticket.id,
+                        Fields.RANDOM_CONTENT: random_dict_factory(),
                     }
-                },
-            }
+                }
+            },
         }
 
     return factory_function

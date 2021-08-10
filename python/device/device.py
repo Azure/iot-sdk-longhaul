@@ -427,16 +427,17 @@ class DeviceApp(object):
         """
 
         # First remove all old props (in case of schema change).  Also clears out old results.
-        props = {Fields.THIEF: None}
+        props = {}
+        for key in self.client.get_twin()["reported"]:
+            if not key.startswith("$"):
+                props[key] = None
         self.client.patch_twin_reported_properties(props)
 
         props = {
-            Fields.THIEF: {
-                Fields.SYSTEM_PROPERTIES: self.get_system_properties(),
-                Fields.SESSION_METRICS: self.get_session_metrics(),
-                Fields.TEST_METRICS: self.get_test_metrics(),
-                Fields.CONFIG: self.config,
-            }
+            Fields.SYSTEM_PROPERTIES: self.get_system_properties(),
+            Fields.SESSION_METRICS: self.get_session_metrics(),
+            Fields.TEST_METRICS: self.get_test_metrics(),
+            Fields.CONFIG: self.config,
         }
         self.client.patch_twin_reported_properties(props)
 
@@ -476,8 +477,8 @@ class DeviceApp(object):
         # Note: we're changing the dictionary that the user passed in.
         # This isn't the best idea, but it works and it saves us from deep copies
         if self.service_instance_id:
-            payload[Fields.THIEF][Fields.SERVICE_INSTANCE_ID] = self.service_instance_id
-        payload[Fields.THIEF][Fields.RUN_ID] = run_id
+            payload[Fields.SERVICE_INSTANCE_ID] = self.service_instance_id
+        payload[Fields.RUN_ID] = run_id
 
         # This function only creates the message.  The caller needs to queue it up for sending.
         msg = Message(json.dumps(payload))
@@ -500,11 +501,9 @@ class DeviceApp(object):
         ]:
             operation_ticket = self.operation_ticket_list.make_event_based_operation_ticket()
             pairing_payload = {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
-                    Fields.OPERATION_ID: operation_ticket.id,
-                    Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
-                }
+                Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
+                Fields.OPERATION_ID: operation_ticket.id,
+                Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
             }
             msg = self.create_message_from_dict(pairing_payload)
             self.client.send_message(msg)
@@ -515,13 +514,12 @@ class DeviceApp(object):
                 timeout=self.config[Settings.PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS]
             )
             if operation_ticket.event.isSet():
-                msg = json.loads(operation_ticket.result_message.data.decode())
+                body = json.loads(operation_ticket.result_message.data.decode())
 
-                logger.info("Received pairing response: {}".format(pprint.pformat(msg)))
+                logger.info("Received pairing response: {}".format(pprint.pformat(body)))
                 event_logger.info(Events.RECEIVED_PAIRING_RESPONSE)
 
-                thief = msg[Fields.THIEF]
-                self.service_instance_id = thief[Fields.SERVICE_INSTANCE_ID]
+                self.service_instance_id = body[Fields.SERVICE_INSTANCE_ID]
 
                 event_logger.info(Events.PAIRING_COMPLETE)
                 return
@@ -579,13 +577,11 @@ class DeviceApp(object):
             operation_ticket = self.operation_ticket_list.make_event_based_operation_ticket()
 
             payload = {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
-                    Fields.OPERATION_ID: operation_ticket.id,
-                    Fields.SESSION_METRICS: self.get_session_metrics(),
-                    Fields.TEST_METRICS: self.get_test_metrics(),
-                    Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
-                }
+                Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
+                Fields.OPERATION_ID: operation_ticket.id,
+                Fields.SESSION_METRICS: self.get_session_metrics(),
+                Fields.TEST_METRICS: self.get_test_metrics(),
+                Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
             }
 
             msg = self.create_message_from_dict(payload)
@@ -634,11 +630,9 @@ class DeviceApp(object):
             to run in it's own thread.  Returns when the PUBACK returns.
             """
             payload = {
-                Fields.THIEF: {
-                    Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
-                    Fields.OPERATION_ID: operation_id,
-                    "extraPayload": self.make_random_payload(),
-                }
+                Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
+                Fields.OPERATION_ID: operation_id,
+                "extraPayload": self.make_random_payload(),
             }
 
             msg = self.create_message_from_dict(payload)
@@ -703,7 +697,7 @@ class DeviceApp(object):
         callback for desired property patch reception
         """
         # props that have the pairing structure go to `incoming_pairing_message_queue`
-        if patch.get(Fields.THIEF, {}).get(Fields.PAIRING, {}):
+        if patch.get(Fields.PAIRING, {}):
             self.incoming_pairing_message_queue.put(patch)
 
         # other props go into incoming_deisred_property_patch_queue
@@ -714,12 +708,10 @@ class DeviceApp(object):
         """
         Callback for receiving c2d messages.
         """
-        obj = json.loads(msg.data.decode())
-        thief = obj.get(Fields.THIEF)
+        body = json.loads(msg.data.decode())
 
-        if thief and thief[Fields.RUN_ID] == run_id:
-            cmd = thief[Fields.CMD]
-            if cmd in [
+        if body and body[Fields.RUN_ID] == run_id:
+            if body[Fields.CMD] in [
                 Commands.PAIR_RESPONSE,
                 Commands.OPERATION_RESPONSE,
                 Commands.METHOD_RESPONSE,
@@ -728,10 +720,10 @@ class DeviceApp(object):
                 self.incoming_executor.submit(self.handle_operation_response, msg)
 
             else:
-                logger.warning("Unknown command received: {}".format(obj))
+                logger.warning("Unknown command received: {}".format(body))
 
         else:
-            logger.warning("C2D received, but it's not for us: {}".format(obj))
+            logger.warning("C2D received, but it's not for us: {}".format(body))
 
     def handle_operation_response(self, msg):
         """
@@ -740,15 +732,15 @@ class DeviceApp(object):
         the service has responded.
         """
 
-        thief = json.loads(msg.data.decode())[Fields.THIEF]
+        body = json.loads(msg.data.decode())
 
-        operation_ids = thief.get(Fields.OPERATION_IDS, [])
+        operation_ids = body.get(Fields.OPERATION_IDS, [])
         if not operation_ids:
             operation_ids = [
-                thief.get(Fields.OPERATION_ID),
+                body.get(Fields.OPERATION_ID),
             ]
 
-        logger.info("Received {} message with {}".format(thief[Fields.CMD], operation_ids))
+        logger.info("Received {} message with {}".format(body[Fields.CMD], operation_ids))
 
         for operation_id in operation_ids:
             operation_ticket = self.operation_ticket_list.get(operation_id)
@@ -789,7 +781,7 @@ class DeviceApp(object):
         """
         test function to send a single reported property and then clear it after the
         server verifies it. It does this by setting properties inside
-        `properties/reported/thief/testContent/reportedPropertyTest`.  Each property has
+        `properties/reported/testContent/reportedPropertyTest`.  Each property has
         a `addOperationId` value and a `removeOperationId` value.  When  the service sees the
         property added, it sends the `addOperationId` to the device.  When the service sees the
         property removed, it sends the `removeOperationId` to the device. This way the device
@@ -808,11 +800,7 @@ class DeviceApp(object):
         metrics[Fields.SESSION_METRICS] = self.get_session_metrics()
 
         def make_reported_prop(property_name, val):
-            return {
-                Fields.THIEF: {
-                    Fields.TEST_CONTENT: {Fields.REPORTED_PROPERTY_TEST: {property_name: val}}
-                }
-            }
+            return {Fields.TEST_CONTENT: {Fields.REPORTED_PROPERTY_TEST: {property_name: val}}}
 
         add_operation = self.operation_ticket_list.make_event_based_operation_ticket()
         remove_operation = self.operation_ticket_list.make_event_based_operation_ticket()
@@ -827,7 +815,7 @@ class DeviceApp(object):
 
         logger.info("Adding test property {}".format(prop_name))
         props = make_reported_prop(prop_name, prop_value)
-        props[Fields.THIEF].update(metrics)
+        props.update(metrics)
         self.client.patch_twin_reported_properties(props)
 
         if add_operation.event.wait(timeout=self.config[Settings.OPERATION_TIMEOUT_IN_SECONDS]):
@@ -856,12 +844,8 @@ class DeviceApp(object):
         twin_guid = str(uuid.uuid4())
 
         payload_set_desired_props = {
-            Fields.THIEF: {
-                Fields.CMD: Commands.SET_DESIRED_PROPS,
-                Fields.DESIRED_PROPERTIES: {
-                    Fields.THIEF: {Fields.TEST_CONTENT: {Fields.TWIN_GUID: twin_guid}}
-                },
-            }
+            Fields.CMD: Commands.SET_DESIRED_PROPS,
+            Fields.DESIRED_PROPERTIES: {Fields.TEST_CONTENT: {Fields.TWIN_GUID: twin_guid}},
         }
         msg = self.create_message_from_dict(payload_set_desired_props)
         logger.info("Sending message to update desired getTwin property to {}".format(twin_guid))
@@ -879,8 +863,7 @@ class DeviceApp(object):
             except queue.Empty:
                 break
             else:
-                thief = patch.get(Fields.THIEF, {})
-                test_content = thief.get(Fields.TEST_CONTENT, {})
+                test_content = patch.get(Fields.TEST_CONTENT, {})
                 actual_twin_guid = test_content.get(Fields.TWIN_GUID)
                 if actual_twin_guid == twin_guid:
                     logger.info("received expected patch: {} succeeded".format(twin_guid))
@@ -907,8 +890,7 @@ class DeviceApp(object):
         logger.info("Got twin: {}".format(twin))
 
         desired = twin.get(Fields.DESIRED, {})
-        thief = desired.get(Fields.THIEF, {})
-        test_content = thief.get(Fields.TEST_CONTENT, {})
+        test_content = desired.get(Fields.TEST_CONTENT, {})
         actual_twin_guid = test_content.get(Fields.TWIN_GUID)
 
         if actual_twin_guid == twin_guid:
@@ -964,12 +946,10 @@ class DeviceApp(object):
             payload = None
 
         command_payload = {
-            Fields.THIEF: {
-                Fields.CMD: Commands.INVOKE_METHOD,
-                Fields.OPERATION_ID: operation_ticket.id,
-                Fields.METHOD_NAME: method.method_name,
-                Fields.METHOD_INVOKE_PAYLOAD: payload,
-            }
+            Fields.CMD: Commands.INVOKE_METHOD,
+            Fields.OPERATION_ID: operation_ticket.id,
+            Fields.METHOD_NAME: method.method_name,
+            Fields.METHOD_INVOKE_PAYLOAD: payload,
         }
         msg = self.create_message_from_dict(command_payload)
         logger.info("sending method invoke with guid={}".format(operation_ticket.id))
@@ -981,21 +961,21 @@ class DeviceApp(object):
                     operation_ticket.id, operation_ticket.result_message
                 )
             )
-            thief = json.loads(operation_ticket.result_message.data.decode())[Fields.THIEF]
+            body = json.loads(operation_ticket.result_message.data.decode())
             fail = False
-            if thief[Fields.METHOD_RESPONSE_STATUS_CODE] != method.expected_status_code:
+            if body[Fields.METHOD_RESPONSE_STATUS_CODE] != method.expected_status_code:
                 logger.error(
                     "Unexpected method status: id={}, received {} expected {}".format(
                         operation_ticket.id,
-                        thief[Fields.METHOD_RESPONSE_STATUS_CODE],
+                        body[Fields.METHOD_RESPONSE_STATUS_CODE],
                         method.expected_status_code,
                     )
                 )
                 fail = True
-            if thief[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
+            if body[Fields.METHOD_RESPONSE_PAYLOAD] != payload:
                 logger.error(
                     "Unexpected payload: id={}, received {} expected {}".format(
-                        operation_ticket.id, thief[Fields.METHOD_RESPONSE_PAYLOAD], payload
+                        operation_ticket.id, body[Fields.METHOD_RESPONSE_PAYLOAD], payload
                     )
                 )
                 fail = True
@@ -1016,11 +996,9 @@ class DeviceApp(object):
         sent_test_payload = self.make_random_payload()
 
         command_payload = {
-            Fields.THIEF: {
-                Fields.CMD: Commands.SEND_C2D,
-                Fields.OPERATION_ID: operation_ticket.id,
-                Fields.TEST_C2D_PAYLOAD: sent_test_payload,
-            }
+            Fields.CMD: Commands.SEND_C2D,
+            Fields.OPERATION_ID: operation_ticket.id,
+            Fields.TEST_C2D_PAYLOAD: sent_test_payload,
         }
 
         logger.info("Requesting C2D for operationId {}".format(operation_ticket.id))
@@ -1030,11 +1008,11 @@ class DeviceApp(object):
             logger.info("C2D received for operationId {}".format(operation_ticket.id))
             self.metrics.receive_c2d_count_received.increment()
 
-            thief = json.loads(operation_ticket.result_message.data.decode())[Fields.THIEF]
-            if thief[Fields.TEST_C2D_PAYLOAD] != sent_test_payload:
+            body = json.loads(operation_ticket.result_message.data.decode())
+            if body[Fields.TEST_C2D_PAYLOAD] != sent_test_payload:
                 logger.warning(
                     "C2D payload for operationId {}  does not match.  Expected={}, Received={}".format(
-                        operation_ticket.id, sent_test_payload, thief[Fields.TEST_C2D_PAYLOAD]
+                        operation_ticket.id, sent_test_payload, body[Fields.TEST_C2D_PAYLOAD]
                     )
                 )
                 raise ThiefFatalException("C2D payload mismatch")
@@ -1160,11 +1138,9 @@ class DeviceApp(object):
             # Update one last time.  This is required because the service app relies
             # on RUN_STATE to know when we're dead
             props = {
-                Fields.THIEF: {
-                    Fields.SESSION_METRICS: self.get_session_metrics(),
-                    Fields.TEST_METRICS: self.get_test_metrics(),
-                    Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
-                }
+                Fields.SESSION_METRICS: self.get_session_metrics(),
+                Fields.TEST_METRICS: self.get_test_metrics(),
+                Fields.SYSTEM_HEALTH_METRICS: self.get_system_health_telemetry(),
             }
             logger.info("Results: {}".format(pprint.pformat(props)))
             self.client.patch_twin_reported_properties(props)

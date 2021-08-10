@@ -15,12 +15,7 @@ pytestmark = pytest.mark.asyncio
 @pytest.fixture
 def test_message(message_factory):
     return message_factory(
-        {
-            Fields.THIEF: {
-                Fields.CMD: Commands.SEND_OPERATION_RESPONSE,
-                Fields.FLAGS: [Flags.RESPOND_IMMEDIATELY],
-            }
-        }
+        {Fields.CMD: Commands.SEND_OPERATION_RESPONSE, Fields.FLAGS: [Flags.RESPOND_IMMEDIATELY]}
     )
 
 

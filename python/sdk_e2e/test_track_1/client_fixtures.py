@@ -19,25 +19,6 @@ PAIRING_REQUEST_TIMEOUT_INTERVAL_IN_SECONDS = 180
 PAIRING_REQUEST_SEND_INTERVAL_IN_SECONDS = 10
 
 
-def create_message_from_dict(payload, service_instance_id, run_id):
-    """
-    helper function to create a message from a dict object
-    """
-
-    # Note: we're changing the dictionary that the user passed in.
-    # This isn't the best idea, but it works and it saves us from deep copies
-    if service_instance_id:
-        payload[Fields.THIEF][Fields.SERVICE_INSTANCE_ID] = service_instance_id
-    payload[Fields.THIEF][Fields.RUN_ID] = run_id
-
-    # This function only creates the message.  The caller needs to queue it up for sending.
-    msg = Message(json.dumps(payload))
-    msg.content_type = Const.JSON_CONTENT_TYPE
-    msg.content_encoding = Const.JSON_CONTENT_ENCODING
-
-    return msg
-
-
 @pytest.fixture(scope="class")
 def client_kwargs():
     return {}
@@ -60,22 +41,22 @@ async def connected_client(brand_new_client):
 @pytest.fixture(scope="class")
 async def c2d_waiter(event_loop, connected_client, operation_ticket_list, run_id):
     async def handle_c2d(msg):
-        thief = json.loads(msg.data.decode()).get(Fields.THIEF, {})
-        logger.info("Received {}".format(thief))
+        body = json.loads(msg.data.decode())
+        logger.info("Received {}".format(body))
 
-        if not thief:
-            logger.warning("No thief object in payload")
+        if not body:
+            logger.warning("No payload")
             return
 
-        if thief.get(Fields.RUN_ID) != run_id:
+        if body.get(Fields.RUN_ID) != run_id:
             logger.warning(
                 "run_id does not match: expected={}, received={}".format(
-                    run_id, thief.get(Fields.RUN_ID)
+                    run_id, body.get(Fields.RUN_ID)
                 )
             )
             return
 
-        cmd = thief.get(Fields.CMD)
+        cmd = body.get(Fields.CMD)
         if cmd not in [
             Commands.PAIR_RESPONSE,
             Commands.OPERATION_RESPONSE,
@@ -85,13 +66,13 @@ async def c2d_waiter(event_loop, connected_client, operation_ticket_list, run_id
             logger.warning("unknown cmd: {}".format(cmd))
             return
 
-        operation_ids = thief.get(Fields.OPERATION_IDS, [])
+        operation_ids = body.get(Fields.OPERATION_IDS, [])
         if not operation_ids:
             operation_ids = [
-                thief.get(Fields.OPERATION_ID),
+                body.get(Fields.OPERATION_ID),
             ]
 
-        logger.info("Received {} message with {}".format(thief[Fields.CMD], operation_ids))
+        logger.info("Received {} message with {}".format(body[Fields.CMD], operation_ids))
 
         for operation_id in operation_ids:
             operation_ticket = operation_ticket_list.get(operation_id)
@@ -116,12 +97,10 @@ async def paired_client(
         )
 
         pairing_payload = {
-            Fields.THIEF: {
-                Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
-                Fields.OPERATION_ID: operation_ticket.id,
-                Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
-                Fields.RUN_ID: run_id,
-            }
+            Fields.CMD: Commands.PAIR_WITH_SERVICE_APP,
+            Fields.OPERATION_ID: operation_ticket.id,
+            Fields.REQUESTED_SERVICE_POOL: requested_service_pool,
+            Fields.RUN_ID: run_id,
         }
 
         msg = Message(json.dumps(pairing_payload))
@@ -139,9 +118,9 @@ async def paired_client(
             pass
         else:
             logger.info("pairing response received")
-            msg = json.loads(operation_ticket.result_message.data.decode())
+            body = json.loads(operation_ticket.result_message.data.decode())
             return collections.namedtuple("ConnectedClient", "client service_instance_id")(
-                connected_client, msg[Fields.THIEF][Fields.SERVICE_INSTANCE_ID]
+                connected_client, body[Fields.SERVICE_INSTANCE_ID]
             )
 
     raise Exception("Service app did not respond in time")
