@@ -58,7 +58,7 @@ class TestSendMessageRetryDisabled(object):
         await test_message.operation_ticket.event.wait()
 
     @pytest.mark.it("Fails if connection disconnects before sending")
-    async def test_sends_if_disconnect_before_sending(self, client, test_message, dropper):
+    async def test_fails_if_disconnect_before_sending(self, client, test_message, dropper):
 
         assert client.connected
 
@@ -72,7 +72,7 @@ class TestSendMessageRetryDisabled(object):
             await send_task
 
     @pytest.mark.it("Fails if connection drops before sending")
-    async def test_sends_if_drop_before_sending(self, client, test_message, dropper):
+    async def test_fails_if_drop_before_sending(self, client, test_message, dropper):
 
         assert client.connected
 
