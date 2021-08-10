@@ -65,3 +65,14 @@ class TestSendMessageRetryDisabled(object):
             await client.send_message(test_message.message)
 
         assert not client.connected
+
+    @pytest.mark.it("Fails if connection cejects send")
+    async def test_sends_if_reject_before_sending(self, client, test_message, dropper):
+
+        assert client.connected
+
+        dropper.reject_outgoing()
+        with pytest.raises(OperationCancelled):
+            await client.send_message(test_message.message)
+
+        assert not client.connected
