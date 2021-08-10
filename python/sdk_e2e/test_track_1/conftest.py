@@ -6,7 +6,7 @@ import logging
 import copy
 import collections
 import json
-from thief_constants import Fields, Const
+from thief_constants import Fields, Const, Commands, Flags
 from client_fixtures import (
     client_kwargs,
     brand_new_client,
@@ -49,6 +49,13 @@ def message_factory(run_id, service_instance_id, operation_ticket_factory):  # n
         )
 
     return wrapper_function
+
+
+@pytest.fixture
+def test_message(message_factory):
+    return message_factory(
+        {Fields.CMD: Commands.SEND_OPERATION_RESPONSE, Fields.FLAGS: [Flags.RESPOND_IMMEDIATELY]}
+    )
 
 
 @pytest.fixture(scope="class")
