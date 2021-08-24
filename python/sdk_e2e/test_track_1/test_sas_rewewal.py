@@ -12,7 +12,7 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.mark.describe("Device Client with reconnect enabled")
-class TestSasRemewalReconnectEnabled(object):
+class TestSasRenewalReconnectEnabled(object):
     @pytest.fixture(scope="class")
     def client_kwargs(self):
         # should renew after 10 seconds
