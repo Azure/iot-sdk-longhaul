@@ -132,6 +132,8 @@ async def client(paired_client):
 
     # clean up all old handlers from this test.
     # Do not clean up on_message_received.  That will break c2d_waiter and the pairing process
+    paired_client.client.on_connection_state_change = None
+
     if paired_client.client.on_twin_desired_properties_patch_received:
         paired_client.client.on_twin_desired_properties_patch_received = None
     if paired_client.client.on_method_request_received:

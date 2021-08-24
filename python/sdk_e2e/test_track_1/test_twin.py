@@ -70,7 +70,7 @@ class TestReportedProperties(object):
 class TestReportedPropertiesDroppedConnection(object):
     @pytest.fixture(scope="class")
     def client_kwargs(self):
-        return {"keep_alive": 10}
+        return {"keep_alive": 5}
 
     @pytest.mark.it("Sends if connection drops before sending")
     async def test_sends_if_drop_before_sending(

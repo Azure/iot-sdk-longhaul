@@ -4,19 +4,11 @@
 import asyncio
 import pytest
 import logging
-from thief_constants import Flags, Fields, Commands
 
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture
-def test_message(message_factory):
-    return message_factory(
-        {Fields.CMD: Commands.SEND_OPERATION_RESPONSE, Fields.FLAGS: [Flags.RESPOND_IMMEDIATELY]}
-    )
 
 
 @pytest.mark.describe("Device Client send_message method")
@@ -44,7 +36,7 @@ class TestSendMessage(object):
 class TestSendMessageDroppedConnection(object):
     @pytest.fixture(scope="class")
     def client_kwargs(self):
-        return {"keep_alive": 10}
+        return {"keep_alive": 5}
 
     @pytest.mark.it("Sends if connection drops before sending")
     async def test_sends_if_drop_before_sending(self, client, test_message, dropper):

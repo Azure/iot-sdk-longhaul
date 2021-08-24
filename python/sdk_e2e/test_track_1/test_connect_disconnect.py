@@ -40,7 +40,7 @@ class TestConnectDisconnect(object):
 class TestConnectDisconnectDroppedConnection(object):
     @pytest.fixture(scope="class")
     def client_kwargs(self):
-        return {"keep_alive": 10}
+        return {"keep_alive": 5}
 
     @pytest.mark.it("disconnects when network drops all outgoing packets")
     async def test_disconnect_on_drop_outgoing(self, connected_client, dropper):
