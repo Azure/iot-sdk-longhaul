@@ -60,7 +60,7 @@ class TestSasRenewalReconnectEnabled(object):
 
 
 @pytest.mark.describe("Device Client with reconnect disabled")
-class TestSasRemewalReconnectDisabled(object):
+class TestSasRenewalReconnectDisabled(object):
     @pytest.fixture(scope="class")
     def client_kwargs(self):
         # should renew after 10 seconds
