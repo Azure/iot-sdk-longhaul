@@ -4,6 +4,7 @@
 import asyncio
 import pytest
 import logging
+from azure.iot.device.exceptions import ConnectionFailedError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
@@ -33,6 +34,35 @@ class TestConnectDisconnect(object):
 
         await client.connect()
         assert client.connected
+
+    # NOTE: perhaps this is more suited to a different test class?
+    @pytest.mark.dropped_connection
+    @pytest.mark.it("Raises ConnectionFailedError if connect attempt fails due to network")
+    @pytest.mark.parametrize("network_failure_type", [
+        pytest.param("drop", id="Network drops outgoing packets"),
+        pytest.param("reject", id="Network rejects outgoing packets")
+    ])
+    async def test_connect_on_drop_outgoing(self, dropper, client, network_failure_type):
+        # NOTE: perhaps this should be using a different client fixture
+        await client.connect()
+        assert client.connected
+        await client.disconnect()
+        assert not client.connected
+        
+        # Set network to fail connect
+        if network_failure_type == "drop":
+            dropper.drop_outgoing()
+        else:
+            dropper.reject_outgoing()
+
+        # Attempt to connect
+        with pytest.raises(ConnectionFailedError) as e_info:
+            await client.connect()
+
+
+        # Clean up (client is a class fixture and must be reconnected)
+        dropper.restore_all()
+        client.connect()
 
 
 @pytest.mark.dropped_connection
