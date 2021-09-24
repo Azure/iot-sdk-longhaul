@@ -27,6 +27,12 @@ eventhub_connection_string = thief_secrets.EVENTHUB_CONNECTION_STRING
 eventhub_consumer_group = thief_secrets.EVENTHUB_CONSUMER_GROUP
 service_pool = thief_secrets.SERVICE_POOL
 
+assert iothub_connection_string
+assert iothub_name
+assert eventhub_connection_string
+assert eventhub_consumer_group
+assert service_pool
+
 service_instance_id = str(uuid.uuid4())
 
 # set default logging which will only go to the console
