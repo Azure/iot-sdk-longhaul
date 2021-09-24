@@ -514,6 +514,10 @@ groups:
       - name: MAX_TEST_RECEIVE_THREADS
         value: "maxTestReceiveThreads"
         desc: "maximum number of receive threads in the test app"
+      - name: DEVICE_TRANSPORT
+        value: "deviceTransport"
+        desc: "transport to use to connect device client: one of amqp, amqp-ws, mqtt, mqtt-ws, or http"
+
 
     subgroups:
       - desc: "pairing settings"
