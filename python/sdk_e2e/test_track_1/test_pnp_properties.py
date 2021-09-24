@@ -5,12 +5,20 @@ import pytest
 import logging
 import asyncio
 import pprint
-from azure.iot.device.iothub import ClientPropertyCollection, generate_writable_property_response
+import azure.iot.device.iothub
 
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 
 pytestmark = pytest.mark.asyncio
+try:
+    ClientPropertyCollection = azure.iot.device.iothub.ClientPropertyCollection
+    generate_writable_property_response = (
+        azure.iot.device.iothub.generate_writable_property_response
+    )
+except AttributeError:
+    # only run if PNP enabled
+    pytestmark = pytest.mark.skip
 
 
 @pytest.fixture(scope="class")

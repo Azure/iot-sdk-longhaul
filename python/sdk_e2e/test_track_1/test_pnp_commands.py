@@ -5,12 +5,17 @@ import pytest
 import logging
 import asyncio
 from thief_constants import Fields
-from azure.iot.device.iothub import CommandResponse
+import azure.iot.device.iothub
 
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 
 pytestmark = pytest.mark.asyncio
+try:
+    CommandResponse = azure.iot.device.iothub.CommandResponse
+except AttributeError:
+    # only run if PNP enabled
+    pytestmark = pytest.mark.skip
 
 
 @pytest.fixture(scope="class")

@@ -4,12 +4,16 @@
 import pytest
 import logging
 import json
+import azure.iot.device.iothub
 from thief_constants import Commands, Fields
 
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 
 pytestmark = pytest.mark.asyncio
+if not getattr(azure.iot.device.iothub, "CommandRequest", None):
+    # only run if PNP enabled
+    pytestmark = pytest.mark.skip
 
 
 @pytest.fixture(scope="class")
